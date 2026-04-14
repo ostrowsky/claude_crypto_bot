@@ -1,0 +1,13 @@
+# PolyBot v2.0 Dependencies
+
+# Telegram
+aiogram>=3.12.0
+
+# HTTP / WebSocket
+aiohttp>=3.9.0
+
+# Data
+pandas>=2.0.0
+
+# Utils
+python-dotenv>=1.0.0

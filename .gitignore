@@ -1,0 +1,84 @@
+# Runtime state and secrets
+.runtime/
+.env
+*.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Logs
+*.log
+bot_stdout*.log
+bot_stderr*.log
+agent_stdout.log
+agent_stderr.log
+rl_worker_stdout.log
+rl_worker_stderr.log
+regime_train.log
+backfill_tg.log
+bot_learning.log
+
+# Runtime data / jsonl datasets (large, auto-generated)
+files/critic_dataset.jsonl
+files/critic_dataset.jsonl.lock
+files/ml_dataset.jsonl
+files/ml_dataset.jsonl.lock
+files/top_gainer_dataset.jsonl
+files/offline_rl_log.jsonl
+files/bot_events.jsonl
+files/agent_events.jsonl
+files/rl_memory.jsonl
+files/logs/
+agent_events.jsonl
+
+# Runtime state files
+files/bandit_state.json
+files/bandit_entry_state.json
+files/bandit_pending.json
+files/positions.json
+files/exit_policy.json
+files/offline_rl_state.json
+files/rl_optimizer_state.json
+files/rl_params.json
+replay_current.json
+
+# CatBoost training artifacts
+catboost_info/
+files/catboost_info/
+
+# Embedded Python runtime (large binaries)
+pyembed/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Claude Code session data
+.claude/
+
+# Build artifacts
+stage1_warning_patch_v2.zip
+*.zip
+
+# Jupyter
+.ipynb_checkpoints/
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini

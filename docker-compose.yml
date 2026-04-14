@@ -1,0 +1,16 @@
+version: "3.9"
+
+services:
+  polybot:
+    build: .
+    container_name: polybot
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./logs:/app/logs
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
