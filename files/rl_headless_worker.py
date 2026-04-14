@@ -22,6 +22,7 @@ import ml_dataset
 import report_candidate_ranker_shadow
 import report_critic_dataset
 import top_gainer_critic
+import backfill_critic_labels
 from ml_signal_model import save_json
 
 
@@ -187,6 +188,11 @@ def build_status_snapshot(
         "datasets": {
             "ml_dataset_rows": ml_rows_total,
             "critic_dataset": critic_report,
+        },
+        "backfill": {
+            "last_ran_at": state.backfill_last_ran_at,
+            "last_filled": state.backfill_last_filled,
+            "last_error": state.backfill_last_error,
         },
         "top_gainer_critic": {
             "enabled": state.top_gainer_enabled,
@@ -504,6 +510,9 @@ class WorkerState:
     latest_training_report_txt: str = ""
     latest_training_latest_json: str = ""
     latest_training_latest_txt: str = ""
+    backfill_last_ran_at: Optional[str] = None
+    backfill_last_filled: int = 0
+    backfill_last_error: str = ""
 
 
 async def _collector_supervisor(state: WorkerState) -> None:
@@ -534,6 +543,52 @@ async def _collector_supervisor(state: WorkerState) -> None:
         await asyncio.sleep(wait)
 
 
+async def _run_backfill_once(state: WorkerState) -> None:
+    """Run backfill_critic_labels once, filling ret_3/5/10 for unlabeled rows."""
+    _log = logging.getLogger("rl_headless_worker.backfill")
+    try:
+        # Count how many rows need fill before running
+        before = sum(
+            1 for r in _iter_critic_rows()
+            if any(r.get("labels", {}).get(f"ret_{h}") is None for h in (3, 5, 10))
+        )
+        if before == 0:
+            _log.debug("Backfill: nothing to fill")
+            return
+        _log.info("Backfill: %d rows need labels", before)
+        await backfill_critic_labels.run()
+        after = sum(
+            1 for r in _iter_critic_rows()
+            if any(r.get("labels", {}).get(f"ret_{h}") is None for h in (3, 5, 10))
+        )
+        filled = before - after
+        state.backfill_last_filled = filled
+        state.backfill_last_ran_at = _utc_now_iso()
+        state.backfill_last_error = ""
+        _log.info("Backfill done: filled %d rows (%d remain)", filled, after)
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        state.backfill_last_error = str(exc)
+        _log.exception("Backfill failed: %s", exc)
+
+
+def _iter_critic_rows():
+    """Yield parsed rows from critic_dataset.jsonl without loading all into memory."""
+    path = critic_dataset.CRITIC_FILE
+    if not path.exists():
+        return
+    with path.open("r", encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                yield json.loads(line)
+            except Exception:
+                continue
+
+
 async def _training_loop(state: WorkerState) -> None:
     log = logging.getLogger("rl_headless_worker.training")
     while True:
@@ -551,6 +606,9 @@ async def _training_loop(state: WorkerState) -> None:
         ):
             await asyncio.sleep(state.train_interval_sec)
             continue
+
+        # Backfill missing labels before training so the model sees fresh data
+        await _run_backfill_once(state)
 
         state.train_runs_total += 1
         state.train_last_started_at = _utc_now_iso()

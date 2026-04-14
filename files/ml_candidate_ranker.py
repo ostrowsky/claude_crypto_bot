@@ -55,7 +55,7 @@ ROOT = Path(__file__).resolve().parent
 DATASET_FILE = ROOT / "critic_dataset.jsonl"
 DEFAULT_MODEL_FILE = ROOT / "ml_candidate_ranker.json"
 DEFAULT_REPORT_FILE = ROOT / "ml_candidate_ranker_report.json"
-DEFAULT_EV_LAMBDA = 0.75
+DEFAULT_EV_LAMBDA = 0.40
 DEFAULT_QUALITY_SCORE_WEIGHT = 0.35
 DEFAULT_RANK_SCORE_WEIGHT = 0.20
 DEFAULT_TOP_GAINER_SCORE_WEIGHT = 0.25
@@ -1069,6 +1069,9 @@ def train_and_evaluate(
         calibrator = PlattCalibrator().fit(val_raw, bundle.y_val)
         val_score = calibrator.predict(val_raw)
         threshold, quality_metrics = find_best_threshold(bundle.y_val, val_score, bundle.r_val)
+        # Cap threshold: find_best_threshold can overfit on small val sets,
+        # producing thresholds so high that test coverage collapses to ~0%.
+        threshold = min(threshold, 0.45)
         val_return = return_model.predict(X_val)
         val_drawdown = np.maximum(0.0, drawdown_model.predict(X_val))
         val_ev = val_return - ev_lambda * val_drawdown
