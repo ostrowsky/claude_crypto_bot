@@ -21,6 +21,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import sys
 import time
 from collections import defaultdict
@@ -30,10 +31,6 @@ from pathlib import Path
 import aiohttp
 import numpy as np
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s  %(levelname)-8s  %(message)s",
-)
 log = logging.getLogger("backfill_critic")
 
 ROOT         = Path(__file__).resolve().parent
@@ -42,6 +39,7 @@ BINANCE_BASE = "https://api.binance.com/api/v3/klines"
 BATCH_SIZE   = 10    # параллельных запросов к Binance
 SLEEP_BATCH  = 0.35  # секунды между батчами (rate-limit)
 HORIZONS     = (3, 5, 10)
+_LOCK_FILE   = ROOT.parent / ".runtime" / "backfill_critic.lock"
 
 
 # ── I/O helpers ───────────────────────────────────────────────────────────────
@@ -176,6 +174,26 @@ async def run(dry_run: bool = False) -> None:
         log.error("critic_dataset.jsonl not found: %s", CRITIC_FILE)
         return
 
+    # Cross-process lock: only one backfill at a time
+    _LOCK_FILE.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        fd = os.open(str(_LOCK_FILE), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        os.close(fd)
+    except FileExistsError:
+        log.info("Backfill already running (lock file exists), skipping")
+        return
+
+    try:
+        await _run_inner(dry_run=dry_run)
+    finally:
+        try:
+            _LOCK_FILE.unlink(missing_ok=True)
+        except Exception:
+            pass
+
+
+async def _run_inner(dry_run: bool = False) -> None:
+
     records, skipped = _read_records(CRITIC_FILE)
     if skipped:
         log.warning("Skipped %d malformed lines", skipped)
@@ -249,5 +267,9 @@ async def run(dry_run: bool = False) -> None:
 
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s  %(levelname)-8s  %(message)s",
+    )
     dry = "--dry-run" in sys.argv
     asyncio.run(run(dry_run=dry))
