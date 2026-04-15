@@ -29,6 +29,11 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
+try:
+    import config as config  # type: ignore
+except ImportError:
+    config = None  # type: ignore
+
 log = logging.getLogger(__name__)
 
 # ── Entry bandit arms ─────────────────────────────────────────────────────────
@@ -460,6 +465,11 @@ def select_entry_profile(
     arm, info = bandit.select_arm(x)
 
     trail_k = round(base_trail_k * TRAIL_ARMS[arm]["trail_k_mult"], 2)
+    # Apply minimum trail_k floor: bandit learned to use 1.05 (very_tight arm) which causes
+    # instant stop-outs on normal candle volatility. Enforce a sane minimum.
+    trail_k_min = getattr(config, "BANDIT_TRAIL_K_MIN", 0.0) if config is not None else 0.0
+    if trail_k_min > 0 and trail_k < trail_k_min:
+        trail_k = round(trail_k_min, 2)
     max_hold = max(4, int(round(base_max_hold * TRAIL_ARMS[arm]["hold_mult"])))
 
     info["arm_name"] = TRAIL_ARMS[arm]["name"]

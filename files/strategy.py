@@ -850,7 +850,8 @@ def get_entry_mode(feat: Dict, i: int) -> str:
 
         strong_rsi_min = getattr(config, "STRONG_RSI_MIN", 55.0)
         strong_close_max = getattr(config, "STRONG_CLOSE_EMA20_MAX_PCT", 1.8)
-        if ema_sep_ok and ema50_rising and ri >= strong_rsi_min and close_edge_pct <= strong_close_max:
+        strong_mode_ok = getattr(config, "STRONG_TREND_MODE_ENABLED", True)
+        if strong_mode_ok and ema_sep_ok and ema50_rising and ri >= strong_rsi_min and close_edge_pct <= strong_close_max:
             return "strong_trend"
         # ADX высокий, но структура не подтверждает → обычный тренд
         return "trend"
@@ -994,6 +995,9 @@ def check_retest_conditions(feat: Dict, i: int) -> Tuple[bool, str]:
       6. ADX > 20 (тренд существует)
       7. vol_x > RETEST_VOL_MIN (объём необязательно высокий)
     """
+    if not getattr(config, "RETEST_MODE_ENABLED", True):
+        return False, "retest mode disabled"
+
     lb      = getattr(config, "RETEST_LOOKBACK",   12)
     tb      = getattr(config, "RETEST_TOUCH_BARS",  5)
     rsi_mx  = getattr(config, "RETEST_RSI_MAX",    65.0)
@@ -1100,6 +1104,9 @@ def check_breakout_conditions(feat: Dict, i: int) -> Tuple[bool, str]:
     Остальные 6 условий (флэт, vol_x, daily_range, MACD, пробой, EMA20)
     достаточно защищают. Бэктест 11/11 подтвердил безопасность.
     """
+    if not getattr(config, "BREAKOUT_MODE_ENABLED", True):
+        return False, "breakout mode disabled"
+
     flat_bars = getattr(config, "BREAKOUT_FLAT_BARS",    8)
     flat_pct  = getattr(config, "BREAKOUT_FLAT_MAX_PCT", 2.0)
     vol_mn    = getattr(config, "BREAKOUT_VOL_MIN",      2.0)

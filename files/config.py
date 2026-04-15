@@ -80,6 +80,15 @@ BOT_ENABLE_DATA_COLLECTOR: bool = False
 # ── RL: Contextual Bandit + Exit Policy ──────────────────────────────────────
 BANDIT_ENABLED: bool = True               # adaptive trail_k/max_hold via LinUCB
 BANDIT_ALPHA: float = 1.5                 # UCB exploration coefficient
+BANDIT_TRAIL_K_MIN: float = 2.0          # floor: bandit cannot set trail_k below this (prevents 1.05 stops)
+
+# ── Mode enable/disable flags ─────────────────────────────────────────────────
+# Data: 77k events. breakout=33% win/-0.053% avg, retest=37%/-0.139%, strong_trend=26%/-0.851%
+# All three have high fast-exit rates (11-29%) and generate BUY→SELL flip-flop chains.
+# impulse/impulse_speed/alignment/trend remain active (positive or near-zero avg PnL).
+BREAKOUT_MODE_ENABLED:    bool = False   # 15.04.2026: disabled — 33% win, -0.053% avg PnL
+RETEST_MODE_ENABLED:      bool = False   # 15.04.2026: disabled — 37% win, -0.139% avg PnL
+STRONG_TREND_MODE_ENABLED: bool = False  # 15.04.2026: disabled — 26% win, -0.851% avg PnL
 EXIT_RL_ENABLED: bool = True              # RL-based exit recommendations
 EXIT_RL_THRESHOLD: float = 0.3            # Q-advantage needed to trigger exit
 EXIT_RL_TIGHTEN_THRESHOLD: float = 0.15   # Q-advantage for tightening stop
@@ -400,7 +409,7 @@ BULL_DAY_RSI_HI:    float = 75.0  # RSI_BUY_HI при бычьем дне
 ADX_SMA_BYPASS: float = 35.0  # ADX ≥ этого → плато сильного тренда, bypass
 
 # ── П3: Cooldown (уже использовался через getattr) ───────────────────────────
-COOLDOWN_BARS: int = 8  # баров тишины после выхода (8 × 15m = 2 часа)
+COOLDOWN_BARS: int = 24  # баров тишины после выхода (24 × 15m = 6 часов; было 8=2ч — flip-flop fix)
 
 # ── RETEST: откат к EMA20 в существующем тренде ──────────────────────────────
 RETEST_LOOKBACK:    int   = 12    # баров назад — проверяем что тренд был
@@ -660,11 +669,11 @@ _last_cross_ts:      dict  = {}     # sym → timestamp последнего CRO
 #
 # Решение: WEAK сигналы (RSI div, vol exhaustion, EMA fan collapse) игнорируются
 # первые MIN_WEAK_EXIT_BARS баров. Hard exits (ATR-трейл, время) — без изменений.
-MIN_WEAK_EXIT_BARS: int = 2   # 2 бара = 30 мин на 15m, 2 часа на 1h
-MIN_WEAK_EXIT_BARS_RETEST: int = 2
-MIN_WEAK_EXIT_BARS_BREAKOUT: int = 2
-MIN_WEAK_EXIT_BARS_TREND: int = 2
-MIN_WEAK_EXIT_BARS_IMPULSE_SPEED: int = 4
+MIN_WEAK_EXIT_BARS: int = 6   # 6 баров = 1.5ч на 15m (было 2=30мин — flip-flop fix)
+MIN_WEAK_EXIT_BARS_RETEST: int = 6    # retest отключён, но на случай включения
+MIN_WEAK_EXIT_BARS_BREAKOUT: int = 6  # breakout отключён, но на случай включения
+MIN_WEAK_EXIT_BARS_TREND: int = 8     # trend: минимум 2ч до WEAK выхода (было 2)
+MIN_WEAK_EXIT_BARS_IMPULSE_SPEED: int = 8  # impulse_speed: было 4
 TREND_HOLD_WEAK_EXIT_ENABLED: bool = True
 TREND_HOLD_WEAK_EXIT_TF: tuple = ("15m",)
 TREND_HOLD_WEAK_EXIT_MODES: tuple = ("impulse_speed", "trend", "alignment")
@@ -710,7 +719,7 @@ PORTFOLIO_REPLACE_CANDIDATE_MIN_FINAL: float = -0.50
 PORTFOLIO_REPLACE_CANDIDATE_MIN_TOP_GAINER: float = 0.10
 PORTFOLIO_REPLACE_POSITION_FINAL_MAX: float = 0.00
 PORTFOLIO_REPLACE_POSITION_TOP_GAINER_MAX: float = 0.20
-WEAK_REENTRY_COOLDOWN_BARS: int = 8
+WEAK_REENTRY_COOLDOWN_BARS: int = 24  # was 8 — увеличено чтобы пресечь flip-flop после WEAK
 ENTRY_SCORE_MIN_ENABLED: bool = True
 ENTRY_SCORE_MIN_15M: float = 48.0
 ENTRY_SCORE_MIN_1H: float = 56.0
