@@ -23,6 +23,7 @@ import report_candidate_ranker_shadow
 import report_critic_dataset
 import top_gainer_critic
 import backfill_critic_labels
+import trend_scout
 from ml_signal_model import save_json
 
 
@@ -513,6 +514,13 @@ class WorkerState:
     backfill_last_ran_at: Optional[str] = None
     backfill_last_filled: int = 0
     backfill_last_error: str = ""
+    scout_last_ran_at: Optional[str] = None
+    scout_last_candidates: int = 0
+    scout_last_trending: int = 0
+    scout_last_blocked: int = 0
+    scout_last_proposals: int = 0
+    scout_last_applied: int = 0
+    scout_last_error: str = ""
 
 
 async def _collector_supervisor(state: WorkerState) -> None:
@@ -747,6 +755,61 @@ async def _top_gainer_critic_loop(state: WorkerState) -> None:
         await asyncio.sleep(DEFAULT_TOP_GAINER_CHECK_SEC)
 
 
+TREND_SCOUT_INTERVAL_SEC = 4 * 3600   # каждые 4 часа
+TREND_SCOUT_AUTO_APPLY_RISK = "low"   # авто-применение только low-risk изменений
+
+
+async def _trend_scout_loop(state: WorkerState) -> None:
+    """Запускает Trend Scout pipeline каждые 4 часа."""
+    _log = logging.getLogger("rl_headless_worker.trend_scout")
+    # Первый запуск через 15 минут после старта (дать системе прогреться)
+    await asyncio.sleep(15 * 60)
+
+    while True:
+        _log.info("Trend Scout: starting pipeline")
+        state.scout_last_error = ""
+        try:
+            report = await trend_scout.run_pipeline(
+                auto_apply_risk=TREND_SCOUT_AUTO_APPLY_RISK,
+                lookback_hours=4.0,
+                dry_run=False,
+            )
+            state.scout_last_ran_at = _utc_now_iso()
+            state.scout_last_candidates = report.candidates_total
+            state.scout_last_trending = report.candidates_trending
+            state.scout_last_blocked = report.blocked_trending
+            state.scout_last_proposals = len(report.proposals)
+            state.scout_last_applied = len(report.applied)
+
+            _log.info(
+                "Trend Scout done: trending=%d blocked=%d proposals=%d applied=%d",
+                report.candidates_trending, report.blocked_trending,
+                len(report.proposals), len(report.applied),
+            )
+
+            # Отправляем в Telegram только если есть находки
+            if report.has_findings and bool(getattr(config, "RL_TELEGRAM_REPORTS_ENABLED", True)):
+                if _try_claim_report_send("trend_scout", cooldown_minutes=90):
+                    await _send_telegram_text(report.telegram_text)
+
+            # Если были применены изменения — перезагрузить конфиг
+            if report.applied:
+                try:
+                    import importlib
+                    importlib.reload(config)
+                    _log.info("config.py reloaded after scout changes")
+                except Exception as exc:
+                    _log.warning("Could not reload config: %s", exc)
+
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            state.scout_last_error = str(exc)
+            _log.exception("Trend Scout failed: %s", exc)
+
+        await asyncio.sleep(TREND_SCOUT_INTERVAL_SEC)
+
+
 async def _write_status_now(state: WorkerState) -> None:
     log = logging.getLogger("rl_headless_worker.status")
     try:
@@ -792,6 +855,7 @@ async def _amain(args: argparse.Namespace) -> int:
         asyncio.create_task(_training_loop(state), name="training"),
         asyncio.create_task(_status_loop(state), name="status"),
         asyncio.create_task(_top_gainer_critic_loop(state), name="top_gainer_critic"),
+        asyncio.create_task(_trend_scout_loop(state), name="trend_scout"),
     ]
     if args.enable_collector:
         tasks.insert(0, asyncio.create_task(_collector_supervisor(state), name="collector"))
