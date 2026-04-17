@@ -30,13 +30,15 @@ from strategy import (
     check_entry_conditions, check_exit_conditions,
     check_retest_conditions, check_breakout_conditions,
     check_impulse_conditions, check_alignment_conditions,
-    check_trend_surge_conditions,
+    check_trend_surge_conditions, check_ema_cross_conditions,
     get_effective_entry_mode,
     get_entry_mode,
 )
 import botlog
 import critic_dataset
 import ml_dataset
+import correlation_guard as corr_guard
+import rotation
 
 log = logging.getLogger(__name__)
 
@@ -324,6 +326,7 @@ def _candidate_signal_flags(
     surge_ok: bool,
     imp_ok: bool,
     aln_ok: bool,
+    cross_ok: bool = False,
 ) -> Dict[str, bool]:
     return {
         "entry_ok": bool(entry_ok),
@@ -332,6 +335,7 @@ def _candidate_signal_flags(
         "surge_ok": bool(surge_ok),
         "impulse_ok": bool(imp_ok),
         "alignment_ok": bool(aln_ok),
+        "cross_ok": bool(cross_ok),
     }
 
 
@@ -2293,6 +2297,7 @@ def _pos_to_dict(pos: "OpenPosition") -> dict:
         "macd_warn_streak": pos.macd_warn_streak, "macd_warned": pos.macd_warned,
         "last_macd_bar_i": pos.last_macd_bar_i,
         "bandit_arm": getattr(pos, "bandit_arm", None),
+        "buy_notified": getattr(pos, "buy_notified", True),
     }
 
 def _pos_from_dict(d: dict) -> "OpenPosition":
@@ -2329,6 +2334,7 @@ def _pos_from_dict(d: dict) -> "OpenPosition":
         macd_warned=d.get("macd_warned", False),
         last_macd_bar_i=d.get("last_macd_bar_i", -1),
         bandit_arm=d.get("bandit_arm"),
+        buy_notified=d.get("buy_notified", True),  # True = старые позиции не получат повтор
     )
 
 def save_positions(positions: dict) -> None:
@@ -2574,6 +2580,11 @@ class OpenPosition:
     # ФИКС: streak обновляется только один раз на каждый новый закрытый бар,
     # а не при каждом поллинге (60с) — иначе через 3 минуты ложные алерты на 30 монетах.
     last_macd_bar_i: int = -1
+
+    # ФИКС: флаг что BUY-уведомление было успешно отправлено.
+    # Если False — значит await send() при входе бросил исключение и позиция
+    # осталась «немой». При следующем поллинге перед SELL будет ретрансляция.
+    buy_notified: bool = False
 
     def pnl_pct(self, current_price: float) -> float:
         return (current_price / self.entry_price - 1.0) * 100.0
@@ -2897,10 +2908,23 @@ async def _poll_coin(
         if current_ts_ms < cooldown_until_ms:
             bar_ms = 15 * 60 * 1000 if tf == "15m" else 60 * 60 * 1000
             bars_left = max(0, (cooldown_until_ms - current_ts_ms) // bar_ms)
+            bars_total = int(getattr(config, "COOLDOWN_BARS", 8))
             # Логируем только начало cooldown (когда bars_left максимальное)
             if not state.cd_logged.get(sym):
                 botlog.log_cooldown(sym=sym, tf=tf, bars_remaining=int(bars_left), first=True)
                 state.cd_logged[sym] = True
+                # ФИКС: логируем в critic_dataset чтобы Trend Scout видел cooldown-блоки.
+                # Без этого в critic нет записей о монетах в cooldown → скаут не диагностирует.
+                _log_critic_candidate(
+                    sym=sym, tf=tf,
+                    bar_ts=int(data["t"][i]),
+                    signal_type="cooldown",
+                    feat=feat, data=data, i=i,
+                    action="blocked",
+                    reason_code="cooldown",
+                    reason=f"cooldown: {bars_left}/{bars_total} bars remaining",
+                    stage="cooldown",
+                )
             return  # ещё в cooldown, пропускаем
         else:
             # Сбрасываем флаг «cooldown залогирован» когда cooldown истёк
@@ -2922,11 +2946,25 @@ async def _poll_coin(
         imp_ok,   _             = check_impulse_conditions(feat, i)
         aln_ok,   _             = check_alignment_conditions(feat, i, tf=tf)
 
+        # EMA_CROSS — самый ранний сигнал: пробой EMA20 снизу вверх.
+        # Срабатывает на 3-5 баров раньше BUY (до роста ADX, до slope-порога).
+        # Имеет собственный cooldown чтобы не спамить повторами одного пробоя.
+        cross_ok = False
+        if getattr(config, "EMA_CROSS_ENABLED", True):
+            _cross_cds = state.__dict__.setdefault("cross_cooldowns", {})
+            _bar_ms_cross = 15 * 60 * 1000 if tf == "15m" else 60 * 60 * 1000
+            _cross_until = _cross_cds.get(sym, 0)
+            if int(data["t"][i]) >= _cross_until:
+                cross_ok, _ = check_ema_cross_conditions(feat, i)
+                if cross_ok:
+                    _cd_cross = int(getattr(config, "CROSS_COOLDOWN_BARS", 6))
+                    _cross_cds[sym] = int(data["t"][i]) + _cd_cross * _bar_ms_cross
+
         # Yield to event loop so Telegram UI requests aren't starved by concurrent
         # _poll_coin tasks whose synchronous sections would otherwise block the loop.
         await asyncio.sleep(0)
 
-        any_signal = entry_ok or brk_ok or ret_ok or surge_ok or imp_ok or aln_ok
+        any_signal = entry_ok or brk_ok or ret_ok or surge_ok or imp_ok or aln_ok or cross_ok
         catchup_snapshot = None
         recent_disc = state.recent_discoveries.get(sym)
         if not any_signal and recent_disc and recent_disc.get("tf") == tf:
@@ -3038,6 +3076,7 @@ async def _poll_coin(
                 surge_ok=surge_ok,
                 imp_ok=imp_ok,
                 aln_ok=aln_ok,
+                cross_ok=cross_ok,
             )
             base_score = _entry_signal_score(
                 mode=preview_mode,
@@ -3079,6 +3118,16 @@ async def _poll_coin(
                 candidate_score += float(getattr(config, "FRESH_SIGNAL_SCORE_BONUS", 7.0))
             if catchup_snapshot is not None:
                 candidate_score += float(getattr(config, "DISCOVERY_CATCHUP_SCORE_BONUS", 6.0))
+
+            # ── Correlation Guard: мягкий downgrade для коррелированных кандидатов ──
+            # Применяется до проверки score_floor, чтобы дубли не прошли по высокому баллу.
+            if bool(getattr(config, "CORR_GUARD_ENABLED", False)) and bool(getattr(config, "CORR_MARGINAL_WEIGHTING", True)):
+                _corr_cache_mg = corr_guard.get_or_create_cache(state.__dict__)
+                _marginal = corr_guard.marginal_score(sym, state.positions, candidate_score, _corr_cache_mg)
+                if _marginal < candidate_score:
+                    log.debug("corr_guard marginal: %s score %.1f -> %.1f", sym, candidate_score, _marginal)
+                    candidate_score = _marginal
+
             if _late_1h_continuation_guard(
                 tf=tf,
                 mode=preview_mode,
@@ -3848,6 +3897,59 @@ async def _poll_coin(
                 )
                 botlog.log_blocked(sym, tf, float(c[i]), cluster_cap_reason, signal_type="open_cluster_cap")
                 return
+
+            # ── Correlation Guard — блокировка клонов по пирсоновской rho ──────
+            if bool(getattr(config, "CORR_GUARD_ENABLED", False)):
+                _corr_cache = corr_guard.get_or_create_cache(state.__dict__)
+                _is_bull, _is_bear = corr_guard.get_bull_bear_flags(state.__dict__)
+                _cg_result = corr_guard.check_entry(
+                    sym,
+                    state.positions,
+                    _corr_cache,
+                    is_bull_day=_is_bull,
+                    is_bear_day=_is_bear,
+                )
+                if not _cg_result.allowed:
+                    _log_critic_candidate(
+                        sym=sym,
+                        tf=tf,
+                        bar_ts=int(data["t"][i]),
+                        signal_type=preview_mode,
+                        feat=feat,
+                        data=data,
+                        i=i,
+                        action="blocked",
+                        reason_code="correlation_guard",
+                        reason=_cg_result.reason,
+                        stage="portfolio",
+                        candidate_score=candidate_score,
+                        base_score=base_score,
+                        score_floor=score_floor,
+                        forecast_return_pct=float(getattr(report, "forecast_return_pct", 0.0)),
+                        today_change_pct=float(getattr(report, "today_change_pct", 0.0)),
+                        ml_proba=ml_proba,
+                        mtf_soft_penalty=mtf_soft_penalty,
+                        fresh_priority=fresh_priority,
+                        catchup=catchup_snapshot is not None,
+                        continuation_profile=continuation_profile,
+                        signal_flags=signal_flags,
+                    )
+                    log.info("CORR GUARD BLOCK %s [%s]: %s", sym, tf, _cg_result.reason)
+                    _maybe_log_ranker_shadow(
+                        sym=sym,
+                        tf=tf,
+                        mode=preview_mode,
+                        price=float(c[i]),
+                        candidate_score=candidate_score,
+                        score_floor=score_floor,
+                        ranker_proba=ranker_proba,
+                        ranker_info=ranker_info,
+                        bot_action="blocked",
+                        reason=_cg_result.reason,
+                    )
+                    botlog.log_blocked(sym, tf, float(c[i]), _cg_result.reason, signal_type="correlation_guard")
+                    return
+
             port_ok, port_reason = _check_portfolio_limits(
                 sym,
                 state,
@@ -3954,6 +4056,52 @@ async def _poll_coin(
                         state.cd_logged.pop(replace_pos.symbol, None)
                         port_ok = True
                         port_reason = ""
+
+                # ── ML-Gated Rotation: вторая попытка освободить слот ──────────
+                # Если существующая score-based ротация не сработала, но у
+                # кандидата высокий ml_proba — помечаем слабейшую по EV ногу
+                # на выход через trail_stop. Слот освободится на следующем
+                # поллинге (через стандартный ATR-exit), и аналогичный
+                # кандидат сможет войти.
+                if (
+                    not port_ok
+                    and replace_pos is None
+                    and bool(getattr(config, "ROTATION_ENABLED", False))
+                ):
+                    _rot_last_prices = state.__dict__.setdefault("last_prices", {})
+                    _rot_decision = rotation.should_rotate(
+                        ml_proba,
+                        state.positions,
+                        config,
+                        _rot_last_prices,
+                    )
+                    if _rot_decision.allowed:
+                        _weak_pos = state.positions.get(_rot_decision.weak_sym)
+                        _weak_price = _rot_last_prices.get(_rot_decision.weak_sym)
+                        if _weak_pos is not None and _weak_price is not None:
+                            _evicted = rotation.evict_position(_weak_pos, float(_weak_price))
+                            if _evicted:
+                                log.info(
+                                    "ML-ROTATION eviction %s for %s [%s]: %s",
+                                    _rot_decision.weak_sym, sym, tf, _rot_decision.reason,
+                                )
+                                if _aux_notifications_enabled():
+                                    try:
+                                        await send(
+                                            rotation.format_rotation_message(
+                                                sym=sym,
+                                                mode=preview_mode,
+                                                tf=tf,
+                                                candidate_ml_proba=float(ml_proba or 0.0),
+                                                decision=_rot_decision,
+                                            )
+                                        )
+                                    except Exception:
+                                        log.exception("ML-ROTATION send failed")
+                                # Слот освободится на след. поллинге — candidate
+                                # заблокируется этим разом, но войдёт при ретраях.
+                                # port_ok остаётся False — это штатно.
+
                 if not port_ok:
                     _block_interval = getattr(config, "BLOCK_LOG_INTERVAL_BARS", 4)
                     bar_ms_b = 15 * 60 * 1000 if tf == "15m" else 60 * 60 * 1000
@@ -4042,9 +4190,14 @@ async def _poll_coin(
                 trail_k  = getattr(config, "ATR_TRAIL_K", 2.0)
                 max_hold = (getattr(config, "MAX_HOLD_BARS_15M", 48)
                             if tf == "15m" else getattr(config, "MAX_HOLD_BARS", 16))
-            else:  # aln_ok
+            elif aln_ok:
                 sig_mode = "alignment"
                 trail_k  = getattr(config, "ATR_TRAIL_K", 2.0)
+                max_hold = (getattr(config, "MAX_HOLD_BARS_15M", 48)
+                            if tf == "15m" else getattr(config, "MAX_HOLD_BARS", 16))
+            else:  # cross_ok — самый ранний: EMA20 пробой снизу, стоп шире
+                sig_mode = "impulse_cross"
+                trail_k  = getattr(config, "ATR_TRAIL_K_CROSS", 2.5)
                 max_hold = (getattr(config, "MAX_HOLD_BARS_15M", 48)
                             if tf == "15m" else getattr(config, "MAX_HOLD_BARS", 16))
 
@@ -4237,7 +4390,7 @@ async def _poll_coin(
                 "retest":       "🔄 Ретест EMA20",
                 "breakout":     "⚡ Пробой флэта",
                 "impulse":      "🚀 Импульс",
-                "impulse_cross":"🚀 Импульс (кросс)",
+                "impulse_cross":"🌱 Рождение тренда (EMA-пробой)",
                 "alignment":    "🌊 Выравнивание тренда",
             }
             mode_label = _mode_labels.get(sig_mode, "📈 Тренд")
@@ -4267,7 +4420,7 @@ async def _poll_coin(
                     _enh_parts.append(f"MH {_enh_adj.multi_horizon_bonus:+.0f}")
                 if _enh_parts:
                     _enh_note = f"\n🔬 Enhanced: {' | '.join(_enh_parts)} = `{_enh_adj.total_bonus:+.1f}`"
-            await send(
+            _buy_msg = (
                 f"🟢 *СИГНАЛ ПОКУПКИ* — {mode_label}\n\n"
                 f"*{sym}*  `[{tf}]`\n"
                 f"💰 Цена: `{price:.6g}`\n"
@@ -4280,9 +4433,51 @@ async def _poll_coin(
                 f"{catchup_note}{_enh_note}\n\n"
                 f"🎯 Буду проверять прогноз: {pos.prediction_summary()}"
             )
+            # ФИКС: если send() бросит исключение (Telegram недоступен, rate-limit и т.п.),
+            # позиция уже сохранена. Флаг buy_notified=False гарантирует, что
+            # уведомление будет переотправлено в следующем цикле поллинга перед SELL.
+            try:
+                await send(_buy_msg)
+                pos.buy_notified = True
+                save_positions(state.positions)
+            except Exception as _send_err:
+                log.warning("BUY notification failed for %s, will retry: %s", sym, _send_err)
+                # pos.buy_notified остаётся False — ретрансляция при следующем поллинге
         return
 
     # ── Open position: track predictions and check exit ──────────────────────
+
+    # ФИКС: ретрансляция BUY-уведомления если send() упал при входе в позицию.
+    # Это гарантирует что пользователь всегда получит BUY перед SELL.
+    if not getattr(pos, "buy_notified", True):
+        _mode_labels_retry = {
+            "trend":        "📈 Тренд",
+            "strong_trend": "💪 Сильный тренд",
+            "impulse_speed":"⚡ Быстрое движение",
+            "retest":       "🔄 Ретест EMA20",
+            "breakout":     "⚡ Пробой флэта",
+            "impulse":      "🚀 Импульс",
+            "impulse_cross":"🌱 Рождение тренда (EMA-пробой)",
+            "alignment":    "🌊 Выравнивание тренда",
+        }
+        _retry_label = _mode_labels_retry.get(getattr(pos, "signal_mode", "trend"), "📈 Тренд")
+        try:
+            await send(
+                f"🟢 *СИГНАЛ ПОКУПКИ* — {_retry_label} _(повтор — первая отправка не удалась)_\n\n"
+                f"*{sym}*  `[{tf}]`\n"
+                f"💰 Цена входа: `{pos.entry_price:.6g}`\n"
+                f"📐 EMA20: `{pos.entry_ema20:.6g}`\n"
+                f"📈 Наклон EMA20: `{pos.entry_slope:+.2f}%`\n"
+                f"💪 ADX: `{pos.entry_adx:.1f}`\n"
+                f"📊 RSI: `{pos.entry_rsi:.1f}`\n"
+                f"🔊 Объём ×: `{pos.entry_vol_x:.2f}`\n"
+                f"⚙️ Стоп: ATR×`{pos.trail_k}`  |  Лимит: `{pos.max_hold_bars}` баров"
+            )
+            pos.buy_notified = True
+            save_positions(state.positions)
+            log.info("BUY notification retransmitted for %s [%s]", sym, tf)
+        except Exception as _retry_err:
+            log.warning("BUY notification retry also failed for %s: %s", sym, _retry_err)
 
     # ИСПРАВЛЕНИЕ: entry_idx определяется ЗДЕСЬ, до любого использования.
     # Ищем бар входа по timestamp в текущем окне свечей.
@@ -4877,6 +5072,38 @@ async def monitoring_loop(state: MonitorState, send: SendFn) -> None:
                                 log.warning("discovery scan failed: %s", exc)
                         state.last_discovery_ts = now_ms
                         state.discovery_task = asyncio.create_task(_run_discovery())
+
+                # ── Correlation Guard: обновление матрицы + prune каждые ~15 минут ──
+                _corr_guard_interval = max(1, int(getattr(config, "CORR_CACHE_TTL_MIN", 15)) * 60 // config.POLL_SEC)
+                if bool(getattr(config, "CORR_GUARD_ENABLED", False)) and _heartbeat_counter % _corr_guard_interval == 0:
+                    try:
+                        _cg_cache = corr_guard.get_or_create_cache(state.__dict__)
+                        _open_syms = list(state.positions.keys())
+                        if len(_open_syms) >= 2:
+                            _cg_cache = await corr_guard.build_matrix_async(session, _open_syms, _cg_cache)
+                            _is_bull_cg, _is_bear_cg = corr_guard.get_bull_bear_flags(state.__dict__)
+                            _prune_list = corr_guard.prune_candidates(
+                                state.positions,
+                                state.__dict__.get("last_prices", {}),
+                                _cg_cache,
+                                is_bull_day=_is_bull_cg,
+                                is_bear_day=_is_bear_cg,
+                            )
+                            for _pc in _prune_list:
+                                _prune_pos = state.positions.get(_pc.symbol)
+                                if _prune_pos is None:
+                                    continue
+                                _prune_price = state.__dict__.get("last_prices", {}).get(_pc.symbol)
+                                if _prune_price is None:
+                                    log.warning("corr_guard prune: no last_price for %s, skip", _pc.symbol)
+                                    continue
+                                log.info("CORR GUARD PRUNE %s: %s", _pc.symbol, _pc.reason)
+                                # Форсируем выход: устанавливаем trail_stop выше текущей цены.
+                                # Следующий poll-цикл (через POLL_SEC) закроет позицию
+                                # стандартным ATR-trail путём — отправит SELL + запишет в critic/botlog.
+                                _prune_pos.trail_stop = _prune_price * 1.001  # +0.1% — гарантированный триггер
+                    except Exception as _cg_err:
+                        log.warning("corr_guard periodic update failed: %s", _cg_err)
 
                 # Heartbeat каждые ~10 минут (600с / POLL_SEC итераций)
                 _heartbeat_counter += 1

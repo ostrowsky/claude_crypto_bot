@@ -134,6 +134,82 @@ BLOCK_RULES: list[BlockRule] = [
         risk="low",
         tf_filter="1h",
     ),
+
+    # ── 9. Портфель полон: слишком мало одновременных позиций ────────────────
+    # Если много трендовых монет блокируются из-за "портфель полон" → предлагаем
+    # увеличить MAX_OPEN_POSITIONS. Риск high = только отчёт, не авто-применение.
+    BlockRule(
+        reason_code="portfolio",
+        config_param="MAX_OPEN_POSITIONS",
+        direction="increase",
+        extract_pattern=r"портфель полон: (\d+)/(\d+)",
+        safe_range=(8, 15),
+        max_change_pct=0.20,
+        risk="high",
+        is_integer=True,
+    ),
+
+    # ── 10. Лимит группы монет ────────────────────────────────────────────────
+    # Если несколько монет одной группы блокируются групповым лимитом → предлагаем
+    # поднять MAX_POSITIONS_PER_GROUP на 1.
+    BlockRule(
+        reason_code="portfolio",
+        config_param="MAX_POSITIONS_PER_GROUP",
+        direction="increase",
+        extract_pattern=r"уже (\d+)/(\d+)",
+        safe_range=(2, 5),
+        max_change_pct=0.50,
+        risk="medium",
+        is_integer=True,
+        reason_pattern=r"группа.*уже",
+    ),
+
+    # ── 11. Correlation Guard: порог слишком агрессивен → предложить поднять ────
+    # Если Guard блокирует много трендовых монет, а их реальная rho оказывается
+    # ниже порога (т.е. монеты на самом деле не клоны), Scout может предложить
+    # поднять CORR_GUARD_THRESHOLD на 0.03-0.05.
+    BlockRule(
+        reason_code="correlation_guard",
+        config_param="CORR_GUARD_THRESHOLD",
+        direction="increase",
+        extract_pattern=r"rho=(\d+\.?\d+) to \w+, cluster size \d+/(\d+)",
+        safe_range=(0.55, 0.80),
+        max_change_pct=0.05,
+        risk="medium",
+    ),
+
+    # ── 12. Ranker hard veto: final score слишком строгий ────────────────────
+    # 787 блокировок в датасете — самая большая «тёмная зона» после portfolio.
+    # Если много трендовых монет упирается в hard-veto, Scout предлагает
+    # смягчить порог ML_CANDIDATE_RANKER_HARD_VETO_15M_FINAL_MAX.
+    # Риск high: это last-resort фильтр против шумного ранкера, авто-ослабление
+    # опасно — только отчёт.
+    BlockRule(
+        reason_code="ranker_hard_veto",
+        config_param="ML_CANDIDATE_RANKER_HARD_VETO_15M_FINAL_MAX",
+        direction="decrease",
+        extract_pattern=r"final (-?\d+\.?\d*) <= (-?\d+\.?\d*)",
+        safe_range=(-1.20, -0.50),
+        max_change_pct=0.10,
+        risk="high",
+        tf_filter="15m",
+    ),
+
+    # ── 13. Cooldown после выхода ──────────────────────────────────────────────
+    # Монета заблокирована cooldown-ом после предыдущего выхода.
+    # Если много трендовых монет застревают в cooldown → диагностируем.
+    # Риск high: COOLDOWN_BARS выставлен сознательно против flip-flop,
+    # авто-уменьшение нежелательно — только отчёт.
+    BlockRule(
+        reason_code="cooldown",
+        config_param="COOLDOWN_BARS",
+        direction="decrease",
+        extract_pattern=r"cooldown: (\d+)/(\d+) bars remaining",
+        safe_range=(8, 24),
+        max_change_pct=0.20,
+        risk="high",
+        is_integer=True,
+    ),
 ]
 
 
