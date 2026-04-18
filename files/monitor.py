@@ -832,6 +832,18 @@ def _impulse_speed_entry_guard(
     if mode != "impulse_speed":
         return None
 
+    # Hard ADX floor — reject "impulse" signals with no trend strength.
+    # Added 2026-04-18 after observing CRVUSDT ADX=17.5 (-2.17%) and
+    # OXTUSDT ADX=11.3 enter on volume spikes with no directional trend.
+    if tf == "15m":
+        adx_floor = float(getattr(config, "IMPULSE_SPEED_15M_ADX_MIN", 20.0))
+        if adx < adx_floor:
+            return f"weak 15m impulse: ADX {adx:.1f} < {adx_floor:.0f}"
+    if tf == "1h":
+        adx_floor_1h = float(getattr(config, "IMPULSE_SPEED_1H_ADX_MIN", 18.0))
+        if adx < adx_floor_1h:
+            return f"weak 1h impulse: ADX {adx:.1f} < {adx_floor_1h:.0f}"
+
     if tf == "1h":
         base_reason = _one_hour_impulse_speed_entry_guard(
             tf=tf,

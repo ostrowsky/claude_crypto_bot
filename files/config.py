@@ -291,6 +291,12 @@ IMPULSE_SPEED_1H_RANGE_MAX: float = 10.0
 # Bull-day relaxed thresholds for 1h impulse guard
 IMPULSE_SPEED_1H_RSI_MAX_BULL: float = 82.0  # was 76 — ORDI RSI=79 was blocked on bull day (15.04.2026)
 IMPULSE_SPEED_1H_RANGE_MAX_BULL: float = 15.0
+# Hard ADX floor for impulse_speed signals (added 2026-04-18).
+# CRVUSDT (ADX 17.5, -2.17%) and OXTUSDT (ADX 11.3) slipped through after
+# 15m late-guard was disabled — they had volume spikes but no trend strength.
+# Set to 0 to disable.
+IMPULSE_SPEED_15M_ADX_MIN: float = 20.0
+IMPULSE_SPEED_1H_ADX_MIN: float = 18.0
 IMPULSE_SPEED_LATE_GUARD_ENABLED: bool = True
 # A/B kill-switches per-tf (added 2026-04-18 after Pareto sweep showed 15m guard
 # blocked +6.77% non-bull winners on 15m). Flip back to True for rollback.
