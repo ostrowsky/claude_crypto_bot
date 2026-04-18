@@ -103,6 +103,32 @@ Binance API → Indicators → Strategy (7 entry modes)
 
 UCB separation растёт (+138% за неделю) — бандит учится различать winners.
 
+### Обновление 2026-04-18
+
+- Recall@20 держится 100% с 10 апреля.
+- UCB sep: 0.015 → **0.136** (×9 за 10 дней).
+- AUC top20: 0.61 → **0.93** (скачок 15→16 апреля: 0.68→0.89).
+- `bandit_n_signal` упёрся в хардкод cap=8000 → добавлен `BANDIT_CRITIC_MAX_RECORDS=25_000` в `config.py`, пропатчен `offline_rl.py`.
+
+### Pareto sweep Scout-гейтов (`files/analyze_blocked_gates.py`)
+
+Реальные `take`-входы дают avg_r5 = **-0.016%**, но ряд `blocked`-гейтов имеет положительный avg_r5 — значит они блокируют прибыльные сигналы:
+
+| gate | n | avg_r5 | win% | вердикт |
+|------|---|--------|------|---------|
+| `impulse_guard` | 550 | **+0.641%** | 40.0 | сильное over-blocking |
+| `entry_score` | 1374 | +0.123% | 50.3 | over-blocking (наибольший объём) |
+| `ranker_hard_veto` | 787 | +0.128% | 46.3 | всё ещё over-blocking |
+| `clone_signal_guard` | 475 | +0.128% | 51.4 | over-blocking |
+| `trend_quality` | 433 | +0.127% | 46.7 | лёгкое over-blocking |
+| `ml_proba_zone` | 1340 | +0.009% | 44.1 | нейтрально |
+| `open_cluster_cap` | 136 | -0.360% | 35.3 | **работает правильно** |
+| `mtf` | 227 | -0.208% | 37.0 | **работает правильно** |
+
+Отчёт `report_rl_daily.py` теперь содержит колонку AUC и алерты:
+- просадка AUC ≥10% от пика последних 5 дней;
+- `bandit_n_signal` стагнирует 3 дня подряд.
+
 ---
 
 ## Расписание задач (Windows Scheduled Tasks)

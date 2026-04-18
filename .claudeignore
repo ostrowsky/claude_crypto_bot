@@ -1,0 +1,85 @@
+# .claudeignore — files Claude should NOT read/glob/grep by default.
+# Use explicit Read(file, offset, limit) or dedicated Python scripts for analysis.
+
+# ─── Huge runtime datasets (10M+ rows, 100+ MB) ─────────────────────────────
+# Reading any of these without offset/limit would blow the context window.
+files/ml_dataset.jsonl
+files/ml_dataset.jsonl.lock
+files/critic_dataset.jsonl
+files/critic_dataset.jsonl.lock
+files/top_gainer_dataset.jsonl
+files/bot_events.jsonl
+files/offline_rl_log.jsonl
+files/rl_memory.jsonl
+files/agent_events.jsonl
+bot_events.jsonl
+agent_events.jsonl
+
+# ─── ML model blobs (1-2 MB JSON each) ──────────────────────────────────────
+# CatBoost/custom JSON dumps — not human-readable, useless to load.
+files/ml_candidate_ranker.json
+files/top_gainer_model.json
+files/ml_candidate_ranker_report.json
+files/ml_candidate_ranker_shadow_report.json
+files/regime_model.json
+files/catboost_info/
+files/catboost_model_cache/
+catboost_info/
+.runtime/catboost_model_cache/
+
+# ─── Runtime logs (1-20 MB) ────────────────────────────────────────────────
+*.log
+bot_stdout.log
+bot_stderr.log
+.runtime/*.log
+.runtime/rl_worker_runtime.log
+
+# ─── Embedded Python runtime (~100 MB binaries) ────────────────────────────
+pyembed/
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# ─── Runtime state JSON (can be read explicitly if needed) ─────────────────
+files/bandit_state.json
+files/bandit_entry_state.json
+files/bandit_pending.json
+files/exit_policy.json
+files/offline_rl_state.json
+files/rl_optimizer_state.json
+files/rl_params.json
+replay_current.json
+
+# ─── Secrets and local configs ──────────────────────────────────────────────
+.env
+*.env
+.chat_ids
+.claude/settings.local.json.bak
+positions.json
+
+# ─── Large HTML/image dumps sitting in .runtime ────────────────────────────
+.runtime/*.html
+.runtime/*.png
+.runtime/*.jpg
+
+# ─── OS / IDE noise ─────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# ─── Git / zip artefacts ────────────────────────────────────────────────────
+*.zip
+.git/objects/
+
+# ─── Runtime directory as a whole (state files — read explicitly by name) ──
+# Scout and worker status files you typically DO want to read are exceptions
+# below — list explicitly rather than whitelisting to keep the list auditable.
+.runtime/bot_bg_runner.cmd

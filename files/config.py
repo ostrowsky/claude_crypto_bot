@@ -31,6 +31,10 @@ ML_TREND_NONBULL_MIN_PROBA: float = 0.35
 ML_TREND_NONBULL_LOW_PROBA_PENALTY: float = 6.0
 ML_TREND_NONBULL_HARD_BLOCK: bool = False
 CRITIC_DATASET_ENABLED: bool = True
+# Max records from critic_dataset.jsonl for entry bandit training.
+# Was hardcoded 8000 — dataset grew to 10K+ on 2026-04-15 and counter stuck.
+# 25_000 gives ~6 months headroom at current growth rate (~500/day).
+BANDIT_CRITIC_MAX_RECORDS: int = 25_000
 ML_CANDIDATE_RANKER_RUNTIME_ENABLED: bool = True
 ML_CANDIDATE_RANKER_MODEL_FILE: str = "ml_candidate_ranker.json"
 ML_CANDIDATE_RANKER_NEUTRAL_PROBA: float = 0.40  # was 0.50 — lowered: most signals score 0.38-0.48, neutral at 0.50 penalised them all

@@ -516,10 +516,37 @@ def build_bandit_accuracy_section() -> str:
             for r in recent[-5:]:
                 recall = r.get("bandit_recall_top20")
                 sep = r.get("bandit_ucb_separation")
+                auc = r.get("model_auc_top20")
                 ts = r.get("ts", "")[:10]
                 recall_s = f"{recall*100:.0f}%" if recall is not None else "n/a"
                 sep_s = f"{sep:+.3f}" if sep is not None else "n/a"
-                lines.append(f"    {ts}: recall={recall_s}  sep={sep_s}")
+                auc_s = f"{auc:.3f}" if auc is not None else "n/a"
+                lines.append(f"    {ts}: recall={recall_s}  sep={sep_s}  auc={auc_s}")
+
+            # ── AUC drop alert ─────────────────────────────────────────────
+            # Warn if today's AUC dropped >=10% from the best of the prior 5 days.
+            tail = recent[-6:]
+            aucs = [(r.get("ts", "")[:10], r.get("model_auc_top20"))
+                    for r in tail if r.get("model_auc_top20") is not None]
+            if len(aucs) >= 3:
+                today_ts, today_auc = aucs[-1]
+                prior = [a for _, a in aucs[:-1]]
+                if prior:
+                    peak = max(prior)
+                    drop = (peak - today_auc) / peak if peak > 0 else 0.0
+                    if drop >= 0.10:
+                        lines.append("")
+                        lines.append(
+                            f"  ⚠ ALERT: AUC dropped {drop*100:.1f}% "
+                            f"(peak={peak:.3f} -> today={today_auc:.3f})"
+                        )
+                    # Also flag n_signal stagnation
+                    n_sig = [r.get("bandit_n_signal", 0) for r in tail[-3:]]
+                    if len(n_sig) == 3 and n_sig[0] == n_sig[1] == n_sig[2]:
+                        lines.append(
+                            f"  ⚠ ALERT: bandit_n_signal stuck at {n_sig[0]} "
+                            f"for 3 days — check BANDIT_CRITIC_MAX_RECORDS."
+                        )
 
     return "\n".join(lines)
 

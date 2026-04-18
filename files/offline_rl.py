@@ -280,7 +280,12 @@ def train_entry_bandit(
              len(universal_samples), len(tg_days), n_universal_top)
 
     # ── Source 2: Signal samples from critic_dataset ────────────────────────
-    critic_records = _load_critic_dataset(max_records=8000)
+    try:
+        import config as _cfg  # type: ignore
+        _max_critic = int(getattr(_cfg, "BANDIT_CRITIC_MAX_RECORDS", 25_000))
+    except Exception:
+        _max_critic = 25_000
+    critic_records = _load_critic_dataset(max_records=_max_critic)
     signal_samples = []
     n_signal_top = 0
 
