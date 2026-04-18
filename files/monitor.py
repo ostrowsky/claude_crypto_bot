@@ -847,6 +847,12 @@ def _impulse_speed_entry_guard(
     if not getattr(config, "IMPULSE_SPEED_LATE_GUARD_ENABLED", False):
         return None
 
+    # Per-tf A/B kill-switches (added 2026-04-18 after Pareto sweep)
+    if tf == "15m" and not getattr(config, "IMPULSE_SPEED_LATE_GUARD_15M_ENABLED", True):
+        return None
+    if tf == "1h" and not getattr(config, "IMPULSE_SPEED_LATE_GUARD_1H_ENABLED", True):
+        return None
+
     if tf == "15m":
         if is_bull_day:
             rsi_min = float(getattr(config, "IMPULSE_SPEED_LATE_GUARD_15M_RSI_MIN_BULL", 76.0))
