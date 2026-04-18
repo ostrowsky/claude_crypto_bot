@@ -419,6 +419,17 @@ class MLPModel:
 
 
 def predict_proba_from_payload(payload: dict, rec: dict) -> float:
+    # Per-segment routing: if the payload contains segment-specific models
+    # under `segment_model_payloads` AND the current rec's (signal_type, regime)
+    # segment passed the training-time quality gate, use that model.
+    # Falls back to the global model for unknown/filtered-out segments.
+    seg_map = payload.get("segment_model_payloads") or {}
+    if seg_map:
+        seg_key = f"{rec.get('signal_type')}|{'bull' if rec.get('is_bull_day') else 'nonbull'}"
+        seg_payload = seg_map.get(seg_key)
+        if seg_payload:
+            return predict_proba_from_payload(seg_payload, rec)
+
     feature_names = payload["feature_names"]
     x = vectorize_record(rec, feature_names)
     mean = np.asarray(payload["scaler_mean"], dtype=float)
@@ -805,10 +816,33 @@ def save_json(path: Path, payload: dict) -> None:
 
 
 def build_live_model_payload(report: dict) -> dict:
+    """
+    Assemble the live payload written to ml_signal_model.json.
+
+    Only segment-specific models that IMPROVE over the rules baseline
+    (ret5_avg_delta > 0) are kept; others would degrade live results and
+    are dropped so the global model handles those segments instead.
+    """
     payload = dict(report.get("model_payload", {}))
-    segment_payloads = report.get("segment_model_payloads", {})
-    if isinstance(segment_payloads, dict) and segment_payloads:
-        payload["segment_model_payloads"] = segment_payloads
+    segment_payloads = report.get("segment_model_payloads") or {}
+    segment_reports = report.get("segment_reports") or {}
+
+    kept: Dict[str, dict] = {}
+    dropped: Dict[str, float] = {}
+    for key, seg_payload in segment_payloads.items():
+        seg_rep = segment_reports.get(key) or {}
+        # segment_reports use "delta"; the aggregate report uses "improvement_delta"
+        delta_dict = seg_rep.get("delta") or seg_rep.get("improvement_delta") or {}
+        delta = float(delta_dict.get("ret5_avg_delta", 0.0))
+        if delta > 0.0:
+            kept[key] = seg_payload
+        else:
+            dropped[key] = delta
+
+    if kept:
+        payload["segment_model_payloads"] = kept
+    if dropped:
+        payload["segment_dropped"] = dropped
     return payload
 
 

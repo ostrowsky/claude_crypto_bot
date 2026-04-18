@@ -5909,10 +5909,12 @@ class TestNightSignalQualityGuards(unittest.TestCase):
         self.assertIn("alignment", config.FAST_LOSS_EMA_EXIT_MODES)
         self.assertIn("retest", config.FAST_LOSS_EMA_EXIT_MODES)
         self.assertIn("breakout", config.FAST_LOSS_EMA_EXIT_MODES)
-        self.assertIn("impulse", config.FAST_LOSS_EMA_EXIT_MODES)
+        # 19.04: `impulse` removed from modes — 1-bar churn (TRUUSDT -2.04% in 1 bar)
+        self.assertNotIn("impulse", config.FAST_LOSS_EMA_EXIT_MODES)
         self.assertNotIn("impulse_speed", config.FAST_LOSS_EMA_EXIT_MODES)
         self.assertEqual(config.FAST_LOSS_EMA_EXIT_RSI_MAX, 70.0)
-        self.assertEqual(config.FAST_LOSS_EMA_EXIT_MIN_BARS, 1)
+        # 19.04: MIN_BARS raised 1 -> 2 to avoid shakeout wick exits
+        self.assertEqual(config.FAST_LOSS_EMA_EXIT_MIN_BARS, 2)
 
     def test_T248_impulse_speed_late_guard_enabled_by_default(self):
         import config

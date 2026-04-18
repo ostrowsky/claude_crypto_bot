@@ -499,8 +499,13 @@ ALIGNMENT_NONBULL_RSI_HI: float = 66.0
 # хотя уже на первом закрытии под EMA20 сделка была в минусе и импульс слабел.
 FAST_LOSS_EMA_EXIT_ENABLED: bool = True
 FAST_LOSS_EMA_EXIT_TF: tuple = ("15m", "1h")
-FAST_LOSS_EMA_EXIT_MODES: tuple = ("retest", "breakout", "alignment", "impulse")
-FAST_LOSS_EMA_EXIT_MIN_BARS: int = 1
+# 19.04: `impulse` удалён — первый бар после импульса часто волатилен и уходит
+# ниже EMA20 даже при продолжении движения (TRUUSDT 15m churn: вход 0.0049 -> выход
+# 0.0048 через 1 бар, -2.04%). Для impulse это не первый убыточный close, а шум.
+FAST_LOSS_EMA_EXIT_MODES: tuple = ("retest", "breakout", "alignment")
+# 19.04: было 1 — слишком агрессивно, ловили шумовой первый бар (TRUUSDT).
+# Даём сделке 2 бара, чтобы убедиться, что это реальный разворот, а не фитиль.
+FAST_LOSS_EMA_EXIT_MIN_BARS: int = 2
 FAST_LOSS_EMA_EXIT_PNL_MAX: float = 0.0
 FAST_LOSS_EMA_EXIT_RSI_MAX: float = 70.0
 
