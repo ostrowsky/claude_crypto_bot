@@ -291,6 +291,15 @@ IMPULSE_SPEED_1H_RANGE_MAX: float = 10.0
 # Bull-day relaxed thresholds for 1h impulse guard
 IMPULSE_SPEED_1H_RSI_MAX_BULL: float = 82.0  # was 76 — ORDI RSI=79 was blocked on bull day (15.04.2026)
 IMPULSE_SPEED_1H_RANGE_MAX_BULL: float = 15.0
+# Stateless late-stage guard (added 2026-04-18): replace daily_range counter,
+# which depends on UTC session start, with ATR-extension from 1h EMA20.
+# When True and ext_atr is provided, uses (price - ema20_1h) / atr_1h instead of
+# daily_range. Metric is identical regardless of time of day and self-resets on
+# consolidation — blocks only when price is truly extended from the mean.
+# Flip to False to roll back to daily_range behavior.
+IMPULSE_SPEED_1H_USE_EXT_ATR: bool = True
+IMPULSE_SPEED_1H_EXT_ATR_MAX: float = 6.0        # 6 ATR above EMA20 = extended
+IMPULSE_SPEED_1H_EXT_ATR_MAX_BULL: float = 9.0   # bull day = wider runway
 # Hard ADX floor for impulse_speed signals (added 2026-04-18).
 # CRVUSDT (ADX 17.5, -2.17%) and OXTUSDT (ADX 11.3) slipped through after
 # 15m late-guard was disabled — they had volume spikes but no trend strength.

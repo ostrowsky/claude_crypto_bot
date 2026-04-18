@@ -781,6 +781,7 @@ def _one_hour_impulse_speed_entry_guard(
     adx: float,
     daily_range: float,
     is_bull_day: bool = False,
+    ext_atr: Optional[float] = None,
 ) -> Optional[str]:
     if tf != "1h" or mode != "impulse_speed":
         return None
@@ -797,8 +798,22 @@ def _one_hour_impulse_speed_entry_guard(
     adx_min = float(getattr(config, "IMPULSE_SPEED_1H_ADX_MIN", 20.0))
     if adx < adx_min:
         return f"1h impulse_speed guard: ADX {adx:.1f} < {adx_min:.1f}"
-    if daily_range > range_max:
-        return f"1h impulse_speed guard: daily_range {daily_range:.2f}% > {range_max:.2f}%"
+
+    # Prefer stateless ATR-extension over daily_range (time-of-day artifact).
+    # Falls back to legacy daily_range when ext_atr is not provided
+    # (unit tests, or if ATR is unavailable).
+    use_ext = bool(getattr(config, "IMPULSE_SPEED_1H_USE_EXT_ATR", True))
+    if use_ext and ext_atr is not None:
+        if is_bull_day:
+            ext_max = float(getattr(config, "IMPULSE_SPEED_1H_EXT_ATR_MAX_BULL", 9.0))
+        else:
+            ext_max = float(getattr(config, "IMPULSE_SPEED_1H_EXT_ATR_MAX", 6.0))
+        if ext_atr > ext_max:
+            return (f"1h impulse_speed guard: ext {ext_atr:.1f} ATR above EMA20 "
+                    f"> {ext_max:.1f}")
+    else:
+        if daily_range > range_max:
+            return f"1h impulse_speed guard: daily_range {daily_range:.2f}% > {range_max:.2f}%"
     return None
 
 
@@ -845,6 +860,20 @@ def _impulse_speed_entry_guard(
             return f"weak 1h impulse: ADX {adx:.1f} < {adx_floor_1h:.0f}"
 
     if tf == "1h":
+        # Compute stateless extension metric: price distance from 1h EMA20 in ATR.
+        # Replaces daily_range (time-of-day artifact). Falls back to daily_range
+        # if ATR unavailable.
+        ext_atr: Optional[float] = None
+        try:
+            atr_arr = feat.get("atr")
+            if atr_arr is not None and ema20 and i is not None:
+                atr_now = float(atr_arr[i])
+                import math as _m
+                if _m.isfinite(atr_now) and atr_now > 0:
+                    ext_atr = (float(price) - float(ema20)) / atr_now
+        except Exception:
+            ext_atr = None
+
         base_reason = _one_hour_impulse_speed_entry_guard(
             tf=tf,
             mode=mode,
@@ -852,6 +881,7 @@ def _impulse_speed_entry_guard(
             adx=adx,
             daily_range=daily_range,
             is_bull_day=is_bull_day,
+            ext_atr=ext_atr,
         )
         if base_reason:
             return base_reason
