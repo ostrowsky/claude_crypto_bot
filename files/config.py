@@ -86,6 +86,12 @@ BANDIT_ENABLED: bool = True               # adaptive trail_k/max_hold via LinUCB
 BANDIT_ALPHA: float = 1.5                 # UCB exploration coefficient
 BANDIT_TRAIL_K_MIN: float = 2.0          # floor: bandit cannot set trail_k below this (prevents 1.05 stops)
 
+# 19.04.2026: opt-in to apply CMA-ES-optimized params from rl_params.json on
+# bot startup. Disabled by default — applying ~22 overrides at once to a
+# profitable bot is risky. Enable only after canary validation. The optimizer
+# (offline_rl.py + rl_optimizer.py) keeps writing rl_params.json regardless.
+RL_PARAMS_APPLY_ON_STARTUP: bool = False
+
 # ── Mode enable/disable flags ─────────────────────────────────────────────────
 # Data: 77k events. breakout=33% win/-0.053% avg, retest=37%/-0.139%, strong_trend=26%/-0.851%
 # All three have high fast-exit rates (11-29%) and generate BUY→SELL flip-flop chains.

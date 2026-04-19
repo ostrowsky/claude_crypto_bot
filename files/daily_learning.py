@@ -227,6 +227,87 @@ def retrain_top_gainer_model() -> Dict:
         return {"status": "error", "error": str(e)}
 
 
+def retrain_ml_signal_model() -> Dict:
+    """
+    19.04.2026: retrain per-segment ML signal model nightly so it doesn't
+    go stale (was last refreshed manually). Reads ml_dataset.jsonl,
+    writes ml_signal_model.json + ml_signal_report.json.
+    """
+    try:
+        import subprocess, sys
+        from pathlib import Path
+        files_dir = Path(__file__).resolve().parent
+        cmd = [
+            sys.executable,
+            str(files_dir / "ml_signal_model.py"),
+            "--dataset", str(files_dir / "ml_dataset.jsonl"),
+            "--model-out", str(files_dir / "ml_signal_model.json"),
+            "--report-out", str(files_dir / "ml_signal_report.json"),
+        ]
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+        if proc.returncode != 0:
+            log.error("ml_signal_model retrain failed: %s", proc.stderr[-500:])
+            return {"status": "error", "stderr": proc.stderr[-500:]}
+        log.info("ml_signal_model retrained")
+        # Read the report to surface delta
+        try:
+            import json, io
+            r = json.load(io.open(files_dir / "ml_signal_report.json", encoding="utf-8"))
+            imp = r.get("improvement_delta", {})
+            return {"status": "ok", "ret5_delta": imp.get("ret5_avg_delta"),
+                    "wr_delta": imp.get("win_rate_delta")}
+        except Exception:
+            return {"status": "ok"}
+    except Exception as e:
+        log.error("ml_signal_model retrain exception: %s", e)
+        return {"status": "error", "error": str(e)}
+
+
+def retrain_ml_candidate_ranker() -> Dict:
+    """
+    19.04.2026: retrain candidate ranker nightly. Was a constant predictor
+    (tree_count=1, importance=0) until eval_metric/early_stopping fix.
+    """
+    try:
+        import subprocess, sys
+        from pathlib import Path
+        files_dir = Path(__file__).resolve().parent
+        cmd = [sys.executable, str(files_dir / "ml_candidate_ranker.py")]
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=900,
+                              cwd=str(files_dir))
+        if proc.returncode != 0:
+            log.error("ml_candidate_ranker retrain failed: %s", proc.stderr[-500:])
+            return {"status": "error", "stderr": proc.stderr[-500:]}
+        log.info("ml_candidate_ranker retrained")
+        try:
+            import json, io
+            r = json.load(io.open(files_dir / "ml_candidate_ranker_report.json", encoding="utf-8"))
+            imp = r.get("improvement_delta", {})
+            return {"status": "ok", "ret5_delta": imp.get("ret5_avg_delta"),
+                    "ev_delta": imp.get("ev_avg_delta")}
+        except Exception:
+            return {"status": "ok"}
+    except Exception as e:
+        log.error("ml_candidate_ranker retrain exception: %s", e)
+        return {"status": "error", "error": str(e)}
+
+
+def refresh_rl_memory() -> Dict:
+    """
+    19.04.2026: rl_memory.jsonl was stale (live monitor doesn't write to it).
+    Backfill from bot_events.jsonl entry/exit pairs so CMA-ES optimizer has
+    fresh experiences to work with on the next cycle.
+    """
+    try:
+        from rl_bootstrap import bootstrap
+        n = bootstrap(events_file="bot_events.jsonl", run_optimize=False)
+        log.info("rl_memory refreshed: +%d experiences", n)
+        return {"status": "ok", "new_experiences": n}
+    except Exception as e:
+        log.error("rl_memory refresh failed: %s", e)
+        return {"status": "error", "error": str(e)}
+
+
 # ── Step 4: Build progress report ──────────────────────────────────────────
 
 def build_progress_report(
@@ -353,6 +434,14 @@ async def run_full_cycle(
     model_result = {}
     if retrain_model:
         model_result = retrain_top_gainer_model()
+        # 19.04.2026: also refresh ml_signal_model, candidate ranker, rl_memory.
+        # All best-effort — failures don't break the cycle.
+        sig_result = retrain_ml_signal_model()
+        rk_result = retrain_ml_candidate_ranker()
+        mem_result = refresh_rl_memory()
+        model_result["ml_signal_model"] = sig_result
+        model_result["ml_candidate_ranker"] = rk_result
+        model_result["rl_memory"] = mem_result
 
     # Step 5: Report
     report_text = build_progress_report(collect_result, train_result, model_result)

@@ -250,8 +250,14 @@ def _safe_truncate(text: str, max_len: int = 4000) -> str:
 def _main_menu_text() -> str:
     wl = config.load_watchlist()
     status = "▶️ запущен" if state.running else "⏹ остановлен"
+    try:
+        import build_info as _bi
+        _build_str = _bi.get_build_info_str()
+    except Exception:
+        _build_str = "—"
     return (
-        f"👋 *Crypto Trend Bot*\n\n"
+        f"👋 *Crypto Trend Bot*\n"
+        f"🔖 `{_build_str}`\n\n"
         f"Мониторинг: {status}\n"
         f"Монет в списке: *{len(wl)}*\n"
         f"Монет «в игре» сегодня: *{len(state.hot_coins)}*\n"
@@ -1816,6 +1822,26 @@ def main() -> None:
     app.add_handler(CommandHandler("test",  cmd_test))
     app.add_handler(CallbackQueryHandler(btn, block=False))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler, block=False))
+
+    # 19.04.2026: wire CMA-ES optimizer output (rl_params.json) into live config.
+    # Was completely orphaned — 60 generations of optimization were not reaching
+    # the trading loop. apply_optimized_params() reads rl_params.json and
+    # patches matching attributes on `config` module via setattr.
+    # OPT-IN via RL_PARAMS_APPLY_ON_STARTUP — default False, because applying
+    # ~22 param overrides at once to a profitable bot (+146% / 7d) is risky;
+    # CMA-ES reward != live PnL. Flip the flag after canary-validating offline.
+    if bool(getattr(config, "RL_PARAMS_APPLY_ON_STARTUP", False)):
+        try:
+            from rl_agent import rl_agent as _rl_agent
+            if _rl_agent.apply_optimized_params():
+                log.info("RL: optimized params applied to config")
+            else:
+                log.info("RL: no optimized params to apply (rl_params.json missing/empty)")
+        except Exception as exc:
+            log.warning("RL: failed to apply optimized params: %s", exc)
+    else:
+        log.info("RL: rl_params.json apply DISABLED (set RL_PARAMS_APPLY_ON_STARTUP=True to enable)")
+
     log.info("Bot started.")
     log.info(
         "Starting polling with timeout=%s poll_interval=%s drop_pending_updates=%s",
