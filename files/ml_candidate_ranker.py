@@ -62,10 +62,16 @@ DEFAULT_TOP_GAINER_SCORE_WEIGHT = 0.25
 DEFAULT_CAPTURE_SCORE_WEIGHT = 0.15
 CATBOOST_RUNTIME_CACHE_DIR = ROOT.parent / ".runtime" / "catboost_model_cache"
 CATBOOST_RANDOM_SEED = 42
-CATBOOST_ITERATIONS = 250
+# 19.04.2026: training was collapsing to tree_count=1 (constant predictor,
+# importance=0 for all 77 features). Root cause: use_best_model=True picked
+# iter 0 because val Logloss never improved (regime mismatch between time
+# splits). Fix: eval_metric=AUC (reward generalization, not point loss),
+# early_stopping_rounds=40, lower lr, stronger regularization.
+CATBOOST_ITERATIONS = 400
 CATBOOST_DEPTH = 6
-CATBOOST_LEARNING_RATE = 0.05
-CATBOOST_L2_LEAF_REG = 6.0
+CATBOOST_LEARNING_RATE = 0.03
+CATBOOST_L2_LEAF_REG = 10.0
+CATBOOST_EARLY_STOPPING_ROUNDS = 40
 
 DECISION_FEATURES = [
     "candidate_score",
@@ -610,7 +616,7 @@ class CatBoostBinaryClassifier:
             raise RuntimeError(f"CatBoost is not available: {CATBOOST_IMPORT_ERROR}")
         self.model = CatBoostClassifier(
             loss_function="Logloss",
-            eval_metric="Logloss",
+            eval_metric="AUC",
             iterations=CATBOOST_ITERATIONS,
             depth=CATBOOST_DEPTH,
             learning_rate=CATBOOST_LEARNING_RATE,
@@ -618,6 +624,7 @@ class CatBoostBinaryClassifier:
             random_seed=CATBOOST_RANDOM_SEED,
             verbose=False,
             allow_writing_files=False,
+            early_stopping_rounds=CATBOOST_EARLY_STOPPING_ROUNDS,
         )
 
     def fit(self, X: np.ndarray, y: np.ndarray, X_val: np.ndarray, y_val: np.ndarray) -> "CatBoostBinaryClassifier":
@@ -646,6 +653,7 @@ class CatBoostValueRegressor:
             random_seed=CATBOOST_RANDOM_SEED,
             verbose=False,
             allow_writing_files=False,
+            early_stopping_rounds=CATBOOST_EARLY_STOPPING_ROUNDS,
         )
 
     def fit(self, X: np.ndarray, y: np.ndarray, X_val: np.ndarray, y_val: np.ndarray) -> "CatBoostValueRegressor":
@@ -674,6 +682,7 @@ class CatBoostGroupRanker:
             random_seed=CATBOOST_RANDOM_SEED,
             verbose=False,
             allow_writing_files=False,
+            early_stopping_rounds=CATBOOST_EARLY_STOPPING_ROUNDS,
         )
 
     def fit(
