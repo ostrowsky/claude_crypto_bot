@@ -22,9 +22,15 @@ ML_GENERAL_NEUTRAL_PROBA: float = 0.50
 ML_GENERAL_SCORE_WEIGHT: float = 0.0
 # Hard block entries outside the profitable ml_proba zone (0.55-0.65 from backtest analysis)
 ML_GENERAL_HARD_BLOCK_ENABLED: bool = True
-ML_GENERAL_HARD_BLOCK_MIN: float = 0.35   # block if ml_proba < this (was 0.55 — too restrictive)
+# 19.04.2026: lowered 0.35 -> 0.28 after ml_signal_model retrain shifted
+# probability distribution downward. Backtest 14d/481 trades: bucket [0.30,0.35)
+# was the BEST (n=24, win=66.7%, avg=+0.67%, sum=+16%), and blocking it was
+# leaving money on the table (impulse_speed win=73%, trend win=80%, impulse
+# win=100% in the ml<0.35 bucket). Live effect: BTC blocked 34x/90min today
+# with ml proba 0.26-0.32 while clearly trending up.
+ML_GENERAL_HARD_BLOCK_MIN: float = 0.28   # block if ml_proba < this
 ML_GENERAL_HARD_BLOCK_MAX: float = 1.01   # disabled: high-confidence signals must never be blocked (was 0.65)
-ML_GENERAL_HARD_BLOCK_BULL_DAY_MIN: float = 0.28  # looser floor on bull days
+ML_GENERAL_HARD_BLOCK_BULL_DAY_MIN: float = 0.22  # looser floor on bull days (was 0.28, kept gap from non-bull)
 ML_ENABLE_TREND_NONBULL_FILTER: bool = True
 ML_TREND_NONBULL_SEGMENT_KEY: str = "trend|nonbull"
 ML_TREND_NONBULL_MIN_PROBA: float = 0.35
