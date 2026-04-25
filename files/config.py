@@ -77,6 +77,19 @@ ML_CANDIDATE_RANKER_HARD_VETO_1H_RETEST_MODES: tuple[str, ...] = ("retest",)
 ML_CANDIDATE_RANKER_HARD_VETO_1H_RETEST_FINAL_MAX: float = -1.20
 ML_CANDIDATE_RANKER_HARD_VETO_1H_RETEST_QUALITY_MAX: float = 0.35
 ML_CANDIDATE_RANKER_HARD_VETO_1H_RETEST_EV_MAX: float = -1.25
+# ── 1h impulse / impulse_speed composite veto (added 2026-04-19) ──
+# Diagnostic: generic 1h gate (final<=-1.50 AND tg<=0.25) blocked 0/190 trades
+# in critic_dataset backtest — threshold below p10 of actual distribution.
+# V3 config backtested on 190 1h-impulse 'take' rows: blocks 33% with avg_ret5
+# -0.27% (kept avg improves +0.04%, kept win% +4.6pp). Mirrors 15m impulse veto.
+# BNT reference (2026-04-19): final=-0.33 EV=-0.38 Q=0.56 TG=0.23 CAP=0.06 -> veto ✓
+ML_CANDIDATE_RANKER_HARD_VETO_1H_IMPULSE_ENABLED: bool = True
+ML_CANDIDATE_RANKER_HARD_VETO_1H_IMPULSE_MODES: tuple[str, ...] = ("impulse_speed", "impulse")
+ML_CANDIDATE_RANKER_HARD_VETO_1H_IMPULSE_FINAL_MAX: float = -0.20
+ML_CANDIDATE_RANKER_HARD_VETO_1H_IMPULSE_EV_MAX: float = -0.30
+ML_CANDIDATE_RANKER_HARD_VETO_1H_IMPULSE_QUALITY_MAX: float = 0.58
+ML_CANDIDATE_RANKER_HARD_VETO_1H_IMPULSE_TOP_GAINER_MAX: float = 0.25
+ML_CANDIDATE_RANKER_HARD_VETO_1H_IMPULSE_CAPTURE_MAX: float = 0.08
 TOP_GAINER_CRITIC_ENABLED: bool = True
 TOP_GAINER_CRITIC_TIMEZONE: str = "Europe/Budapest"
 TOP_GAINER_CRITIC_TOP_N: int = 15
@@ -298,7 +311,9 @@ LATE_1H_CONTINUATION_GUARD_RANGE_MIN: float = 5.0
 LATE_1H_CONTINUATION_GUARD_SCORE_MAX: float = 68.0
 IMPULSE_SPEED_1H_ENTRY_GUARD_ENABLED: bool = True
 IMPULSE_SPEED_1H_RSI_MAX: float = 76.0       # was 70 — raised: RSI=70-76 is normal for trending coins
-IMPULSE_SPEED_1H_ADX_MIN: float = 17.04  # scout:15.04.2026 was 19.36
+# NOTE: IMPULSE_SPEED_1H_ADX_MIN is defined below (line ~333) as the hard ADX floor.
+# The 17.04 value previously here was a dead duplicate (overwritten by the later definition).
+# Removed to avoid confusion — see IMPULSE_SPEED_1H_ADX_MIN at the hard-floor block.
 IMPULSE_SPEED_1H_RANGE_MAX: float = 10.0
 # Bull-day relaxed thresholds for 1h impulse guard
 IMPULSE_SPEED_1H_RSI_MAX_BULL: float = 82.0  # was 76 — ORDI RSI=79 was blocked on bull day (15.04.2026)
@@ -315,9 +330,12 @@ IMPULSE_SPEED_1H_EXT_ATR_MAX_BULL: float = 9.0   # bull day = wider runway
 # Hard ADX floor for impulse_speed signals (added 2026-04-18).
 # CRVUSDT (ADX 17.5, -2.17%) and OXTUSDT (ADX 11.3) slipped through after
 # 15m late-guard was disabled — they had volume spikes but no trend strength.
+# 15m floor backtest 2026-04-20: take rows ADX[15-17)=+0.33% win71%, ADX[17-20)=+0.22% win59%
+# → lowered 20→15; ADX<15 = avg -0.36% (correctly blocked). 1h: take rows ADX[15-18)=-0.87%,
+# ADX[18-20)=-1.29% → 1h floor kept at 18 (low ADX genuinely bad on 1h).
 # Set to 0 to disable.
-IMPULSE_SPEED_15M_ADX_MIN: float = 20.0
-IMPULSE_SPEED_1H_ADX_MIN: float = 18.0
+IMPULSE_SPEED_15M_ADX_MIN: float = 15.0   # was 20.0 (backtest 2026-04-20: -5pts, ADX15-20 positive)
+IMPULSE_SPEED_1H_ADX_MIN: float = 14.0  # scout:22.04.2026 was 15.84
 IMPULSE_SPEED_LATE_GUARD_ENABLED: bool = True
 # A/B kill-switches per-tf (added 2026-04-18 after Pareto sweep showed 15m guard
 # blocked +6.77% non-bull winners on 15m). Flip back to True for rollback.
@@ -505,6 +523,11 @@ ALIGNMENT_NONBULL_REQUIRE_ABOVE_EMA200: bool = True
 ALIGNMENT_NONBULL_VOL_MIN: float = 1.0
 ALIGNMENT_NONBULL_RSI_LO: float = 50.0
 ALIGNMENT_NONBULL_RSI_HI: float = 66.0
+# G1+G4 quality gates — backtest 2026-04-20: 15m +0.19% delta, sharpe +2.50; 1h -0.06%→+0.42%
+ALIGNMENT_QUALITY_GATES_ENABLED: bool = True
+ALIGNMENT_MACD_SLOPE_LOOKBACK: int   = 2      # G1: hist[i] >= hist[i-N] (slope not fading)
+ALIGNMENT_MIN_DIST_TO_HIGH_BARS: int = 20     # G4: rolling N-bar high for distance check
+ALIGNMENT_MIN_DIST_TO_HIGH_ATR: float = 0.30  # G4: must be >= X ATRs below the N-bar high
 
 # ── Fast loss exit: ускоренный выход после первого закрытия ниже EMA20 ─────────────
 # Ночная проблема 23.03: часть 15m сделок выходила только после 2-го close ниже EMA20,
@@ -800,6 +823,16 @@ TREND_15M_QUALITY_DAILY_RANGE_MAX: float = 10.0        # was 8.0
 TREND_15M_QUALITY_DAILY_RANGE_MAX_BULL_DAY: float = 14.0  # relaxed for bull days (TAO 12% blocked)
 TREND_15M_QUALITY_PRICE_EDGE_MAX_PCT: float = 3.20     # was 2.40 — TAO blocked at 2.43%
 TREND_15M_QUALITY_PRICE_EDGE_MAX_BULL_DAY_PCT: float = 4.00  # wider on bull days
+# Mode daily-range / slope quality gate (backtest 2026-04-24, 60d, 2197 entries)
+# Root cause: on quiet-market days (daily_range 3-4%) signals are almost all FP
+# because coins don't make big moves regardless of technical setup.
+# TP entries have significantly higher daily_range than FP across all modes.
+MODE_RANGE_QUALITY_GUARD_ENABLED: bool = True
+ALIGNMENT_15M_RANGE_MIN:  float = 4.0  # +5.9pp prec (23.0%->28.9%), blocks 49% entries
+TREND_15M_RANGE_MIN:      float = 4.0  # +17.1pp prec (29.9%->47.0%), blocks 57% entries
+ALIGNMENT_1H_RANGE_MIN:   float = 5.0  # +8.0pp prec (30.9%->38.9%), blocks 28% entries
+TREND_1H_SLOPE_MIN:       float = 0.50 # +4.6pp prec (14.1%->18.8%), blocks 28% entries
+IMPULSE_SPEED_1H_RANGE_MIN: float = 7.0  # +3.3pp prec (16.5%->19.8%), blocks 20% entries
 NEAR_MISS_LOGGING_ENABLED: bool = True
 NEAR_MISS_FORECAST_MIN: float = 0.05
 NEAR_MISS_VOL_MIN: float = 0.85
@@ -834,7 +867,7 @@ CLONE_SIGNAL_GUARD_ENABLED: bool = True
 CLONE_SIGNAL_GUARD_TF: tuple = ("15m",)
 CLONE_SIGNAL_GUARD_MODES: tuple = ("impulse_speed", "breakout", "retest", "alignment", "trend")
 CLONE_SIGNAL_GUARD_WINDOW_BARS: int = 8
-CLONE_SIGNAL_GUARD_MAX_SIMILAR: int = 11  # was 4 — 116 blocks in recent events: FLUX/ORDI blocked by clone guard  # scout:17.04.2026 was 10
+CLONE_SIGNAL_GUARD_MAX_SIMILAR: int = 14  # was 4 — 116 blocks in recent events: FLUX/ORDI blocked by clone guard  # scout:22.04.2026 was 13
 CLONE_SIGNAL_GUARD_MAX_SAME_GROUP: int = 1
 CLONE_SIGNAL_GUARD_OVERRIDE_SCORE: float = 90.0
 CLONE_SIGNAL_GUARD_OVERRIDE_RANKER_FINAL: float = 0.50
@@ -864,6 +897,7 @@ CORR_MAX_PER_CLUSTER: int = 2                    # макс. позиций в �
 CORR_MARGINAL_WEIGHTING: bool = True             # штраф score при ранжировании дублей
 CORR_PRUNE_ENABLED: bool = True                  # закрывать раздувшиеся кластеры
 CORR_PRUNE_PROFIT_PROTECT_PCT: float = 2.0       # не закрывать позиции с PnL > этого %
+CORR_PRUNE_MIN_BARS: int = 4                     # не прунить позиции моложе N баров (защита от 1-бар выходов)
 CORR_CACHE_TTL_MIN: int = 15                     # TTL кэша матрицы в минутах
 
 # ── ML-Gated Portfolio Rotation ──────────────────────────────────────────────

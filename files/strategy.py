@@ -1444,6 +1444,35 @@ def check_alignment_conditions(feat: Dict, i: int, tf: str = "") -> Tuple[bool, 
     if not np.isfinite(float(adx_v)) or float(adx_v) < adx_min_aln:
         return False, f"ADX {float(adx_v):.1f} < {adx_min_aln} (флэт, нет направленности)"
 
+    # ── Quality gates G1 + G4 (backtest 2026-04-20: +0.19% 15m / +0.48% 1h) ────────
+    if getattr(config, "ALIGNMENT_QUALITY_GATES_ENABLED", False):
+        # G1: MACD hist slope not fading — hist[i] must be >= hist[i - lookback]
+        g1_lb = int(getattr(config, "ALIGNMENT_MACD_SLOPE_LOOKBACK", 2))
+        ki = i - g1_lb
+        if ki >= 0:
+            mh_prev = float(mh_arr[ki])
+            if np.isfinite(mh_now) and np.isfinite(mh_prev) and mh_now < mh_prev:
+                return False, (
+                    f"G1: MACD hist fading ({mh_now:.6f} < hist-{g1_lb} {mh_prev:.6f})"
+                )
+
+        # G4: not near N-bar high — must be >= X ATRs below recent peak
+        hi_arr  = feat.get("high")
+        atr_arr = feat.get("atr")
+        if hi_arr is not None and atr_arr is not None:
+            g4_bars    = int(getattr(config, "ALIGNMENT_MIN_DIST_TO_HIGH_BARS", 20))
+            g4_atr_min = float(getattr(config, "ALIGNMENT_MIN_DIST_TO_HIGH_ATR", 0.30))
+            lo_idx = max(0, i - g4_bars + 1)
+            h_peak = float(np.max(hi_arr[lo_idx : i + 1]))
+            atr_v  = float(atr_arr[i])
+            if np.isfinite(atr_v) and atr_v > 0:
+                dist_atr = (h_peak - ci) / atr_v
+                if dist_atr < g4_atr_min:
+                    return False, (
+                        f"G4: near {g4_bars}-bar high "
+                        f"(dist {dist_atr:.2f} ATR < {g4_atr_min})"
+                    )
+
     return True, f"EMA↑ slope={slp:+.2f}% MACD×{macd_bars}б RSI={ri:.0f} vol×{vx:.1f}"
 
 

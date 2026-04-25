@@ -100,6 +100,21 @@ Rule of thumb: if a file is >1 MB or lives in `.runtime/`, use scripted aggregat
 | SKIP + top-20 gainer | **-0.8** (miss penalty) |
 | SKIP + not top gainer | +0.10 |
 | ENTER + not top gainer | -0.12 |
+| ENTER + fast reversal (≤3 bars, P&L < -0.5%) | **-0.6** (planned, see § 4a) |
+| SKIP + fast reversal | **+0.30** (planned) |
+
+### 4a. Anti-fast-reversal training requirement (2026-04-25)
+
+The model must **avoid emitting BUY when a quick SELL is likely**. Currently 53.7% of `alignment` entries close within 3 bars at avg P&L -0.348% — these are unactionable for a human reader of the Telegram channel.
+
+**Required pieces:**
+1. **Label**: `label_fast_reversal` in `critic_dataset.jsonl` and `top_gainer_dataset.jsonl` — `1` if next 3 bars after entry hit `entry × (1 - ATR_pct × trail_k)`.
+2. **Model output**: `proba_fast_reversal ∈ [0,1]` (separate head or new CatBoost classifier).
+3. **Guard**: `_fast_reversal_guard_reason()` in `monitor.py`. Block if `proba_fast_reversal > FAST_REVERSAL_PROBA_MAX` (default `0.55`). Reason code: `fast_reversal_risk`.
+4. **Bandit context**: add `proba_fast_reversal` to LinUCB context vector.
+5. **Reward update**: see table above.
+
+Implementation order: label → train → backtest (60d) → wire guard. Do NOT enable guard before backtest confirms recall@top20 stays ≥ current.
 
 ### Training sources (entry bandit)
 1. **Primary:** `top_gainer_dataset.jsonl` — ALL ~105 watchlist coins × N daily snapshots.
@@ -289,6 +304,8 @@ Runtime token storage: `.runtime\bot_bg_runner.cmd` (runtime-generated, gitignor
 ## 14. Watchlist
 
 ~105 Binance USDT perpetual futures coins. File: `files/watchlist.json`.
+
+**IMMUTABLE — DO NOT EXPAND.** These are the specific coins the user has access to for trading. Adding other symbols is pointless regardless of backtest results. If a top-gainer today is not in this list — that's expected and acceptable, not a bug to fix.
 
 ---
 

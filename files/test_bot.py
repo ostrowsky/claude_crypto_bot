@@ -3959,6 +3959,82 @@ class TestCriticQualityGuards(unittest.TestCase):
         self.assertIsNotNone(reason)
         self.assertIn("weak 1h retest", reason)
 
+    def test_ranker_hard_veto_blocks_bnt_like_1h_impulse(self):
+        # BNTUSDT 2026-04-19 entry: mode=impulse, final=-0.33 EV=-0.38 Q=0.56
+        # TG=0.23 CAP=0.06 — all three ML signals negative but the old
+        # generic 1h gate (final<=-1.50) never fired. New 1h-impulse veto
+        # must catch this composite profile.
+        from monitor import _ranker_hard_veto_reason
+
+        reason = _ranker_hard_veto_reason(
+            tf="1h",
+            mode="impulse",
+            ranker_info={
+                "final_score": -0.33,
+                "ev_raw": -0.38,
+                "quality_proba": 0.56,
+                "top_gainer_prob": 0.23,
+                "capture_ratio_pred": 0.06,
+            },
+        )
+        self.assertIsNotNone(reason)
+        self.assertIn("weak 1h impulse", reason)
+
+    def test_ranker_hard_veto_allows_strong_1h_impulse_speed(self):
+        # DOGS-like profile (all 5 ranker components positive/high):
+        # the new 1h-impulse veto must NOT fire.
+        from monitor import _ranker_hard_veto_reason
+
+        reason = _ranker_hard_veto_reason(
+            tf="1h",
+            mode="impulse_speed",
+            ranker_info={
+                "final_score": 1.46,
+                "ev_raw": 1.17,
+                "quality_proba": 0.57,
+                "top_gainer_prob": 0.54,
+                "capture_ratio_pred": 0.05,
+            },
+        )
+        self.assertIsNone(reason)
+
+    def test_ranker_hard_veto_allows_partial_weak_1h_impulse_speed(self):
+        # One metric weak is NOT enough — AND logic demands all 5 conditions.
+        # q=0.65 exceeds q_max=0.58 → must NOT veto.
+        from monitor import _ranker_hard_veto_reason
+
+        reason = _ranker_hard_veto_reason(
+            tf="1h",
+            mode="impulse_speed",
+            ranker_info={
+                "final_score": -0.80,
+                "ev_raw": -0.50,
+                "quality_proba": 0.65,
+                "top_gainer_prob": 0.40,
+                "capture_ratio_pred": 0.12,
+            },
+        )
+        self.assertIsNone(reason)
+
+    def test_ranker_hard_veto_1h_impulse_gate_does_not_affect_15m(self):
+        # Same BNT-like ranker info, but on 15m impulse — the 1h gate must
+        # not leak into 15m path. 15m impulse gate requires final<=-2.00,
+        # so this profile must NOT be vetoed on 15m.
+        from monitor import _ranker_hard_veto_reason
+
+        reason = _ranker_hard_veto_reason(
+            tf="15m",
+            mode="impulse",
+            ranker_info={
+                "final_score": -0.33,
+                "ev_raw": -0.38,
+                "quality_proba": 0.56,
+                "top_gainer_prob": 0.23,
+                "capture_ratio_pred": 0.06,
+            },
+        )
+        self.assertIsNone(reason)
+
     def test_ranker_position_cleanup_exits_stale_15m_impulse(self):
         import numpy as np
         from monitor import OpenPosition, _ranker_position_cleanup_reason

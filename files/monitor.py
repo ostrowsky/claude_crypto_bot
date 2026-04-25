@@ -1702,6 +1702,68 @@ def _trend_entry_quality_guard_reason(
     )
 
 
+def _mode_daily_range_guard_reason(
+    *,
+    mode: str,
+    tf: str,
+    daily_range: float,
+    slope: float,
+) -> Optional[str]:
+    """
+    Regime gate: block signals on quiet-market days (low daily_range / slope).
+    Backtest 2026-04-24, 60d window:
+      alignment/15m range>=4.0 -> +5.9pp precision (23%->28.9%)
+      trend/15m     range>=4.0 -> +17.1pp precision (29.9%->47.0%)
+      alignment/1h  range>=5.0 -> +8.0pp precision (30.9%->38.9%)
+      trend/1h      slope>=0.50 -> +4.6pp precision (14.1%->18.8%)
+      impulse_speed/1h range>=7.0 -> +3.3pp precision (16.5%->19.8%)
+    """
+    if not getattr(config, "MODE_RANGE_QUALITY_GUARD_ENABLED", True):
+        return None
+
+    if mode == "alignment" and tf == "15m":
+        rmin = float(getattr(config, "ALIGNMENT_15M_RANGE_MIN", 4.0))
+        if daily_range < rmin:
+            return (
+                f"mode_range_quality: alignment/15m daily_range "
+                f"{daily_range:.2f}% < {rmin:.2f}%"
+            )
+
+    elif mode == "trend" and tf == "15m":
+        rmin = float(getattr(config, "TREND_15M_RANGE_MIN", 4.0))
+        if daily_range < rmin:
+            return (
+                f"mode_range_quality: trend/15m daily_range "
+                f"{daily_range:.2f}% < {rmin:.2f}%"
+            )
+
+    elif mode == "alignment" and tf == "1h":
+        rmin = float(getattr(config, "ALIGNMENT_1H_RANGE_MIN", 5.0))
+        if daily_range < rmin:
+            return (
+                f"mode_range_quality: alignment/1h daily_range "
+                f"{daily_range:.2f}% < {rmin:.2f}%"
+            )
+
+    elif mode == "trend" and tf == "1h":
+        smin = float(getattr(config, "TREND_1H_SLOPE_MIN", 0.50))
+        if slope < smin:
+            return (
+                f"mode_range_quality: trend/1h slope "
+                f"{slope:.3f}% < {smin:.3f}%"
+            )
+
+    elif mode == "impulse_speed" and tf == "1h":
+        rmin = float(getattr(config, "IMPULSE_SPEED_1H_RANGE_MIN", 7.0))
+        if daily_range < rmin:
+            return (
+                f"mode_range_quality: impulse_speed/1h daily_range "
+                f"{daily_range:.2f}% < {rmin:.2f}%"
+            )
+
+    return None
+
+
 def _ranker_entry_veto_reason(
     *,
     tf: str,
@@ -1803,6 +1865,30 @@ def _ranker_hard_veto_reason(
                 return (
                     f"ranker hard veto: weak 1h retest "
                     f"(final {ranker_final:.2f}, EV {ev_raw:.2f}, Q {quality_proba:.2f})"
+                )
+        if (
+            getattr(config, "ML_CANDIDATE_RANKER_HARD_VETO_1H_IMPULSE_ENABLED", False)
+            and mode in tuple(
+                str(x)
+                for x in getattr(config, "ML_CANDIDATE_RANKER_HARD_VETO_1H_IMPULSE_MODES", ("impulse_speed", "impulse"))
+            )
+        ):
+            final_max = float(getattr(config, "ML_CANDIDATE_RANKER_HARD_VETO_1H_IMPULSE_FINAL_MAX", -0.20))
+            ev_max = float(getattr(config, "ML_CANDIDATE_RANKER_HARD_VETO_1H_IMPULSE_EV_MAX", -0.30))
+            quality_max = float(getattr(config, "ML_CANDIDATE_RANKER_HARD_VETO_1H_IMPULSE_QUALITY_MAX", 0.58))
+            tg_max = float(getattr(config, "ML_CANDIDATE_RANKER_HARD_VETO_1H_IMPULSE_TOP_GAINER_MAX", 0.25))
+            cap_max = float(getattr(config, "ML_CANDIDATE_RANKER_HARD_VETO_1H_IMPULSE_CAPTURE_MAX", 0.08))
+            if (
+                ranker_final <= final_max
+                and ev_raw <= ev_max
+                and quality_proba <= quality_max
+                and top_gainer_prob <= tg_max
+                and capture_ratio_pred <= cap_max
+            ):
+                return (
+                    f"ranker hard veto: weak 1h impulse "
+                    f"(final {ranker_final:.2f}, EV {ev_raw:.2f}, Q {quality_proba:.2f}, "
+                    f"TG {top_gainer_prob:.2f}, CAP {capture_ratio_pred:.2f})"
                 )
         final_max = float(getattr(config, "ML_CANDIDATE_RANKER_HARD_VETO_1H_FINAL_MAX", -1.50))
         tg_max = float(getattr(config, "ML_CANDIDATE_RANKER_HARD_VETO_1H_TOP_GAINER_MAX", 0.25))
@@ -3704,6 +3790,56 @@ async def _poll_coin(
                     reason=trend_guard_reason,
                 )
                 botlog.log_blocked(sym, tf, float(c[i]), trend_guard_reason, signal_type="trend_quality")
+                return
+
+            mode_range_guard_reason = _mode_daily_range_guard_reason(
+                mode=preview_mode,
+                tf=tf,
+                daily_range=preview_range,
+                slope=preview_slope,
+            )
+            if mode_range_guard_reason:
+                _log_critic_candidate(
+                    sym=sym,
+                    tf=tf,
+                    bar_ts=int(data["t"][i]),
+                    signal_type=preview_mode,
+                    feat=feat,
+                    data=data,
+                    i=i,
+                    action="blocked",
+                    reason_code="mode_range_quality",
+                    reason=mode_range_guard_reason,
+                    stage="quality_floor",
+                    candidate_score=candidate_score,
+                    base_score=base_score,
+                    score_floor=score_floor,
+                    forecast_return_pct=float(getattr(report, "forecast_return_pct", 0.0)),
+                    today_change_pct=float(getattr(report, "today_change_pct", 0.0)),
+                    ml_proba=ml_proba,
+                    mtf_soft_penalty=mtf_soft_penalty,
+                    fresh_priority=_is_fresh_priority_candidate(preview_mode, catchup_snapshot),
+                    catchup=catchup_snapshot is not None,
+                    continuation_profile=continuation_profile,
+                    signal_flags=signal_flags,
+                )
+                log.info("MODE RANGE QUALITY BLOCK %s [%s]: %s", sym, tf, mode_range_guard_reason)
+                _maybe_log_ranker_shadow(
+                    sym=sym,
+                    tf=tf,
+                    mode=preview_mode,
+                    price=float(c[i]),
+                    candidate_score=candidate_score,
+                    score_floor=score_floor,
+                    ranker_proba=ranker_proba,
+                    ranker_info=ranker_info,
+                    bot_action="blocked",
+                    reason=mode_range_guard_reason,
+                )
+                botlog.log_blocked(
+                    sym, tf, float(c[i]), mode_range_guard_reason,
+                    signal_type="mode_range_quality",
+                )
                 return
 
             ranker_veto_reason = _ranker_entry_veto_reason(

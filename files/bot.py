@@ -127,15 +127,19 @@ def kb_main() -> InlineKeyboardMarkup:
             callback_data="market_scan",
         )]
 
-    signals_lbl = f"📊 Позиции  [{pos}/{getattr(config,'MAX_OPEN_POSITIONS',6)}]" if pos else "📊 Позиции"
+    max_pos     = getattr(config, "MAX_OPEN_POSITIONS", 6)
+    signals_lbl = f"📊 Позиции  [{pos}/{max_pos}]"
     list_lbl    = f"📋 Список монет  [{wl}]"
 
+    # Layout per spec (PROJECT_CONTEXT.md "Telegram UI"):
+    #   [ ▶ Анализ + Мониторинг (N) ]
+    #   [ 🔍 Только анализ ] [ 📊 Позиции [open/max] ]
+    #   [ 📋 Список монет [N] ] [ ⚙ Настройки ]
     return InlineKeyboardMarkup([
         [main_btn],
-        rescan_btn,
-        [InlineKeyboardButton(signals_lbl, callback_data="positions")],
-        [InlineKeyboardButton(list_lbl,    callback_data="watchlist")],
-        [InlineKeyboardButton("⚙️ Настройки", callback_data="settings")],
+        [rescan_btn[0], InlineKeyboardButton(signals_lbl, callback_data="positions")],
+        [InlineKeyboardButton(list_lbl, callback_data="watchlist"),
+         InlineKeyboardButton("⚙️ Настройки", callback_data="settings")],
     ])
 
 
@@ -415,24 +419,7 @@ def _menu_panel_text(prefix: str | None = None) -> str:
 
 
 async def _show_menu_panel_message(msg, force_refresh: bool = False, prefix: str | None = None) -> None:
-    text = _menu_panel_text(prefix)
-    if force_refresh:
-        try:
-            await _reply_text_with_retry(
-                msg,
-                "Меню активно.",
-                reply_markup=kb_menu_reply(),
-            )
-        except Exception as e:
-            log.warning("menu keyboard refresh failed: %s", e)
-    await _reply_text_with_retry(
-        msg,
-        text,
-        reply_markup=kb_menu_root_inline(),
-    )
-
-
-async def _show_main_menu_message(msg, force_refresh: bool = False, prefix: str | None = None) -> None:
+    _refresh_positions_state()
     text = _main_menu_text()
     if prefix:
         text = f"{prefix}\n\n{text}"
@@ -447,9 +434,31 @@ async def _show_main_menu_message(msg, force_refresh: bool = False, prefix: str 
             log.warning("menu keyboard refresh failed: %s", e)
     await _reply_text_with_retry(
         msg,
-        text + "\n\nВыберите раздел ниже.",
+        text,
         parse_mode=ParseMode.MARKDOWN,
-        reply_markup=kb_menu_root_inline(),
+        reply_markup=kb_main(),
+    )
+
+
+async def _show_main_menu_message(msg, force_refresh: bool = False, prefix: str | None = None) -> None:
+    _refresh_positions_state()
+    text = _main_menu_text()
+    if prefix:
+        text = f"{prefix}\n\n{text}"
+    if force_refresh:
+        try:
+            await _reply_text_with_retry(
+                msg,
+                "Меню активно.",
+                reply_markup=kb_menu_reply(),
+            )
+        except Exception as e:
+            log.warning("menu keyboard refresh failed: %s", e)
+    await _reply_text_with_retry(
+        msg,
+        text,
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=kb_main(),
     )
 
 
@@ -877,10 +886,14 @@ async def cmd_hide_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def btn(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     query   = update.callback_query
-    # query.answer() может упасть если запрос пришёл с задержкой >2 мин
-    # (бот был выключен, накопились старые нажатия). Проглатываем — action
-    # всё равно выполняем, просто спиннер у кнопки не уберётся.
-    await _answer_callback_fast(query)
+    # Fire-and-forget ack: query.answer() — это сетевой round-trip к Telegram.
+    # Раньше мы ждали его (до 3s), и только потом начинали реальную работу.
+    # Теперь ack уходит параллельно с обработкой, общая задержка кнопки
+    # сокращается на 100–500ms (а в пиках — на 3s, если answer() таймаутил).
+    _track_background_task(
+        asyncio.create_task(_answer_callback_fast(query)),
+        "callback_ack",
+    )
     action  = query.data
     chat_id = query.message.chat_id
     log.info("callback from %s: %s", chat_id, action)
@@ -1148,20 +1161,18 @@ async def btn(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
 
     elif action == "back_main":
         _refresh_positions_state()
-        wl = config.load_watchlist()
         await _reply_text_with_retry(
             query.message,
-            f"Монет в списке: *{len(wl)}*  |  В игре: *{len(state.hot_coins)}*  |  "
-            f"Сигналов: *{len(state.positions)}*\n\n"
-            f"Используйте кнопки снизу для следующего действия.",
+            _main_menu_text(),
             parse_mode=ParseMode.MARKDOWN,
-            reply_markup=kb_menu_root_inline(),
+            reply_markup=kb_main(),
         )
 
 
 # ── Text input (add / remove coin) ────────────────────────────────────────────
 
     elif action == "show_menu":
+        _refresh_positions_state()
         try:
             await _reply_text_with_retry(
                 query.message,
@@ -1172,8 +1183,9 @@ async def btn(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
             log.warning("show menu keyboard restore failed: %s", e)
         await _reply_text_with_retry(
             query.message,
-            _menu_panel_text(),
-            reply_markup=kb_menu_root_inline(),
+            _main_menu_text(),
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=kb_main(),
         )
         return
 

@@ -420,7 +420,13 @@ def prune_candidates(
         scored.sort(key=lambda x: x[0], reverse=True)
 
         # Оставляем top-max_cluster, остальные — кандидаты на закрытие
+        min_bars = int(getattr(config, "CORR_PRUNE_MIN_BARS", 4))
         for ranker_fs, pnl_pct, s in scored[max_cluster:]:
+            pos_age = int(getattr(open_positions.get(s, object()), "bars_elapsed", 0))
+            if pos_age < min_bars:
+                log.debug("corr_guard prune: skip %s (age=%d bars < min=%d)",
+                          s, pos_age, min_bars)
+                continue
             if pnl_pct > profit_protect:
                 log.debug("corr_guard prune: skip %s (pnl=%.2f%% > protect=%.2f%%)",
                           s, pnl_pct, profit_protect)
