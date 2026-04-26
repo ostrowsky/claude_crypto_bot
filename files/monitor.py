@@ -1702,6 +1702,45 @@ def _trend_entry_quality_guard_reason(
     )
 
 
+def _trail_min_buffer_pct(mode: str) -> float:
+    """
+    Returns the minimum trail-stop buffer as a fraction of price for a given mode.
+    Anti-whipsaw fix (2026-04-26 ALGOUSDT case): bandit picks "tight" arm
+    (trail_k=2.12) which is statistically profitable on average, but on coins
+    with compressed 15m ATR (~0.4% of price) and wide daily-range (5%+),
+    2.12*ATR=0.86% buffer is too tight — noise pierces stop.
+    Applied as floor: actual_buffer = max(trail_k*ATR, MIN_PCT*price).
+    """
+    if not getattr(config, "TRAIL_MIN_BUFFER_PCT_ENABLED", False):
+        return 0.0
+    if mode == "impulse_speed":
+        return float(getattr(config, "TRAIL_MIN_BUFFER_PCT_IMPULSE_SPEED", 0.015))
+    if mode == "strong_trend":
+        return float(getattr(config, "TRAIL_MIN_BUFFER_PCT_STRONG_TREND", 0.015))
+    if mode == "impulse":
+        return float(getattr(config, "TRAIL_MIN_BUFFER_PCT_IMPULSE", 0.012))
+    if mode == "trend":
+        return float(getattr(config, "TRAIL_MIN_BUFFER_PCT_TREND", 0.0))
+    if mode == "alignment":
+        return float(getattr(config, "TRAIL_MIN_BUFFER_PCT_ALIGNMENT", 0.0))
+    if mode == "retest":
+        return float(getattr(config, "TRAIL_MIN_BUFFER_PCT_RETEST", 0.0))
+    if mode == "breakout":
+        return float(getattr(config, "TRAIL_MIN_BUFFER_PCT_BREAKOUT", 0.0))
+    return float(getattr(config, "TRAIL_MIN_BUFFER_PCT_DEFAULT", 0.0))
+
+
+def _compute_trail_buffer(*, price: float, trail_k: float, atr: float, mode: str) -> float:
+    """
+    Computes the trail-stop buffer (absolute price units), enforcing the
+    mode-specific minimum buffer floor. Returns max(trail_k*ATR, MIN_PCT*price).
+    """
+    atr_buf = trail_k * atr if atr > 0 else 0.0
+    min_pct = _trail_min_buffer_pct(mode)
+    min_buf = min_pct * price if (price > 0 and min_pct > 0) else 0.0
+    return max(atr_buf, min_buf)
+
+
 def _mode_daily_range_guard_reason(
     *,
     mode: str,
@@ -4450,7 +4489,16 @@ async def _poll_coin(
                     log.warning("Bandit trail error for %s: %s", sym, e)
 
             atr_val    = float(feat["atr"][i]) if np.isfinite(feat["atr"][i]) else 0.0
-            init_trail = price - trail_k * atr_val if atr_val > 0 else 0.0
+            # Anti-whipsaw: enforce minimum trail buffer in % of price for high-vol modes.
+            # See _trail_min_buffer_pct docstring for ALGOUSDT 26.04 case study.
+            _init_buf  = _compute_trail_buffer(price=price, trail_k=trail_k, atr=atr_val, mode=sig_mode)
+            init_trail = price - _init_buf if _init_buf > 0 else 0.0
+            if atr_val > 0:
+                _atr_buf_pct = (trail_k * atr_val) / price * 100 if price > 0 else 0.0
+                _eff_buf_pct = _init_buf / price * 100 if price > 0 else 0.0
+                if _eff_buf_pct > _atr_buf_pct + 0.01:
+                    log.info("TRAIL FLOOR %s [%s]: ATR-buf=%.2f%% -> floor=%.2f%% (trail_k=%.2f)",
+                             sym, sig_mode, _atr_buf_pct, _eff_buf_pct, trail_k)
             prediction_horizons = _position_forward_horizons(tf, sig_mode)
 
             pos = OpenPosition(
@@ -4779,9 +4827,21 @@ async def _poll_coin(
                     state.cd_logged.pop(sym, None)
                     return
     if atr_now > 0:
-        new_trail = close_now - pos.trail_k * atr_now  # П1: trail_k зависит от режима
+        # Anti-whipsaw: enforce minimum trail buffer (% of price) per mode.
+        # Floor protects against compressed-ATR + wide-daily-range coins where
+        # bandit-chosen trail_k*ATR yields buffer < 1% on a 5%-daily-range coin.
+        _mode_for_buf = getattr(pos, "signal_mode", "trend")
+        _buf_pos = _compute_trail_buffer(
+            price=close_now, trail_k=pos.trail_k, atr=atr_now, mode=_mode_for_buf
+        )
+        new_trail = close_now - _buf_pos  # П1: trail_k зависит от режима
         if effective_trail_k < pos.trail_k:
-            new_trail = max(new_trail, close_now - effective_trail_k * atr_now)
+            # Profit-lock: tighter trail mid-trade. Apply floor here too so we don't
+            # under-shoot the safety net.
+            _buf_eff = _compute_trail_buffer(
+                price=close_now, trail_k=effective_trail_k, atr=atr_now, mode=_mode_for_buf
+            )
+            new_trail = max(new_trail, close_now - _buf_eff)
         if new_trail > pos.trail_stop:
             pos.trail_stop = new_trail
 

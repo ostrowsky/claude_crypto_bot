@@ -423,6 +423,26 @@ POSITIONS_FILE: str = "positions.json"
 ATR_TRAIL_K: float = 2.0   # множитель ATR для трейлинг-стопа
 MACDWARN_BARS: int = 3     # баров подряд MACD hist падает → предупреждение о развороте
 
+# ── Trail-stop minimum buffer (anti-whipsaw, 2026-04-26) ──────────────────────
+# Problem (ALGOUSDT 26.04 case): bandit picks "tight" arm (trail_k=2.12) which
+# is statistically profitable on average (+0.21% over 85 trades on impulse_speed/15m).
+# But on coins with compressed 15m ATR (0.4% of price) and wide daily-range (5%+),
+# 2.12*ATR = 0.86% buffer → noise pierces stop → exit → price continues without us.
+# 52 of 85 "tight"-arm trades on impulse_speed/strong_trend ended in trail-loss
+# averaging -1.64%.
+# Fix: enforce a MINIMUM trail buffer in % of entry price (volatility-adjusted),
+# regardless of bandit/ATR-based choice. Buffer = max(trail_k*ATR, MIN_PCT*price).
+# Mode-aware: high-vol modes (impulse_speed, strong_trend) need wider min-buffer.
+TRAIL_MIN_BUFFER_PCT_ENABLED: bool = True
+TRAIL_MIN_BUFFER_PCT_IMPULSE_SPEED: float = 0.015  # 1.5% min buffer (high-vol regime)
+TRAIL_MIN_BUFFER_PCT_STRONG_TREND:  float = 0.015
+TRAIL_MIN_BUFFER_PCT_IMPULSE:       float = 0.012  # 1.2% min buffer
+TRAIL_MIN_BUFFER_PCT_TREND:         float = 0.0    # disabled — narrow stops work for trend
+TRAIL_MIN_BUFFER_PCT_ALIGNMENT:     float = 0.0
+TRAIL_MIN_BUFFER_PCT_RETEST:        float = 0.0    # retest by design uses tight stop
+TRAIL_MIN_BUFFER_PCT_BREAKOUT:      float = 0.0    # breakout by design uses tight stop
+TRAIL_MIN_BUFFER_PCT_DEFAULT:       float = 0.0    # other modes — no floor
+
 # ── П1: ATR-трейл и лимит баров по режиму входа ──────────────────────────────
 ATR_TRAIL_K_STRONG:    float = 2.5   # BUY strong_trend (ADX высокий + объём)
 ATR_TRAIL_K_RETEST:    float = 1.5   # RETEST (откат к EMA20 — tighter trail режет плохие возвраты)
