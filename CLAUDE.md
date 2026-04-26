@@ -221,6 +221,22 @@ TREND_15M_QUALITY_DAILY_RANGE_MAX_BULL_DAY = 14.0       # TAO 12% was being bloc
 ML_CANDIDATE_RANKER_HARD_VETO_1H_TOP_GAINER_MAX = 0.25  # veto only if final bad AND TG prob low
 ```
 
+### Trail-stop min buffer floor (2026-04-26)
+Whipsaw exits on `impulse_speed`/`strong_trend`/`impulse` when bandit picks
+`tight`/`very_tight` arm on high-volatility names (ALGOUSDT 04-22, 04-26).
+Fix: `buffer = max(trail_k*ATR, min_pct(mode)*price)` at both init_trail
+and trail-update sites in `monitor.py` (helpers `_trail_min_buffer_pct`,
+`_compute_trail_buffer` ~ L1705). Defaults:
+```python
+TRAIL_MIN_BUFFER_PCT_ENABLED = True
+TRAIL_MIN_BUFFER_PCT_IMPULSE_SPEED = 0.015   # 1.5%
+TRAIL_MIN_BUFFER_PCT_STRONG_TREND  = 0.015
+TRAIL_MIN_BUFFER_PCT_IMPULSE       = 0.012
+# trend / alignment / retest / breakout / default = 0.0
+```
+Rollback: `TRAIL_MIN_BUFFER_PCT_ENABLED=False`.
+Spec: `docs/specs/features/trail-min-buffer-spec.md`.
+
 ---
 
 ## 8. Portfolio rotation (2026-04-17)

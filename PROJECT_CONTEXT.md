@@ -346,6 +346,49 @@ TREND_15M_QUALITY_DAILY_RANGE_MAX_BULL_DAY = 14.0  # bull day (TAO 12% был з
 ML_CANDIDATE_RANKER_HARD_VETO_1H_TOP_GAINER_MAX = 0.25  # вето только если И final плохой И TG prob низкий
 ```
 
+### Trail-stop minimum buffer (2026-04-26)
+
+Whipsaw-выходы на `impulse_speed` / `strong_trend` / `impulse`, когда
+бандит выбирал `tight`/`very_tight` arm на волатильных монетах
+(ALGOUSDT 04-22 и 04-26: ATR-trail hit на −0.4…−0.6 % за 30–50 мин,
+далее цена шла вверх).
+
+Фикс: пол на буфер trail-stop в долях от цены, применяется и при
+init_trail, и при per-bar обновлении:
+
+```
+buffer = max(trail_k * ATR, min_pct(mode) * price)
+trail  = price - buffer
+```
+
+```python
+TRAIL_MIN_BUFFER_PCT_ENABLED = True
+TRAIL_MIN_BUFFER_PCT_IMPULSE_SPEED = 0.015  # 1.5 %
+TRAIL_MIN_BUFFER_PCT_STRONG_TREND  = 0.015
+TRAIL_MIN_BUFFER_PCT_IMPULSE       = 0.012
+# trend / alignment / retest / breakout / default = 0.0
+```
+
+Откат: `TRAIL_MIN_BUFFER_PCT_ENABLED = False` + рестарт.
+Хелперы в `monitor.py` ~ L1705: `_trail_min_buffer_pct`,
+`_compute_trail_buffer`. Полная спецификация:
+`docs/specs/features/trail-min-buffer-spec.md`.
+
+### Spec-first workflow (2026-04-26)
+
+Проект перешёл на spec-first подход (вдохновлено
+[ostrowsky/spec-first-bootstrap](https://github.com/ostrowsky/spec-first-bootstrap)):
+
+- `AGENTS.md` — гайд процесса для AI-агентов.
+- `docs/specs/templates/feature-spec.md` — шаблон для каждой фичи/фикса.
+- `docs/specs/features/*.md` — по одной спецификации на изменение.
+- `docs/specs/README.md` — индекс.
+
+Любое нетривиальное изменение начинается с копии шаблона в
+`docs/specs/features/<slug>-spec.md`, где фиксируются проблема,
+scope, success metric, rollback и план верификации. В commit body
+ссылка `Spec: docs/specs/features/<slug>-spec.md`.
+
 ---
 
 ## Дедупликация Telegram отчётов
