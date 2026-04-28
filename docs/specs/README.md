@@ -1,6 +1,6 @@
 # Specs index
 
-Spec-first workflow. See [`../../AGENTS.md`](../../AGENTS.md) for the process.
+Spec-first workflow. См. [`../../AGENTS.md`](../../AGENTS.md) для процесса.
 
 ## Templates
 
@@ -10,7 +10,16 @@ Spec-first workflow. See [`../../AGENTS.md`](../../AGENTS.md) for the process.
 
 | Slug | Status | Summary |
 |------|--------|---------|
-| [`features/trail-min-buffer-spec.md`](./features/trail-min-buffer-spec.md) | shipped 2026-04-26 | Per-mode minimum %-of-price floor on ATR trail-stop buffer to prevent whipsaw exits on volatile entries (impulse_speed, strong_trend, impulse). |
+| [`signal-pipeline`](./features/signal-pipeline-spec.md) | shipped | Сквозной pipeline (indicators → strategy → ML → ranker → bandit → guards → rotation → entry) и 7 entry-режимов. |
+| [`contextual-bandit`](./features/contextual-bandit-spec.md) | shipped | LinUCB entry (2 arms) + trail (5 arms). Async reward, источники, training pipeline. |
+| [`ml-candidate-ranker`](./features/ml-candidate-ranker-spec.md) | shipped | CatBoost ranker (quality, EV, expected_return/drawdown, TG-prob) + hard veto. |
+| [`top-gainer-model`](./features/top-gainer-model-spec.md) | shipped | Daily CatBoost top-N классификаторы (top5/10/20/50) + intraday snapshots + critic. |
+| [`portfolio-rotation`](./features/portfolio-rotation-spec.md) | shipped 2026-04-17 | ML-gated weak-leg eviction через soft-trail (`trail_stop = price × 1.001`). |
+| [`correlation-guard`](./features/correlation-guard-spec.md) | shipped | Pearson log-return clustering (Union-Find) + cap позиций в кластере. |
+| [`trend-quality-guard`](./features/trend-quality-guard-spec.md) | shipped | RSI / price-edge / daily-range cap для 15m `trend` (с bull-day relaxation). |
+| [`daily-learning-pipeline`](./features/daily-learning-pipeline-spec.md) | shipped | EOD orchestrator: snapshot → resolve → train (bandit/TG/ranker/signal) → report. |
+| [`trail-min-buffer`](./features/trail-min-buffer-spec.md) | shipped 2026-04-26 | Per-mode % floor на ATR-trail buffer для борьбы с whipsaw на impulse_speed/strong_trend. |
+| [`anti-fast-reversal`](./features/anti-fast-reversal-spec.md) | draft | Label / model / guard / reward для отсечения быстрых разворотов (≤3 баров). |
 
 ## How to add a new spec
 
@@ -18,5 +27,5 @@ Spec-first workflow. See [`../../AGENTS.md`](../../AGENTS.md) for the process.
 cp docs/specs/templates/feature-spec.md docs/specs/features/<slug>-spec.md
 $EDITOR docs/specs/features/<slug>-spec.md
 git add docs/specs/features/<slug>-spec.md
-# … then implement, verify, commit code with `Spec: docs/specs/features/<slug>-spec.md` in the body
+# … затем implement, verify, commit с `Spec: docs/specs/features/<slug>-spec.md` в commit body
 ```
