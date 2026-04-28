@@ -20,6 +20,9 @@ Spec-first workflow. См. [`../../AGENTS.md`](../../AGENTS.md) для проц�
 | [`daily-learning-pipeline`](./features/daily-learning-pipeline-spec.md) | shipped | EOD orchestrator: snapshot → resolve → train (bandit/TG/ranker/signal) → report. |
 | [`trail-min-buffer`](./features/trail-min-buffer-spec.md) | shipped 2026-04-26 | Per-mode % floor на ATR-trail buffer для борьбы с whipsaw на impulse_speed/strong_trend. |
 | [`anti-fast-reversal`](./features/anti-fast-reversal-spec.md) | draft | Label / model / guard / reward для отсечения быстрых разворотов (≤3 баров). |
+| [`ml-signal-blindspot-recovery`](./features/ml-signal-blindspot-recovery-spec.md) | draft | Audit + oversampling weight для blind-spot syms (TRU/BLUR/MDT/ORDI/AUDIO). 24 % top-20 проходят через ML-block. |
+| [`breakout-15m-disable`](./features/breakout-15m-disable-spec.md) | draft | Отключение `breakout/15m`: даже на 5/45 top-20 entries `avg_pnl=+0.03 %`. |
+| [`eod-health-alert`](./features/eod-health-alert-spec.md) | draft | TG-алерт при `n_collected=0` / AUC drop / bandit stall в EOD-цикле. |
 
 ## How to add a new spec
 
