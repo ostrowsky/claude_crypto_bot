@@ -6,6 +6,7 @@ Date-stamped operational reports (отличаются от спек: спеки
 | File | Coverage |
 |------|----------|
 | [`2026-04-28-learning-and-scout.md`](./2026-04-28-learning-and-scout.md) | Прогресс обучения (recall, UCB sep, AUC) + Pareto-обзор скаута + trail-arm summary + action items. |
+| [`2026-04-28-improvements.md`](./2026-04-28-improvements.md) | 9 верифицированных бэктестами предложений с ранжированием по impact на главную цель (early BUY на top-20). |
 
 ## Конвенция
 
