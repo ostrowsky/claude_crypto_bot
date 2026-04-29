@@ -23,6 +23,7 @@ Spec-first workflow. См. [`../../AGENTS.md`](../../AGENTS.md) для проц�
 | [`ml-signal-blindspot-recovery`](./features/ml-signal-blindspot-recovery-spec.md) | draft | Audit + oversampling weight для blind-spot syms (TRU/BLUR/MDT/ORDI/AUDIO). 24 % top-20 проходят через ML-block. |
 | [`breakout-15m-disable`](./features/breakout-15m-disable-spec.md) | draft | Отключение `breakout/15m`: даже на 5/45 top-20 entries `avg_pnl=+0.03 %`. |
 | [`eod-health-alert`](./features/eod-health-alert-spec.md) | draft | TG-алерт при `n_collected=0` / AUC drop / bandit stall в EOD-цикле. |
+| [`metrics-framework`](./features/metrics-framework-spec.md) | draft | 13 метрик в 4 слоях (Coverage / Earliness / Quality / Discrimination) + north-star `EarlyCapture@top20`. Привязка каждой инициативы к target-метрике. |
 
 ## How to add a new spec
 
