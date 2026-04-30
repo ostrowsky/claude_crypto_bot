@@ -35,11 +35,31 @@ Product Spec  ──►  Implementation  ──►  Verification
 3. **Verify.** Run the verification listed in the spec
    (backtest / unit tests / live monitor for N minutes). Paste the result
    into the spec's "Verification" section.
-4. **Commit.** Reference the spec path in the commit body:
-   `Spec: docs/specs/features/<slug>-spec.md`.
-5. **Update CLAUDE.md / PROJECT_CONTEXT.md** if the change touches sections
+4. **Bump version** in `files/build_info.py`:
+   - Increment `BUILD_VERSION` (semver: patch / minor / major).
+   - Set `BUILD_APPLIED_AT_UTC` to the **current UTC ISO timestamp**
+     (this is *when the new version is applied*, not when the bot
+     starts and not the file mtime).
+   - Update `BUILD_NOTES` with one-line summary.
+   - `_append_version_history()` will record (version, applied_at)
+     in `.runtime/version_history.jsonl` automatically on first
+     import after the change.
+5. **Commit.** Reference the spec path in the commit body:
+   `Spec: docs/specs/features/<slug>-spec.md`. Include the version
+   bump in the same commit.
+6. **Update CLAUDE.md / PROJECT_CONTEXT.md** if the change touches sections
    2 / 4 / 5 / 7 / 8 / 11 of `CLAUDE.md` (architecture, ML, schedules,
    known issues, rotation, config flags).
+
+### Version bump rules (semver)
+
+- **patch** (x.y.**Z**): logger fixes, log-line wording, comment-only,
+  retraining of an existing model, doc-only follow-ups in code.
+- **minor** (x.**Y**.0): new feature behind a flag, new gate, new
+  config tunable, new spec implementation that changes runtime
+  behaviour for some path.
+- **major** (**X**.0.0): breaking change in public API (rare for this
+  project), restructure of pipeline, removal of an entry mode.
 
 ### When a spec is NOT required
 
