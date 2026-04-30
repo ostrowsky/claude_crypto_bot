@@ -24,6 +24,8 @@ Spec-first workflow. См. [`../../AGENTS.md`](../../AGENTS.md) для проц�
 | [`breakout-15m-disable`](./features/breakout-15m-disable-spec.md) | draft | Отключение `breakout/15m`: даже на 5/45 top-20 entries `avg_pnl=+0.03 %`. |
 | [`eod-health-alert`](./features/eod-health-alert-spec.md) | draft | TG-алерт при `n_collected=0` / AUC drop / bandit stall в EOD-цикле. |
 | [`metrics-framework`](./features/metrics-framework-spec.md) | draft | 13 метрик в 4 слоях (Coverage / Earliness / Quality / Discrimination) + north-star `EarlyCapture@top20`. Привязка каждой инициативы к target-метрике. |
+| [`entry-event-logger-fix`](./features/entry-event-logger-fix-spec.md) | shipped 2026-04-30 | Добавлены `ranker_top_gainer_prob`, `ranker_ev`, `ranker_quality_proba`, `signal_mode`, `candidate_score` в entry-event payload. Разблокирует валидацию 1A и 4A. |
+| [`dynamic-max-hold`](./features/dynamic-max-hold-spec.md) | draft | Продление `max_hold_bars` если ADX растёт + price > EMA20 + pnl>0. Validated +0.039 NS (capture 0.16→0.24). Whitelist: impulse_speed, strong_trend, trend, retest. |
 
 ## How to add a new spec
 

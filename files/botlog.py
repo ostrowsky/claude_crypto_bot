@@ -92,7 +92,16 @@ def log_entry(sym: str, tf: str, mode: str, price: float,
               ema20: float, slope: float, rsi: float, adx: float,
               vol_x: float, macd_hist: float, daily_range: float,
               trail_k: float, max_hold_bars: int,
-              ml_proba: Optional[float] = None) -> None:
+              ml_proba: Optional[float] = None,
+              # Logger-fix 2026-04-30: ranker outputs for post-hoc validation
+              # Spec: docs/specs/features/entry-event-logger-fix-spec.md
+              ranker_top_gainer_prob: Optional[float] = None,
+              ranker_ev: Optional[float] = None,
+              ranker_quality_proba: Optional[float] = None,
+              ranker_final_score: Optional[float] = None,
+              signal_mode: Optional[str] = None,
+              candidate_score: Optional[float] = None,
+              score_floor: Optional[float] = None) -> None:
     """Открытие позиции."""
     rec: Dict[str, Any] = {
         "event":        "entry",
@@ -112,6 +121,21 @@ def log_entry(sym: str, tf: str, mode: str, price: float,
     }
     if ml_proba is not None:
         rec["ml_proba"] = round(float(ml_proba), 4)
+    # Ranker outputs (nullable; absent if ranker did not run)
+    if ranker_top_gainer_prob is not None:
+        rec["ranker_top_gainer_prob"] = round(float(ranker_top_gainer_prob), 4)
+    if ranker_ev is not None:
+        rec["ranker_ev"] = round(float(ranker_ev), 4)
+    if ranker_quality_proba is not None:
+        rec["ranker_quality_proba"] = round(float(ranker_quality_proba), 4)
+    if ranker_final_score is not None:
+        rec["ranker_final_score"] = round(float(ranker_final_score), 4)
+    if signal_mode is not None:
+        rec["signal_mode"] = signal_mode
+    if candidate_score is not None:
+        rec["candidate_score"] = round(float(candidate_score), 2)
+    if score_floor is not None:
+        rec["score_floor"] = round(float(score_floor), 2)
     _write(rec)
 
 

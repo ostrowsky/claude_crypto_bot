@@ -221,6 +221,15 @@ TREND_15M_QUALITY_DAILY_RANGE_MAX_BULL_DAY = 14.0       # TAO 12% was being bloc
 ML_CANDIDATE_RANKER_HARD_VETO_1H_TOP_GAINER_MAX = 0.25  # veto only if final bad AND TG prob low
 ```
 
+### Entry-event logger fix (2026-04-30)
+Added ranker outputs to entry-event payload in `bot_events.jsonl`:
+`ranker_top_gainer_prob`, `ranker_ev`, `ranker_quality_proba`,
+`ranker_final_score`, `signal_mode`, `candidate_score`, `score_floor`.
+Unblocks post-hoc validation of 1A (top_gainer_prob mega-trigger)
+and 4A (precision-prune). All fields nullable, no schema break.
+Patch sites: `botlog.py::log_entry`, `monitor.py` ~ L4605.
+Spec: `docs/specs/features/entry-event-logger-fix-spec.md`.
+
 ### Trail-stop min buffer floor (2026-04-26)
 Whipsaw exits on `impulse_speed`/`strong_trend`/`impulse` when bandit picks
 `tight`/`very_tight` arm on high-volatility names (ALGOUSDT 04-22, 04-26).

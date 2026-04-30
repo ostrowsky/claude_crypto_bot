@@ -4610,6 +4610,16 @@ async def _poll_coin(
                     daily_range=_dr if np.isfinite(_dr) else 0.0,
                     trail_k=trail_k, max_hold_bars=max_hold,
                     ml_proba=ml_proba,
+                    # Logger-fix 2026-04-30 (entry-event-logger-fix-spec.md):
+                    # surface ranker outputs for post-hoc validation of
+                    # 1A (top_gainer_prob mega-trigger) and 4A (precision-prune)
+                    ranker_top_gainer_prob=getattr(pos, "ranker_top_gainer_prob", None),
+                    ranker_ev=getattr(pos, "ranker_ev", None),
+                    ranker_quality_proba=getattr(pos, "ranker_quality_proba", None),
+                    ranker_final_score=getattr(pos, "ranker_final_score", None),
+                    signal_mode=getattr(pos, "signal_mode", None) or sig_mode,
+                    candidate_score=candidate_score,
+                    score_floor=score_floor,
                 )
             except Exception as _log_err:
                 log.warning("botlog.log_entry failed for %s: %s", sym, _log_err)
