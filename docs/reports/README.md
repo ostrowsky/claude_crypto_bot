@@ -10,6 +10,7 @@ Date-stamped operational reports (отличаются от спек: спеки
 | [`2026-04-28-improvements-validated.md`](./2026-04-28-improvements-validated.md) | Каждое предложение прогнано через бэктест. P5 поднята до HIGH; P1 опущена (3 из 5 «silent» — это holding); P3 ушла в needs-redesign (75 FP/day). |
 | [`2026-04-29-metrics-baseline.md`](./2026-04-29-metrics-baseline.md) | Baseline всех 13 метрик framework-спеки. North-star `EarlyCapture@top20 = 0.074` (vs target 0.40). Capture = 0.052 — главный отстающий, не coverage. |
 | [`2026-04-29-north-star-roadmap.md`](./2026-04-29-north-star-roadmap.md) | 4 пути роста north-star (earliness, hold-longer, coverage, precision). 10-step rollout 0.077 → 0.42. Главный insight: earliness двигает 2 lever’а сразу (capture + lead). |
+| [`2026-04-30-roadmap-validation.md`](./2026-04-30-roadmap-validation.md) | 4 backtest-валидации: 2A dynamic max_hold подтверждено (+0.039 NS), 1C мельче (+0.005), 1A/4A defer до logger-fix. Re-rank: 2A — #1 win. |
 
 ## Конвенция
 
