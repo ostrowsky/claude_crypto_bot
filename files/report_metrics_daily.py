@@ -21,6 +21,7 @@ SCRIPTS = [
     "_backtest_time_to_signal.py",          # E1
     "_backtest_capture_ratio.py",           # E2
     "_compute_early_capture.py",            # north-star
+    "_backtest_ex1_realized_potential.py",  # EX1 (exit-side, 2026-05-02)
 ]
 
 row = {"ts": datetime.now(timezone.utc).isoformat()}
@@ -68,6 +69,11 @@ for s in SCRIPTS:
         elif "precision_pct" in m: v = f"prec={m['precision_pct']:.1f}% rate={m.get('raw_entries_per_day',0):.1f}/d"
         elif "median_h" in m: v = f"median lead {m['median_h']:+.2f}h, late {m.get('late_30m_pct',0):.0f}%"
         elif "overall_pct" in m: v = f"overall {m['overall_pct']:.1f}%"
-        elif "top20" in m and m["top20"]: v = f"top20 mean={m['top20']['mean']:+.3f}"
+        elif "top20" in m and isinstance(m.get("top20"), dict) and m["top20"]:
+            t = m["top20"]
+            if "share_ex1_ge_05" in t:
+                v = f"top20 EX1 median={t['median']:+.3f}, ex1>=0.5: {t['share_ex1_ge_05']:.0f}%"
+            else:
+                v = f"top20 mean={t['mean']:+.3f}"
         else: v = "ok"
         print(f"  {s:<45} {name:<28} {v}")

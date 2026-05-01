@@ -27,6 +27,8 @@ Spec-first workflow. См. [`../../AGENTS.md`](../../AGENTS.md) для проц�
 | [`entry-event-logger-fix`](./features/entry-event-logger-fix-spec.md) | shipped 2026-04-30 | Добавлены `ranker_top_gainer_prob`, `ranker_ev`, `ranker_quality_proba`, `signal_mode`, `candidate_score` в entry-event payload. Разблокирует валидацию 1A и 4A. |
 | [`dynamic-max-hold`](./features/dynamic-max-hold-spec.md) | draft | Продление `max_hold_bars` если ADX растёт + price > EMA20 + pnl>0. Validated +0.039 NS (capture 0.16→0.24). Whitelist: impulse_speed, strong_trend, trend, retest. |
 | [`trend-1h-chop-filter`](./features/trend-1h-chop-filter-spec.md) | shipped 2026-05-01 v2.6.0 | Block `trend/1h` if `(ADX<25) OR (slope<1.2) OR (vol_x<1.3)`. Backtest: precision 1.2 %→16.7 %, recall 100 %, avg_pnl −0.17 %→+1.58 %. |
+| [`trend-surge-precedence`](./features/trend-surge-precedence-spec.md) | shipped 2026-05-02 v2.7.0 (flagged off) | H3: surge_ok идёт ПЕРЕД entry_ok. Активация `TREND_SURGE_PRECEDENCE_ENABLED=True`. Acceptance: ≥5 reclassifications за 7 d shadow. |
+| [`ex1-realized-potential`](./features/ex1-realized-potential-spec.md) | shipped 2026-05-02 v2.7.0 | Exit-side метрика. Baseline median EX1 = +0.001 на top-20. `_backtest_ex1_realized_potential.py` + интеграция в daily aggregator. |
 
 ## How to add a new spec
 

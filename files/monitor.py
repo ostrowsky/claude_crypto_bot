@@ -4488,6 +4488,18 @@ async def _poll_coin(
                 sig_mode  = "retest"
                 trail_k   = getattr(config, "ATR_TRAIL_K_RETEST",    1.8)
                 max_hold  = getattr(config, "MAX_HOLD_BARS_RETEST",   10)
+            elif surge_ok and getattr(config, "TREND_SURGE_PRECEDENCE_ENABLED", False):
+                # H3 (2026-05-02): TREND_SURGE опережает entry_ok когда обе условия True.
+                # Detector ловит slope-acceleration + растущий MACD — раньше чем
+                # entry_ok успевает зафиксировать тренд по ADX/slope порогам.
+                # Spec: docs/specs/features/trend-surge-precedence-spec.md
+                sig_mode = "trend_surge"
+                trail_k  = getattr(config, "ATR_TRAIL_K_TREND_SURGE",
+                                   getattr(config, "ATR_TRAIL_K_STRONG", 2.5))
+                max_hold = (getattr(config, "MAX_HOLD_BARS_15M", 48)
+                            if tf == "15m" else getattr(config, "MAX_HOLD_BARS", 16))
+                if entry_ok:
+                    log.info("SURGE WON over entry_ok %s [%s/%s]", sym, sig_mode, tf)
             elif entry_ok:
                 mode, _  = get_effective_entry_mode(feat, i, c, tf=tf)
                 sig_mode = mode  # "trend" / "strong_trend" / "impulse_speed"
@@ -4499,6 +4511,7 @@ async def _poll_coin(
                 max_hold = (getattr(config, 'MAX_HOLD_BARS_15M', 48)
                             if tf == '15m' else config.MAX_HOLD_BARS)
             elif surge_ok:
+                # Default behaviour когда flag=False: surge ловит только когда entry_ok=False
                 sig_mode = "impulse_speed"
                 trail_k  = getattr(config, "ATR_TRAIL_K_STRONG", 2.5)
                 max_hold = (getattr(config, "MAX_HOLD_BARS_15M", 48)
@@ -4724,6 +4737,7 @@ async def _poll_coin(
                 "trend":        "📈 Тренд",
                 "strong_trend": "💪 Сильный тренд",
                 "impulse_speed":"⚡ Быстрое движение",
+                "trend_surge":  "🌱 Старт тренда (slope-ускорение)",
                 "retest":       "🔄 Ретест EMA20",
                 "breakout":     "⚡ Пробой флэта",
                 "impulse":      "🚀 Импульс",

@@ -858,6 +858,13 @@ TREND_1H_CHOP_USE_BULL_DAY_RELAX: bool = False
 TREND_1H_CHOP_ADX_MIN_BULL_DAY: float = 22.0
 TREND_1H_CHOP_SLOPE_MIN_BULL_DAY: float = 1.0
 TREND_1H_CHOP_VOL_MIN_BULL_DAY: float = 1.2
+# ── H3 · Trend-surge precedence (2026-05-02) ───────────────────────────────────
+# Spec: docs/specs/features/trend-surge-precedence-spec.md
+# Когда True: surge_ok идёт ПЕРЕД entry_ok в pipeline (раньше ловим slope-
+# ускорение). Default False для постепенного rollout. Acceptance: 7 d shadow
+# с >=5 reclassifications и без regression в recall@top20.
+TREND_SURGE_PRECEDENCE_ENABLED: bool = False
+ATR_TRAIL_K_TREND_SURGE: float = 2.5  # = STRONG default; trail для нового режима
 # Mode daily-range / slope quality gate (backtest 2026-04-24, 60d, 2197 entries)
 # Root cause: on quiet-market days (daily_range 3-4%) signals are almost all FP
 # because coins don't make big moves regardless of technical setup.

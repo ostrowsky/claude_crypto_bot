@@ -221,6 +221,24 @@ TREND_15M_QUALITY_DAILY_RANGE_MAX_BULL_DAY = 14.0       # TAO 12% was being bloc
 ML_CANDIDATE_RANKER_HARD_VETO_1H_TOP_GAINER_MAX = 0.25  # veto only if final bad AND TG prob low
 ```
 
+### H3 trend-surge precedence (2026-05-02) · v2.7.0
+Detector `check_trend_surge_conditions` существовал, но в основном
+pipeline шёл ПОСЛЕ `entry_ok` — фактически dead-code. Добавлен
+config-флаг `TREND_SURGE_PRECEDENCE_ENABLED` (default **False**).
+Когда True: surge ловится ПЕРЕД entry_ok, новый `sig_mode = trend_surge`,
+trail_k = `ATR_TRAIL_K_TREND_SURGE` (2.5).
+TG-метка: 🌱 Старт тренда (slope-ускорение).
+Acceptance перед flip → True: ≥5 reclassifications за 7 d shadow.
+Spec: `docs/specs/features/trend-surge-precedence-spec.md`.
+
+### EX1 realized-to-potential capture (2026-05-02) · v2.7.0
+Первая exit-side метрика. Baseline median **+0.001** на top-20 winners
+— практически ноль capture от potential. Худший exit-class:
+`ema20_weakness` (median EX1 −0.010, worst cases −10 % pnl при +170+%
+potential). Скрипт: `_backtest_ex1_realized_potential.py`. Интегрировано
+в `report_metrics_daily.py`.
+Spec: `docs/specs/features/ex1-realized-potential-spec.md`.
+
 ### Trend/1h chop-filter (2026-05-01) · v2.6.0
 Reason of birth: live STRKUSDT signal at ADX 20.2 / slope +0.70 % /
 vol_x 1.61 — pure chop-range, not a trend.

@@ -22,9 +22,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 # ── Source of truth ────────────────────────────────────────────────────────
-BUILD_VERSION: str = "2.6.0"
-BUILD_APPLIED_AT_UTC: str = "2026-05-01T10:21:22Z"
-BUILD_NOTES: str = "trend/1h chop-filter (ADX>=25, slope>=1.2, vol_x>=1.3)"
+BUILD_VERSION: str = "2.7.0"
+BUILD_APPLIED_AT_UTC: str = "2026-05-01T23:27:57Z"
+BUILD_NOTES: str = "H3 trend-surge precedence (flagged off) + EX1 metric"
 
 # ── Helpers ────────────────────────────────────────────────────────────────
 _ROOT = Path(__file__).resolve().parent.parent
