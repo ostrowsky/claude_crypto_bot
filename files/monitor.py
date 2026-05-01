@@ -1702,6 +1702,49 @@ def _trend_entry_quality_guard_reason(
     )
 
 
+def _trend_1h_chop_guard_reason(
+    *,
+    tf: str,
+    mode: str,
+    adx: float,
+    slope: float,
+    vol_x: float,
+    is_bull_day: bool = False,
+) -> Optional[str]:
+    """
+    Block trend/1h candidates that look like chop-range, not real trend.
+    Trigger if any of: ADX < threshold, slope_pct < threshold, vol_x < threshold.
+
+    Backtest 30d (_validate_trend_chop_filter.py): trend/1h baseline
+    precision 1.2%, after filter (ADX>=25 & slope>=1.2 & vol>=1.3)
+    precision 16.7% (+15.5pp), recall 100%, avg_pnl +1.58% vs -0.17%.
+
+    Spec: docs/specs/features/trend-1h-chop-filter-spec.md
+    """
+    if tf != "1h" or mode != "trend":
+        return None
+    if not getattr(config, "TREND_1H_CHOP_FILTER_ENABLED", True):
+        return None
+    if is_bull_day and getattr(config, "TREND_1H_CHOP_USE_BULL_DAY_RELAX", False):
+        adx_min   = float(getattr(config, "TREND_1H_CHOP_ADX_MIN_BULL_DAY", 22.0))
+        slope_min = float(getattr(config, "TREND_1H_CHOP_SLOPE_MIN_BULL_DAY", 1.0))
+        vol_min   = float(getattr(config, "TREND_1H_CHOP_VOL_MIN_BULL_DAY", 1.2))
+    else:
+        adx_min   = float(getattr(config, "TREND_1H_CHOP_ADX_MIN", 25.0))
+        slope_min = float(getattr(config, "TREND_1H_CHOP_SLOPE_MIN", 1.2))
+        vol_min   = float(getattr(config, "TREND_1H_CHOP_VOL_MIN", 1.3))
+    fails = []
+    if adx < adx_min:
+        fails.append(f"ADX {adx:.1f}<{adx_min:.0f}")
+    if slope < slope_min:
+        fails.append(f"slope {slope:+.2f}%<{slope_min:.1f}%")
+    if vol_x < vol_min:
+        fails.append(f"vol {vol_x:.2f}<{vol_min:.1f}")
+    if not fails:
+        return None
+    return f"trend/1h chop: " + " OR ".join(fails)
+
+
 def _trail_min_buffer_pct(mode: str) -> float:
     """
     Returns the minimum trail-stop buffer as a fraction of price for a given mode.
@@ -3829,6 +3872,58 @@ async def _poll_coin(
                     reason=trend_guard_reason,
                 )
                 botlog.log_blocked(sym, tf, float(c[i]), trend_guard_reason, signal_type="trend_quality")
+                return
+
+            # ── Trend/1h chop-filter (2026-05-01) ─────────────────────────────
+            # Spec: docs/specs/features/trend-1h-chop-filter-spec.md
+            # Backtest: precision 1.2% -> 16.7%, recall 100%, avg_pnl +1.58%.
+            chop_guard_reason = _trend_1h_chop_guard_reason(
+                tf=tf,
+                mode=preview_mode,
+                adx=preview_adx,
+                slope=preview_slope,
+                vol_x=preview_vol,
+                is_bull_day=is_bull_day_now,
+            )
+            if chop_guard_reason:
+                _log_critic_candidate(
+                    sym=sym,
+                    tf=tf,
+                    bar_ts=int(data["t"][i]),
+                    signal_type=preview_mode,
+                    feat=feat,
+                    data=data,
+                    i=i,
+                    action="blocked",
+                    reason_code="trend_1h_chop",
+                    reason=chop_guard_reason,
+                    stage="quality_floor",
+                    candidate_score=candidate_score,
+                    base_score=base_score,
+                    score_floor=score_floor,
+                    forecast_return_pct=float(getattr(report, "forecast_return_pct", 0.0)),
+                    today_change_pct=float(getattr(report, "today_change_pct", 0.0)),
+                    ml_proba=ml_proba,
+                    mtf_soft_penalty=mtf_soft_penalty,
+                    fresh_priority=_is_fresh_priority_candidate(preview_mode, catchup_snapshot),
+                    catchup=catchup_snapshot is not None,
+                    continuation_profile=continuation_profile,
+                    signal_flags=signal_flags,
+                )
+                log.info("TREND/1H CHOP BLOCK %s: %s", sym, chop_guard_reason)
+                _maybe_log_ranker_shadow(
+                    sym=sym,
+                    tf=tf,
+                    mode=preview_mode,
+                    price=float(c[i]),
+                    candidate_score=candidate_score,
+                    score_floor=score_floor,
+                    ranker_proba=ranker_proba,
+                    ranker_info=ranker_info,
+                    bot_action="blocked",
+                    reason=chop_guard_reason,
+                )
+                botlog.log_blocked(sym, tf, float(c[i]), chop_guard_reason, signal_type="trend_1h_chop")
                 return
 
             mode_range_guard_reason = _mode_daily_range_guard_reason(

@@ -221,6 +221,30 @@ TREND_15M_QUALITY_DAILY_RANGE_MAX_BULL_DAY = 14.0       # TAO 12% was being bloc
 ML_CANDIDATE_RANKER_HARD_VETO_1H_TOP_GAINER_MAX = 0.25  # veto only if final bad AND TG prob low
 ```
 
+### Trend/1h chop-filter (2026-05-01) · v2.6.0
+Reason of birth: live STRKUSDT signal at ADX 20.2 / slope +0.70 % /
+vol_x 1.61 — pure chop-range, not a trend.
+Guard: блокирует `trend/1h` candidates если
+`(ADX<25) OR (slope_pct<1.2) OR (vol_x<1.3)`.
+Backtest 30 d (`_validate_trend_chop_filter.py`):
+- baseline trend/1h: precision 1.2 %, avg_pnl −0.17 %, FR_v1 22.6 %.
+- after filter: precision **16.7 %** (+15.5 pp), recall 100 % (1/1
+  top-20 winner сохранён), avg_pnl **+1.58 %**, FR 16.7 %.
+- 80 of 86 entries cut → ~14× меньше шума на TG.
+Helper: `monitor.py::_trend_1h_chop_guard_reason` (~ L1700).
+Wired right after `trend_quality` guard в monitor pipeline.
+Reason-code: `trend_1h_chop`.
+Configs:
+```python
+TREND_1H_CHOP_FILTER_ENABLED = True
+TREND_1H_CHOP_ADX_MIN   = 25.0
+TREND_1H_CHOP_SLOPE_MIN = 1.2
+TREND_1H_CHOP_VOL_MIN   = 1.3
+TREND_1H_CHOP_USE_BULL_DAY_RELAX = False  # opt-in
+```
+Rollback: `TREND_1H_CHOP_FILTER_ENABLED=False`.
+Spec: `docs/specs/features/trend-1h-chop-filter-spec.md`.
+
 ### Entry-event logger fix (2026-04-30)
 Added ranker outputs to entry-event payload in `bot_events.jsonl`:
 `ranker_top_gainer_prob`, `ranker_ev`, `ranker_quality_proba`,

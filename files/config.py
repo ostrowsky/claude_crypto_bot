@@ -843,6 +843,21 @@ TREND_15M_QUALITY_DAILY_RANGE_MAX: float = 10.0        # was 8.0
 TREND_15M_QUALITY_DAILY_RANGE_MAX_BULL_DAY: float = 14.0  # relaxed for bull days (TAO 12% blocked)
 TREND_15M_QUALITY_PRICE_EDGE_MAX_PCT: float = 3.20     # was 2.40 — TAO blocked at 2.43%
 TREND_15M_QUALITY_PRICE_EDGE_MAX_BULL_DAY_PCT: float = 4.00  # wider on bull days
+# ── Trend/1h chop-filter (2026-05-01) ──────────────────────────────────────────
+# Spec: docs/specs/features/trend-1h-chop-filter-spec.md
+# Backtest 30 d (_validate_trend_chop_filter.py): trend/1h baseline precision
+# 1.2 %, after filter (ADX>=25 & slope>=1.2 & vol>=1.3) precision 16.7 %,
+# recall 100 %, avg_pnl +1.58 % vs −0.17 %.
+# Live trigger case: STRKUSDT 2026-05-01 (ADX 20.2, slope +0.70 %, chop range).
+TREND_1H_CHOP_FILTER_ENABLED: bool = True
+TREND_1H_CHOP_ADX_MIN: float = 25.0
+TREND_1H_CHOP_SLOPE_MIN: float = 1.2  # in % (slope_pct)
+TREND_1H_CHOP_VOL_MIN: float = 1.3   # vol_x multiplier
+# Bull-day relaxation (opt-in; not validated on bull-day subsample)
+TREND_1H_CHOP_USE_BULL_DAY_RELAX: bool = False
+TREND_1H_CHOP_ADX_MIN_BULL_DAY: float = 22.0
+TREND_1H_CHOP_SLOPE_MIN_BULL_DAY: float = 1.0
+TREND_1H_CHOP_VOL_MIN_BULL_DAY: float = 1.2
 # Mode daily-range / slope quality gate (backtest 2026-04-24, 60d, 2197 entries)
 # Root cause: on quiet-market days (daily_range 3-4%) signals are almost all FP
 # because coins don't make big moves regardless of technical setup.
