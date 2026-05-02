@@ -865,6 +865,16 @@ TREND_1H_CHOP_VOL_MIN_BULL_DAY: float = 1.2
 # с >=5 reclassifications и без regression в recall@top20.
 TREND_SURGE_PRECEDENCE_ENABLED: bool = False
 ATR_TRAIL_K_TREND_SURGE: float = 2.5  # = STRONG default; trail для нового режима
+# ── H5 · Trailing-only after break-even (2026-05-02) ───────────────────────────
+# Spec: docs/specs/features/h5-trailing-only-break-even-spec.md
+# When position is profitable (pnl >= H5_BREAK_EVEN_PCT), suppress soft
+# EMA-pattern exits ("2 closes below EMA20", "slope flip", "ADX weakening")
+# and let ATR-trail handle reversals. Backtest 30d: 4/982 eligible exits,
+# 1 top-20 winner left +471% on table (APEUSDT 04-30).
+# Default: SHADOW on, ENABLED off (logging-only mode for 7d acceptance).
+H5_TRAILING_ONLY_AFTER_BREAK_EVEN_ENABLED: bool = False
+H5_TRAILING_ONLY_SHADOW: bool = True
+H5_BREAK_EVEN_PCT: float = 0.5
 # Mode daily-range / slope quality gate (backtest 2026-04-24, 60d, 2197 entries)
 # Root cause: on quiet-market days (daily_range 3-4%) signals are almost all FP
 # because coins don't make big moves regardless of technical setup.

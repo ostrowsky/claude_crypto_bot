@@ -221,6 +221,24 @@ TREND_15M_QUALITY_DAILY_RANGE_MAX_BULL_DAY = 14.0       # TAO 12% was being bloc
 ML_CANDIDATE_RANKER_HARD_VETO_1H_TOP_GAINER_MAX = 0.25  # veto only if final bad AND TG prob low
 ```
 
+### H5 trailing-only after break-even (2026-05-02) · v2.8.0
+Когда `pos.pnl >= 0.5 %`, soft EMA-pattern exits подавляются и
+управление передаётся ATR-trail’у. Цель: атаковать главный leak
+из EX1 baseline — exit_class `ema20_weakness` (median EX1 −0.010).
+Backtest 30 d: 4/982 H5-eligible exits, на одном APEUSDT 04-30
+оставлено +471 % potential на столе. Default: SHADOW=True (logging),
+ENABLED=False (поведение не меняется до acceptance).
+Acceptance перед flip → True: 7 d shadow с ≥3 events.
+Helper: `monitor.py::_h5_should_suppress` (~ L1745).
+Wired в exit-pipeline после WEAK / TREND_HOLD overrides (~ L5325).
+Configs:
+```python
+H5_TRAILING_ONLY_AFTER_BREAK_EVEN_ENABLED = False
+H5_TRAILING_ONLY_SHADOW = True
+H5_BREAK_EVEN_PCT = 0.5
+```
+Spec: `docs/specs/features/h5-trailing-only-break-even-spec.md`.
+
 ### H3 trend-surge precedence (2026-05-02) · v2.7.0
 Detector `check_trend_surge_conditions` существовал, но в основном
 pipeline шёл ПОСЛЕ `entry_ok` — фактически dead-code. Добавлен

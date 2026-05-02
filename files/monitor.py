@@ -1745,6 +1745,43 @@ def _trend_1h_chop_guard_reason(
     return f"trend/1h chop: " + " OR ".join(fails)
 
 
+def _h5_should_suppress(reason: Optional[str], pnl_pct: float) -> bool:
+    """
+    H5: trailing-only after break-even.
+    Returns True if soft EMA-pattern exit should be suppressed because
+    position is profitable enough to ride out a normal pullback.
+
+    Worst exit-class per EX1 baseline: ema20_weakness (median -0.010).
+    Bot closes on a normal retracement to EMA20 in bull-trends, leaving
+    the rest of the move on the table. Suppression triggers ATR-trail
+    to handle reversal instead of pattern-based heuristics.
+
+    NOT suppressed: WEAK signals (own guard), RSI/MACD/time exits,
+    catastrophic reversals (handled by ATR-trail anyway).
+
+    Spec: docs/specs/features/h5-trailing-only-break-even-spec.md
+    """
+    if not reason:
+        return False
+    pnl_min = float(getattr(config, "H5_BREAK_EVEN_PCT", 0.5))
+    if pnl_pct < pnl_min:
+        return False
+    r = reason.lower()
+    if r.startswith("⚠️") or "weak" in r:
+        return False
+    if "rsi" in r or "macd" in r:
+        return False
+    if "лимит" in r or "max_hold" in r or "время" in r:
+        return False
+    soft_markers = (
+        "2 закрытия подряд ниже ema20",
+        "ниже ema20",
+        "ema20 разворачивается",
+        "adx ослабевает",
+    )
+    return any(m in r for m in soft_markers)
+
+
 def _trail_min_buffer_pct(mode: str) -> float:
     """
     Returns the minimum trail-stop buffer as a fraction of price for a given mode.
@@ -5341,6 +5378,25 @@ async def _poll_coin(
                 reason,
             )
             reason = None
+        elif _h5_should_suppress(reason, current_pnl):
+            # H5 (2026-05-02): trailing-only after break-even.
+            # On profitable positions (pnl >= H5_BREAK_EVEN_PCT) suppress
+            # soft EMA-pattern exits and let ATR-trail handle reversals.
+            # Spec: docs/specs/features/h5-trailing-only-break-even-spec.md
+            h5_enabled = bool(getattr(config, "H5_TRAILING_ONLY_AFTER_BREAK_EVEN_ENABLED", False))
+            h5_shadow  = bool(getattr(config, "H5_TRAILING_ONLY_SHADOW", True))
+            if h5_enabled:
+                log.info(
+                    "H5 SUPPRESS %s [%s] bars=%d pnl=%.2f%%: %s",
+                    sym, tf, pos.bars_elapsed, current_pnl, reason,
+                )
+                reason = None
+            elif h5_shadow:
+                log.info(
+                    "H5 SHADOW would-suppress %s [%s] bars=%d pnl=%.2f%%: %s",
+                    sym, tf, pos.bars_elapsed, current_pnl, reason,
+                )
+                # behaviour unchanged
 
     if reason:
         price = float(c[i])
