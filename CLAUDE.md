@@ -221,6 +221,75 @@ TREND_15M_QUALITY_DAILY_RANGE_MAX_BULL_DAY = 14.0       # TAO 12% was being bloc
 ML_CANDIDATE_RANKER_HARD_VETO_1H_TOP_GAINER_MAX = 0.25  # veto only if final bad AND TG prob low
 ```
 
+### H5 trailing-only after break-even (2026-05-02) · v2.8.0
+Когда `pos.pnl >= 0.5 %`, soft EMA-pattern exits подавляются и
+управление передаётся ATR-trail’у. Цель: атаковать главный leak
+из EX1 baseline — exit_class `ema20_weakness` (median EX1 −0.010).
+Backtest 30 d: 4/982 H5-eligible exits, на одном APEUSDT 04-30
+оставлено +471 % potential на столе. Default: SHADOW=True (logging),
+ENABLED=False (поведение не меняется до acceptance).
+Acceptance перед flip → True: 7 d shadow с ≥3 events.
+Helper: `monitor.py::_h5_should_suppress` (~ L1745).
+Wired в exit-pipeline после WEAK / TREND_HOLD overrides (~ L5325).
+Configs:
+```python
+H5_TRAILING_ONLY_AFTER_BREAK_EVEN_ENABLED = False
+H5_TRAILING_ONLY_SHADOW = True
+H5_BREAK_EVEN_PCT = 0.5
+```
+Spec: `docs/specs/features/h5-trailing-only-break-even-spec.md`.
+
+### H3 trend-surge precedence (2026-05-02) · v2.7.0
+Detector `check_trend_surge_conditions` существовал, но в основном
+pipeline шёл ПОСЛЕ `entry_ok` — фактически dead-code. Добавлен
+config-флаг `TREND_SURGE_PRECEDENCE_ENABLED` (default **False**).
+Когда True: surge ловится ПЕРЕД entry_ok, новый `sig_mode = trend_surge`,
+trail_k = `ATR_TRAIL_K_TREND_SURGE` (2.5).
+TG-метка: 🌱 Старт тренда (slope-ускорение).
+Acceptance перед flip → True: ≥5 reclassifications за 7 d shadow.
+Spec: `docs/specs/features/trend-surge-precedence-spec.md`.
+
+### EX1 realized-to-potential capture (2026-05-02) · v2.7.0
+Первая exit-side метрика. Baseline median **+0.001** на top-20 winners
+— практически ноль capture от potential. Худший exit-class:
+`ema20_weakness` (median EX1 −0.010, worst cases −10 % pnl при +170+%
+potential). Скрипт: `_backtest_ex1_realized_potential.py`. Интегрировано
+в `report_metrics_daily.py`.
+Spec: `docs/specs/features/ex1-realized-potential-spec.md`.
+
+### Trend/1h chop-filter (2026-05-01) · v2.6.0
+Reason of birth: live STRKUSDT signal at ADX 20.2 / slope +0.70 % /
+vol_x 1.61 — pure chop-range, not a trend.
+Guard: блокирует `trend/1h` candidates если
+`(ADX<25) OR (slope_pct<1.2) OR (vol_x<1.3)`.
+Backtest 30 d (`_validate_trend_chop_filter.py`):
+- baseline trend/1h: precision 1.2 %, avg_pnl −0.17 %, FR_v1 22.6 %.
+- after filter: precision **16.7 %** (+15.5 pp), recall 100 % (1/1
+  top-20 winner сохранён), avg_pnl **+1.58 %**, FR 16.7 %.
+- 80 of 86 entries cut → ~14× меньше шума на TG.
+Helper: `monitor.py::_trend_1h_chop_guard_reason` (~ L1700).
+Wired right after `trend_quality` guard в monitor pipeline.
+Reason-code: `trend_1h_chop`.
+Configs:
+```python
+TREND_1H_CHOP_FILTER_ENABLED = True
+TREND_1H_CHOP_ADX_MIN   = 25.0
+TREND_1H_CHOP_SLOPE_MIN = 1.2
+TREND_1H_CHOP_VOL_MIN   = 1.3
+TREND_1H_CHOP_USE_BULL_DAY_RELAX = False  # opt-in
+```
+Rollback: `TREND_1H_CHOP_FILTER_ENABLED=False`.
+Spec: `docs/specs/features/trend-1h-chop-filter-spec.md`.
+
+### Entry-event logger fix (2026-04-30)
+Added ranker outputs to entry-event payload in `bot_events.jsonl`:
+`ranker_top_gainer_prob`, `ranker_ev`, `ranker_quality_proba`,
+`ranker_final_score`, `signal_mode`, `candidate_score`, `score_floor`.
+Unblocks post-hoc validation of 1A (top_gainer_prob mega-trigger)
+and 4A (precision-prune). All fields nullable, no schema break.
+Patch sites: `botlog.py::log_entry`, `monitor.py` ~ L4605.
+Spec: `docs/specs/features/entry-event-logger-fix-spec.md`.
+
 ### Trail-stop min buffer floor (2026-04-26)
 Whipsaw exits on `impulse_speed`/`strong_trend`/`impulse` when bandit picks
 `tight`/`very_tight` arm on high-volatility names (ALGOUSDT 04-22, 04-26).

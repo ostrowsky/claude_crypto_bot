@@ -1702,6 +1702,86 @@ def _trend_entry_quality_guard_reason(
     )
 
 
+def _trend_1h_chop_guard_reason(
+    *,
+    tf: str,
+    mode: str,
+    adx: float,
+    slope: float,
+    vol_x: float,
+    is_bull_day: bool = False,
+) -> Optional[str]:
+    """
+    Block trend/1h candidates that look like chop-range, not real trend.
+    Trigger if any of: ADX < threshold, slope_pct < threshold, vol_x < threshold.
+
+    Backtest 30d (_validate_trend_chop_filter.py): trend/1h baseline
+    precision 1.2%, after filter (ADX>=25 & slope>=1.2 & vol>=1.3)
+    precision 16.7% (+15.5pp), recall 100%, avg_pnl +1.58% vs -0.17%.
+
+    Spec: docs/specs/features/trend-1h-chop-filter-spec.md
+    """
+    if tf != "1h" or mode != "trend":
+        return None
+    if not getattr(config, "TREND_1H_CHOP_FILTER_ENABLED", True):
+        return None
+    if is_bull_day and getattr(config, "TREND_1H_CHOP_USE_BULL_DAY_RELAX", False):
+        adx_min   = float(getattr(config, "TREND_1H_CHOP_ADX_MIN_BULL_DAY", 22.0))
+        slope_min = float(getattr(config, "TREND_1H_CHOP_SLOPE_MIN_BULL_DAY", 1.0))
+        vol_min   = float(getattr(config, "TREND_1H_CHOP_VOL_MIN_BULL_DAY", 1.2))
+    else:
+        adx_min   = float(getattr(config, "TREND_1H_CHOP_ADX_MIN", 25.0))
+        slope_min = float(getattr(config, "TREND_1H_CHOP_SLOPE_MIN", 1.2))
+        vol_min   = float(getattr(config, "TREND_1H_CHOP_VOL_MIN", 1.3))
+    fails = []
+    if adx < adx_min:
+        fails.append(f"ADX {adx:.1f}<{adx_min:.0f}")
+    if slope < slope_min:
+        fails.append(f"slope {slope:+.2f}%<{slope_min:.1f}%")
+    if vol_x < vol_min:
+        fails.append(f"vol {vol_x:.2f}<{vol_min:.1f}")
+    if not fails:
+        return None
+    return f"trend/1h chop: " + " OR ".join(fails)
+
+
+def _h5_should_suppress(reason: Optional[str], pnl_pct: float) -> bool:
+    """
+    H5: trailing-only after break-even.
+    Returns True if soft EMA-pattern exit should be suppressed because
+    position is profitable enough to ride out a normal pullback.
+
+    Worst exit-class per EX1 baseline: ema20_weakness (median -0.010).
+    Bot closes on a normal retracement to EMA20 in bull-trends, leaving
+    the rest of the move on the table. Suppression triggers ATR-trail
+    to handle reversal instead of pattern-based heuristics.
+
+    NOT suppressed: WEAK signals (own guard), RSI/MACD/time exits,
+    catastrophic reversals (handled by ATR-trail anyway).
+
+    Spec: docs/specs/features/h5-trailing-only-break-even-spec.md
+    """
+    if not reason:
+        return False
+    pnl_min = float(getattr(config, "H5_BREAK_EVEN_PCT", 0.5))
+    if pnl_pct < pnl_min:
+        return False
+    r = reason.lower()
+    if r.startswith("⚠️") or "weak" in r:
+        return False
+    if "rsi" in r or "macd" in r:
+        return False
+    if "лимит" in r or "max_hold" in r or "время" in r:
+        return False
+    soft_markers = (
+        "2 закрытия подряд ниже ema20",
+        "ниже ema20",
+        "ema20 разворачивается",
+        "adx ослабевает",
+    )
+    return any(m in r for m in soft_markers)
+
+
 def _trail_min_buffer_pct(mode: str) -> float:
     """
     Returns the minimum trail-stop buffer as a fraction of price for a given mode.
@@ -3831,6 +3911,58 @@ async def _poll_coin(
                 botlog.log_blocked(sym, tf, float(c[i]), trend_guard_reason, signal_type="trend_quality")
                 return
 
+            # ── Trend/1h chop-filter (2026-05-01) ─────────────────────────────
+            # Spec: docs/specs/features/trend-1h-chop-filter-spec.md
+            # Backtest: precision 1.2% -> 16.7%, recall 100%, avg_pnl +1.58%.
+            chop_guard_reason = _trend_1h_chop_guard_reason(
+                tf=tf,
+                mode=preview_mode,
+                adx=preview_adx,
+                slope=preview_slope,
+                vol_x=preview_vol,
+                is_bull_day=is_bull_day_now,
+            )
+            if chop_guard_reason:
+                _log_critic_candidate(
+                    sym=sym,
+                    tf=tf,
+                    bar_ts=int(data["t"][i]),
+                    signal_type=preview_mode,
+                    feat=feat,
+                    data=data,
+                    i=i,
+                    action="blocked",
+                    reason_code="trend_1h_chop",
+                    reason=chop_guard_reason,
+                    stage="quality_floor",
+                    candidate_score=candidate_score,
+                    base_score=base_score,
+                    score_floor=score_floor,
+                    forecast_return_pct=float(getattr(report, "forecast_return_pct", 0.0)),
+                    today_change_pct=float(getattr(report, "today_change_pct", 0.0)),
+                    ml_proba=ml_proba,
+                    mtf_soft_penalty=mtf_soft_penalty,
+                    fresh_priority=_is_fresh_priority_candidate(preview_mode, catchup_snapshot),
+                    catchup=catchup_snapshot is not None,
+                    continuation_profile=continuation_profile,
+                    signal_flags=signal_flags,
+                )
+                log.info("TREND/1H CHOP BLOCK %s: %s", sym, chop_guard_reason)
+                _maybe_log_ranker_shadow(
+                    sym=sym,
+                    tf=tf,
+                    mode=preview_mode,
+                    price=float(c[i]),
+                    candidate_score=candidate_score,
+                    score_floor=score_floor,
+                    ranker_proba=ranker_proba,
+                    ranker_info=ranker_info,
+                    bot_action="blocked",
+                    reason=chop_guard_reason,
+                )
+                botlog.log_blocked(sym, tf, float(c[i]), chop_guard_reason, signal_type="trend_1h_chop")
+                return
+
             mode_range_guard_reason = _mode_daily_range_guard_reason(
                 mode=preview_mode,
                 tf=tf,
@@ -4393,6 +4525,18 @@ async def _poll_coin(
                 sig_mode  = "retest"
                 trail_k   = getattr(config, "ATR_TRAIL_K_RETEST",    1.8)
                 max_hold  = getattr(config, "MAX_HOLD_BARS_RETEST",   10)
+            elif surge_ok and getattr(config, "TREND_SURGE_PRECEDENCE_ENABLED", False):
+                # H3 (2026-05-02): TREND_SURGE опережает entry_ok когда обе условия True.
+                # Detector ловит slope-acceleration + растущий MACD — раньше чем
+                # entry_ok успевает зафиксировать тренд по ADX/slope порогам.
+                # Spec: docs/specs/features/trend-surge-precedence-spec.md
+                sig_mode = "trend_surge"
+                trail_k  = getattr(config, "ATR_TRAIL_K_TREND_SURGE",
+                                   getattr(config, "ATR_TRAIL_K_STRONG", 2.5))
+                max_hold = (getattr(config, "MAX_HOLD_BARS_15M", 48)
+                            if tf == "15m" else getattr(config, "MAX_HOLD_BARS", 16))
+                if entry_ok:
+                    log.info("SURGE WON over entry_ok %s [%s/%s]", sym, sig_mode, tf)
             elif entry_ok:
                 mode, _  = get_effective_entry_mode(feat, i, c, tf=tf)
                 sig_mode = mode  # "trend" / "strong_trend" / "impulse_speed"
@@ -4404,6 +4548,7 @@ async def _poll_coin(
                 max_hold = (getattr(config, 'MAX_HOLD_BARS_15M', 48)
                             if tf == '15m' else config.MAX_HOLD_BARS)
             elif surge_ok:
+                # Default behaviour когда flag=False: surge ловит только когда entry_ok=False
                 sig_mode = "impulse_speed"
                 trail_k  = getattr(config, "ATR_TRAIL_K_STRONG", 2.5)
                 max_hold = (getattr(config, "MAX_HOLD_BARS_15M", 48)
@@ -4610,6 +4755,16 @@ async def _poll_coin(
                     daily_range=_dr if np.isfinite(_dr) else 0.0,
                     trail_k=trail_k, max_hold_bars=max_hold,
                     ml_proba=ml_proba,
+                    # Logger-fix 2026-04-30 (entry-event-logger-fix-spec.md):
+                    # surface ranker outputs for post-hoc validation of
+                    # 1A (top_gainer_prob mega-trigger) and 4A (precision-prune)
+                    ranker_top_gainer_prob=getattr(pos, "ranker_top_gainer_prob", None),
+                    ranker_ev=getattr(pos, "ranker_ev", None),
+                    ranker_quality_proba=getattr(pos, "ranker_quality_proba", None),
+                    ranker_final_score=getattr(pos, "ranker_final_score", None),
+                    signal_mode=getattr(pos, "signal_mode", None) or sig_mode,
+                    candidate_score=candidate_score,
+                    score_floor=score_floor,
                 )
             except Exception as _log_err:
                 log.warning("botlog.log_entry failed for %s: %s", sym, _log_err)
@@ -4619,6 +4774,7 @@ async def _poll_coin(
                 "trend":        "📈 Тренд",
                 "strong_trend": "💪 Сильный тренд",
                 "impulse_speed":"⚡ Быстрое движение",
+                "trend_surge":  "🌱 Старт тренда (slope-ускорение)",
                 "retest":       "🔄 Ретест EMA20",
                 "breakout":     "⚡ Пробой флэта",
                 "impulse":      "🚀 Импульс",
@@ -5222,6 +5378,25 @@ async def _poll_coin(
                 reason,
             )
             reason = None
+        elif _h5_should_suppress(reason, current_pnl):
+            # H5 (2026-05-02): trailing-only after break-even.
+            # On profitable positions (pnl >= H5_BREAK_EVEN_PCT) suppress
+            # soft EMA-pattern exits and let ATR-trail handle reversals.
+            # Spec: docs/specs/features/h5-trailing-only-break-even-spec.md
+            h5_enabled = bool(getattr(config, "H5_TRAILING_ONLY_AFTER_BREAK_EVEN_ENABLED", False))
+            h5_shadow  = bool(getattr(config, "H5_TRAILING_ONLY_SHADOW", True))
+            if h5_enabled:
+                log.info(
+                    "H5 SUPPRESS %s [%s] bars=%d pnl=%.2f%%: %s",
+                    sym, tf, pos.bars_elapsed, current_pnl, reason,
+                )
+                reason = None
+            elif h5_shadow:
+                log.info(
+                    "H5 SHADOW would-suppress %s [%s] bars=%d pnl=%.2f%%: %s",
+                    sym, tf, pos.bars_elapsed, current_pnl, reason,
+                )
+                # behaviour unchanged
 
     if reason:
         price = float(c[i])

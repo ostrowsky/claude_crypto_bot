@@ -89,3 +89,13 @@ all_neg_pnl = sum(t["pnl"] for t in trades if t["pnl"] < 0)
 fr_neg_pnl = sum(t["pnl"] for t in trades if t["bars"] <= 3 and t["pnl"] <= -0.3)
 print(f"\n  Total negative pnl pool: {all_neg_pnl:+.2f}% (sum of losers)")
 print(f"  Fast-reversal pool:      {fr_neg_pnl:+.2f}% ({100*fr_neg_pnl/min(-0.0001,all_neg_pnl):.0f}% of total drag)")
+
+# METRIC_JSON for daily aggregator
+metric = {
+    "metric": "Q1_Q3_fast_reversal",
+    "n_total_pairs": overall_fr1_n,
+    "n_fr_v1": overall_fr1,
+    "fr_v1_overall_pct": 100*overall_fr1/max(1, overall_fr1_n),
+    "fr_drag_pct_of_total_neg": 100*fr_neg_pnl/min(-0.0001, all_neg_pnl),
+}
+print("\nMETRIC_JSON:" + json.dumps(metric))

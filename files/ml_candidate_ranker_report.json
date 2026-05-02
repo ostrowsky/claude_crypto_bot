@@ -1,9 +1,9 @@
 {
   "dataset_file": "D:\\Projects\\claude_crypto_bot\\files\\critic_dataset.jsonl",
-  "rows_total": 12064,
-  "train_rows": 8444,
-  "val_rows": 1810,
-  "test_rows": 1810,
+  "rows_total": 13447,
+  "train_rows": 9412,
+  "val_rows": 2017,
+  "test_rows": 2018,
   "feature_count": 77,
   "catboost_available": true,
   "catboost_import_error": "",
@@ -18,364 +18,364 @@
   "validation": {
     "catboost": {
       "quality": {
-        "threshold": 0.45,
-        "accuracy": 0.5503,
-        "precision": 0.4742,
-        "recall": 0.2797,
-        "f1": 0.3519,
-        "coverage": 0.2575,
-        "selected_count": 466,
-        "selected_ret5_avg": -0.1182,
-        "selected_win_rate": 0.4742,
-        "brier": 0.245,
-        "auc": 0.5454
+        "threshold": 0.375,
+        "accuracy": 0.652,
+        "precision": 0.4922,
+        "recall": 0.09,
+        "f1": 0.1522,
+        "coverage": 0.0635,
+        "selected_count": 128,
+        "selected_ret5_avg": -0.2045,
+        "selected_win_rate": 0.4922,
+        "brier": 0.2256,
+        "auc": 0.5593
       },
       "group_ranking": {
-        "grouped_competitions": 193,
+        "grouped_competitions": 299,
         "top_n": [
           {
             "top_n": 1,
-            "eligible_groups": 193,
+            "eligible_groups": 299,
             "baseline": {
-              "count": 193,
-              "avg_target_return": 0.0283,
-              "avg_ret5": 0.05,
-              "avg_ev": -1.0494,
-              "avg_drawdown": 2.4451,
-              "avg_exit_pnl": -0.0459,
-              "win_rate": 0.4197,
-              "teacher_rows": 190,
-              "teacher_top_gainer_rate": 0.5211,
-              "teacher_capture_ratio": 0.1945
+              "count": 299,
+              "avg_target_return": -0.3669,
+              "avg_ret5": -0.2211,
+              "avg_ev": -1.4382,
+              "avg_drawdown": 2.3877,
+              "avg_exit_pnl": -0.3686,
+              "win_rate": 0.3712,
+              "teacher_rows": 298,
+              "teacher_top_gainer_rate": 0.5168,
+              "teacher_capture_ratio": 0.1948
             },
             "ranker": {
-              "count": 193,
-              "avg_target_return": 0.436,
-              "avg_ret5": 0.3798,
-              "avg_ev": -0.0828,
-              "avg_drawdown": 1.1413,
-              "avg_exit_pnl": 2.2008,
-              "win_rate": 0.5285,
-              "teacher_rows": 191,
-              "teacher_top_gainer_rate": 0.2827,
-              "teacher_capture_ratio": 0.0862
+              "count": 299,
+              "avg_target_return": -0.0342,
+              "avg_ret5": 0.0061,
+              "avg_ev": -0.3674,
+              "avg_drawdown": 0.8029,
+              "avg_exit_pnl": -0.2543,
+              "win_rate": 0.4214,
+              "teacher_rows": 297,
+              "teacher_top_gainer_rate": 0.2593,
+              "teacher_capture_ratio": 0.0849
             },
             "delta": {
-              "avg_target_return": 0.4077,
-              "avg_ret5": 0.3298,
-              "avg_ev": 0.9666,
-              "avg_drawdown": -1.3038,
-              "win_rate": 0.1088,
-              "teacher_top_gainer_rate": -0.2384,
-              "teacher_capture_ratio": -0.1083
+              "avg_target_return": 0.3327,
+              "avg_ret5": 0.2272,
+              "avg_ev": 1.0708,
+              "avg_drawdown": -1.5848,
+              "win_rate": 0.0502,
+              "teacher_top_gainer_rate": -0.2575,
+              "teacher_capture_ratio": -0.1099
             },
-            "overlap_ratio": 0.1865
+            "overlap_ratio": 0.1806
           },
           {
             "top_n": 3,
-            "eligible_groups": 149,
+            "eligible_groups": 210,
             "baseline": {
-              "count": 447,
-              "avg_target_return": 0.2992,
-              "avg_ret5": 0.2476,
-              "avg_ev": -0.4724,
-              "avg_drawdown": 1.6993,
-              "avg_exit_pnl": 0.5703,
-              "win_rate": 0.443,
-              "teacher_rows": 440,
-              "teacher_top_gainer_rate": 0.3886,
-              "teacher_capture_ratio": 0.1739
+              "count": 630,
+              "avg_target_return": -0.3954,
+              "avg_ret5": -0.3277,
+              "avg_ev": -1.1223,
+              "avg_drawdown": 1.6799,
+              "avg_exit_pnl": -0.4743,
+              "win_rate": 0.3619,
+              "teacher_rows": 627,
+              "teacher_top_gainer_rate": 0.3684,
+              "teacher_capture_ratio": 0.135
             },
             "ranker": {
-              "count": 447,
-              "avg_target_return": 0.2882,
-              "avg_ret5": 0.229,
-              "avg_ev": -0.1608,
-              "avg_drawdown": 0.9803,
-              "avg_exit_pnl": 1.042,
-              "win_rate": 0.4631,
-              "teacher_rows": 441,
-              "teacher_top_gainer_rate": 0.2018,
-              "teacher_capture_ratio": 0.0763
+              "count": 630,
+              "avg_target_return": -0.1122,
+              "avg_ret5": -0.0785,
+              "avg_ev": -0.4748,
+              "avg_drawdown": 0.8798,
+              "avg_exit_pnl": -0.1753,
+              "win_rate": 0.4079,
+              "teacher_rows": 625,
+              "teacher_top_gainer_rate": 0.1888,
+              "teacher_capture_ratio": 0.0582
             },
             "delta": {
-              "avg_target_return": -0.011,
-              "avg_ret5": -0.0186,
-              "avg_ev": 0.3116,
-              "avg_drawdown": -0.719,
-              "win_rate": 0.0201,
-              "teacher_top_gainer_rate": -0.1868,
-              "teacher_capture_ratio": -0.0976
+              "avg_target_return": 0.2832,
+              "avg_ret5": 0.2492,
+              "avg_ev": 0.6475,
+              "avg_drawdown": -0.8001,
+              "win_rate": 0.046,
+              "teacher_top_gainer_rate": -0.1796,
+              "teacher_capture_ratio": -0.0768
             },
-            "overlap_ratio": 0.4251
+            "overlap_ratio": 0.4746
           }
         ],
         "top1_head_to_head": {
-          "wins": 91,
-          "losses": 63,
-          "ties": 39,
-          "eligible_groups": 193
+          "wins": 150,
+          "losses": 94,
+          "ties": 55,
+          "eligible_groups": 299
         }
       }
     }
   },
   "test_baseline_candidates": {
     "threshold": 0.5,
-    "accuracy": 0.3602,
-    "precision": 0.3602,
+    "accuracy": 0.3389,
+    "precision": 0.3389,
     "recall": 1.0,
-    "f1": 0.5297,
+    "f1": 0.5063,
     "coverage": 1.0,
-    "selected_count": 1810,
-    "selected_ret5_avg": -0.3705,
-    "selected_win_rate": 0.3602,
-    "brier": 0.6398,
-    "auc": 0.509
+    "selected_count": 2018,
+    "selected_ret5_avg": -0.5756,
+    "selected_win_rate": 0.3389,
+    "brier": 0.6611,
+    "auc": 0.51
   },
   "test_ranker": {
-    "threshold": 0.45,
-    "accuracy": 0.616,
-    "precision": 0.4557,
-    "recall": 0.339,
-    "f1": 0.3887,
-    "coverage": 0.268,
-    "selected_count": 485,
-    "selected_ret5_avg": -0.0966,
-    "selected_win_rate": 0.4557,
-    "brier": 0.2342,
-    "auc": 0.553
+    "threshold": 0.375,
+    "accuracy": 0.6427,
+    "precision": 0.2658,
+    "recall": 0.0307,
+    "f1": 0.055,
+    "coverage": 0.0391,
+    "selected_count": 79,
+    "selected_ret5_avg": -1.3073,
+    "selected_win_rate": 0.2658,
+    "brier": 0.2248,
+    "auc": 0.4826
   },
   "test_group_ranking": {
-    "grouped_competitions": 299,
+    "grouped_competitions": 372,
     "top_n": [
       {
         "top_n": 1,
-        "eligible_groups": 299,
+        "eligible_groups": 372,
         "baseline": {
-          "count": 299,
-          "avg_target_return": -0.0055,
-          "avg_ret5": 0.0941,
-          "avg_ev": -0.6959,
-          "avg_drawdown": 1.6779,
-          "avg_exit_pnl": 0.4241,
-          "win_rate": 0.3813,
-          "teacher_rows": 293,
-          "teacher_top_gainer_rate": 0.4744,
-          "teacher_capture_ratio": 0.2231
+          "count": 372,
+          "avg_target_return": 0.0702,
+          "avg_ret5": 0.1107,
+          "avg_ev": -0.4217,
+          "avg_drawdown": 1.3006,
+          "avg_exit_pnl": 0.2945,
+          "win_rate": 0.4005,
+          "teacher_rows": 345,
+          "teacher_top_gainer_rate": 0.4348,
+          "teacher_capture_ratio": 0.1296
         },
         "ranker": {
-          "count": 299,
-          "avg_target_return": -0.083,
-          "avg_ret5": -0.0623,
-          "avg_ev": -0.3219,
-          "avg_drawdown": 0.6143,
-          "avg_exit_pnl": -0.4544,
-          "win_rate": 0.4114,
-          "teacher_rows": 291,
-          "teacher_top_gainer_rate": 0.2268,
-          "teacher_capture_ratio": 0.0891
+          "count": 372,
+          "avg_target_return": -0.0088,
+          "avg_ret5": -0.0067,
+          "avg_ev": -0.3238,
+          "avg_drawdown": 0.7297,
+          "avg_exit_pnl": 0.0293,
+          "win_rate": 0.4005,
+          "teacher_rows": 345,
+          "teacher_top_gainer_rate": 0.2609,
+          "teacher_capture_ratio": 0.0727
         },
         "delta": {
-          "avg_target_return": -0.0775,
-          "avg_ret5": -0.1564,
-          "avg_ev": 0.374,
-          "avg_drawdown": -1.0636,
-          "win_rate": 0.0301,
-          "teacher_top_gainer_rate": -0.2476,
-          "teacher_capture_ratio": -0.134
+          "avg_target_return": -0.079,
+          "avg_ret5": -0.1174,
+          "avg_ev": 0.0979,
+          "avg_drawdown": -0.5709,
+          "win_rate": 0.0,
+          "teacher_top_gainer_rate": -0.1739,
+          "teacher_capture_ratio": -0.0569
         },
-        "overlap_ratio": 0.1371
+        "overlap_ratio": 0.1962
       },
       {
         "top_n": 3,
-        "eligible_groups": 211,
+        "eligible_groups": 258,
         "baseline": {
-          "count": 633,
-          "avg_target_return": -0.157,
-          "avg_ret5": -0.1004,
-          "avg_ev": -0.6381,
-          "avg_drawdown": 1.2375,
-          "avg_exit_pnl": -0.0447,
-          "win_rate": 0.3997,
-          "teacher_rows": 620,
-          "teacher_top_gainer_rate": 0.3774,
-          "teacher_capture_ratio": 0.1593
+          "count": 774,
+          "avg_target_return": -0.0489,
+          "avg_ret5": -0.044,
+          "avg_ev": -0.5063,
+          "avg_drawdown": 1.1163,
+          "avg_exit_pnl": 0.1567,
+          "win_rate": 0.416,
+          "teacher_rows": 701,
+          "teacher_top_gainer_rate": 0.3452,
+          "teacher_capture_ratio": 0.1063
         },
         "ranker": {
-          "count": 633,
-          "avg_target_return": 0.0396,
-          "avg_ret5": 0.0418,
-          "avg_ev": -0.2607,
-          "avg_drawdown": 0.7134,
-          "avg_exit_pnl": -0.101,
-          "win_rate": 0.4155,
-          "teacher_rows": 620,
-          "teacher_top_gainer_rate": 0.2113,
-          "teacher_capture_ratio": 0.086
+          "count": 774,
+          "avg_target_return": 0.0263,
+          "avg_ret5": 0.0349,
+          "avg_ev": -0.2871,
+          "avg_drawdown": 0.7802,
+          "avg_exit_pnl": -0.0672,
+          "win_rate": 0.4134,
+          "teacher_rows": 703,
+          "teacher_top_gainer_rate": 0.2731,
+          "teacher_capture_ratio": 0.0796
         },
         "delta": {
-          "avg_target_return": 0.1966,
-          "avg_ret5": 0.1422,
-          "avg_ev": 0.3774,
-          "avg_drawdown": -0.5241,
-          "win_rate": 0.0158,
-          "teacher_top_gainer_rate": -0.1661,
-          "teacher_capture_ratio": -0.0733
+          "avg_target_return": 0.0752,
+          "avg_ret5": 0.0789,
+          "avg_ev": 0.2192,
+          "avg_drawdown": -0.3361,
+          "win_rate": -0.0026,
+          "teacher_top_gainer_rate": -0.0721,
+          "teacher_capture_ratio": -0.0267
         },
-        "overlap_ratio": 0.5039
+        "overlap_ratio": 0.5775
       },
       {
         "top_n": 5,
-        "eligible_groups": 135,
+        "eligible_groups": 145,
         "baseline": {
-          "count": 675,
-          "avg_target_return": -0.1451,
-          "avg_ret5": -0.1181,
-          "avg_ev": -0.5573,
-          "avg_drawdown": 1.0938,
-          "avg_exit_pnl": 0.0066,
-          "win_rate": 0.3778,
-          "teacher_rows": 661,
-          "teacher_top_gainer_rate": 0.3404,
-          "teacher_capture_ratio": 0.1462
+          "count": 725,
+          "avg_target_return": -0.2171,
+          "avg_ret5": -0.2049,
+          "avg_ev": -0.6859,
+          "avg_drawdown": 1.1783,
+          "avg_exit_pnl": -0.1235,
+          "win_rate": 0.3752,
+          "teacher_rows": 631,
+          "teacher_top_gainer_rate": 0.2837,
+          "teacher_capture_ratio": 0.0871
         },
         "ranker": {
-          "count": 675,
-          "avg_target_return": -0.0339,
-          "avg_ret5": -0.0387,
-          "avg_ev": -0.34,
-          "avg_drawdown": 0.7547,
-          "avg_exit_pnl": 0.1551,
-          "win_rate": 0.3985,
-          "teacher_rows": 661,
-          "teacher_top_gainer_rate": 0.2118,
-          "teacher_capture_ratio": 0.1019
+          "count": 725,
+          "avg_target_return": -0.1532,
+          "avg_ret5": -0.1437,
+          "avg_ev": -0.5253,
+          "avg_drawdown": 0.9466,
+          "avg_exit_pnl": 0.0037,
+          "win_rate": 0.3821,
+          "teacher_rows": 631,
+          "teacher_top_gainer_rate": 0.2409,
+          "teacher_capture_ratio": 0.0714
         },
         "delta": {
-          "avg_target_return": 0.1112,
-          "avg_ret5": 0.0794,
-          "avg_ev": 0.2173,
-          "avg_drawdown": -0.3391,
-          "win_rate": 0.0207,
-          "teacher_top_gainer_rate": -0.1286,
-          "teacher_capture_ratio": -0.0443
+          "avg_target_return": 0.0639,
+          "avg_ret5": 0.0612,
+          "avg_ev": 0.1606,
+          "avg_drawdown": -0.2317,
+          "win_rate": 0.0069,
+          "teacher_top_gainer_rate": -0.0428,
+          "teacher_capture_ratio": -0.0157
         },
-        "overlap_ratio": 0.5911
+        "overlap_ratio": 0.6772
       }
     ],
     "top1_head_to_head": {
-      "wins": 140,
-      "losses": 118,
-      "ties": 41,
-      "eligible_groups": 299
+      "wins": 158,
+      "losses": 141,
+      "ties": 73,
+      "eligible_groups": 372
     }
   },
   "test_calibration": [
     {
       "bucket": 1,
-      "rows": 362,
-      "proba_min": 0.4617,
-      "proba_max": 0.5384,
-      "avg_quality": 0.4972,
-      "avg_target_return": -0.079
+      "rows": 403,
+      "proba_min": 0.3629,
+      "proba_max": 0.3933,
+      "avg_quality": 0.3077,
+      "avg_target_return": -0.9246
     },
     {
       "bucket": 2,
-      "rows": 362,
-      "proba_min": 0.4395,
-      "proba_max": 0.4617,
-      "avg_quality": 0.3343,
-      "avg_target_return": -0.3161
+      "rows": 403,
+      "proba_min": 0.3547,
+      "proba_max": 0.3629,
+      "avg_quality": 0.34,
+      "avg_target_return": -0.5034
     },
     {
       "bucket": 3,
-      "rows": 362,
-      "proba_min": 0.4293,
-      "proba_max": 0.4394,
-      "avg_quality": 0.2983,
-      "avg_target_return": -0.2875
+      "rows": 403,
+      "proba_min": 0.3508,
+      "proba_max": 0.3547,
+      "avg_quality": 0.3623,
+      "avg_target_return": -0.3893
     },
     {
       "bucket": 4,
-      "rows": 362,
-      "proba_min": 0.417,
-      "proba_max": 0.4293,
-      "avg_quality": 0.3122,
-      "avg_target_return": -0.6038
+      "rows": 403,
+      "proba_min": 0.3453,
+      "proba_max": 0.3508,
+      "avg_quality": 0.3499,
+      "avg_target_return": -0.2309
     },
     {
       "bucket": 5,
-      "rows": 362,
-      "proba_min": 0.375,
-      "proba_max": 0.417,
-      "avg_quality": 0.3591,
-      "avg_target_return": -0.5662
+      "rows": 406,
+      "proba_min": 0.315,
+      "proba_max": 0.3452,
+      "avg_quality": 0.335,
+      "avg_target_return": -0.8282
     }
   ],
   "improvement_delta": {
-    "ret5_avg_delta": -0.1564,
-    "win_rate_delta": 0.0301,
-    "coverage_delta": -0.732,
-    "ev_avg_delta": 0.374,
-    "target_return_delta": -0.0775,
-    "teacher_top_gainer_rate_delta": -0.2476,
-    "teacher_capture_ratio_delta": -0.134
+    "ret5_avg_delta": -0.1174,
+    "win_rate_delta": 0.0,
+    "coverage_delta": -0.9609,
+    "ev_avg_delta": 0.0979,
+    "target_return_delta": -0.079,
+    "teacher_top_gainer_rate_delta": -0.1739,
+    "teacher_capture_ratio_delta": -0.0569
   },
   "teacher_label_coverage": {
-    "train_rows": 3500,
-    "val_rows": 1768,
-    "test_rows": 1778,
-    "train_top_gainer_rate": 0.2077,
-    "train_capture_ratio": 0.0462
+    "train_rows": 4441,
+    "val_rows": 2000,
+    "test_rows": 1801,
+    "train_top_gainer_rate": 0.1979,
+    "train_capture_ratio": 0.0541
   },
   "top_feature_importance": [
     {
-      "feature": "seq_last_slope",
-      "importance": 0.0497
+      "feature": "adx",
+      "importance": 0.0
     },
     {
-      "feature": "dow_cos",
-      "importance": 0.0342
+      "feature": "atr_pct",
+      "importance": 0.0
     },
     {
-      "feature": "daily_range",
-      "importance": 0.0337
+      "feature": "body_pct",
+      "importance": 0.0
     },
     {
-      "feature": "seq_mean_rsi",
-      "importance": 0.0257
+      "feature": "btc_momentum_4h",
+      "importance": 0.0
+    },
+    {
+      "feature": "btc_vs_ema50",
+      "importance": 0.0
+    },
+    {
+      "feature": "close_vs_ema20",
+      "importance": 0.0
     },
     {
       "feature": "close_vs_ema200",
-      "importance": 0.0217
+      "importance": 0.0
     },
     {
-      "feature": "hour_sin",
-      "importance": 0.0208
+      "feature": "close_vs_ema50",
+      "importance": 0.0
     },
     {
-      "feature": "flag_surge_ok",
-      "importance": 0.0196
+      "feature": "daily_range",
+      "importance": 0.0
     },
     {
-      "feature": "seq_trend_close_norm",
-      "importance": 0.0182
+      "feature": "ema20_vs_ema50",
+      "importance": 0.0
     },
     {
-      "feature": "seq_mean_slope",
-      "importance": 0.0176
+      "feature": "ema50_vs_ema200",
+      "importance": 0.0
     },
     {
-      "feature": "dow_sin",
-      "importance": 0.0157
-    },
-    {
-      "feature": "seq_last_macd_hist_norm",
-      "importance": 0.0148
-    },
-    {
-      "feature": "score_floor",
-      "importance": 0.0142
+      "feature": "lower_wick_pct",
+      "importance": 0.0
     }
   ],
   "suggestions": [

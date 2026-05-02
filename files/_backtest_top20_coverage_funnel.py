@@ -121,3 +121,15 @@ if blocked_examples:
     print("\nExamples of blocked-only top-20 winners:")
     for d, sym, r, n in blocked_examples:
         print(f"  {d}  {sym:<14} top_reason={r}  (n_blocks={n})")
+
+# METRIC_JSON for daily aggregator
+metric = {
+    "metric": "C1_C2_coverage_funnel",
+    "n_top20_winners": total,
+    "entered": classes.get("entered", 0),
+    "blocked_only": classes.get("blocked_only", 0),
+    "no_event": classes.get("no_event", 0),
+    "coverage_pct_raw": 100*classes.get("entered", 0)/max(1, total),
+    "silent_miss_pct": 100*classes.get("no_event", 0)/max(1, total),
+}
+print("\nMETRIC_JSON:" + json.dumps(metric))
