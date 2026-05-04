@@ -22,9 +22,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 # ── Source of truth ────────────────────────────────────────────────────────
-BUILD_VERSION: str = "2.9.0"
-BUILD_APPLIED_AT_UTC: str = "2026-05-04T20:37:59Z"
-BUILD_NOTES: str = "signal-efficiency-evaluator skill integrated (Phase A: wrapper + adapter)"
+BUILD_VERSION: str = "2.10.0"
+BUILD_APPLIED_AT_UTC: str = "2026-05-04T21:02:21Z"
+BUILD_NOTES: str = "skill Phase B/D: zigzag_labeler module + EX1 ZigZag mode + per-mode wrapper + canonical metrics"
 
 # ── Helpers ────────────────────────────────────────────────────────────────
 _ROOT = Path(__file__).resolve().parent.parent

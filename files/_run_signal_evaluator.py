@@ -44,13 +44,28 @@ EVAL_DIR = ROOT / "evaluation_output"
 TMP_EVENTS = ROOT / ".runtime" / "_skill_events_translated.jsonl"
 
 
-def translate_events(window_start_ms: int, window_end_ms: int) -> tuple[set[str], int]:
+def translate_events(window_start_ms: int, window_end_ms: int,
+                     mode_filter: str | None = None) -> tuple[set[str], int]:
     """
     Read our bot_events.jsonl, translate entry/exit events into BUY/SELL,
     write to TMP_EVENTS. Return (set_of_symbols_seen, n_events).
+
+    If mode_filter is set, keeps only entries with mode==mode_filter
+    (and their matching exits — exits don't carry mode but are paired
+    by symbol so we keep all exits for symbols that had a matching entry).
     """
     syms: set[str] = set()
     n = 0
+    # If filtering by mode, first pass: collect symbols whose entries match
+    syms_with_matching_entry: set[str] = set()
+    if mode_filter:
+        with io.open(EVENTS_PATH, encoding="utf-8") as src:
+            for ln in src:
+                try: e = json.loads(ln)
+                except: continue
+                if e.get("event") == "entry" and e.get("mode") == mode_filter:
+                    sym = e.get("sym") or e.get("symbol")
+                    if sym: syms_with_matching_entry.add(sym)
     TMP_EVENTS.parent.mkdir(exist_ok=True)
     with io.open(EVENTS_PATH, encoding="utf-8") as src, \
          io.open(TMP_EVENTS, "w", encoding="utf-8") as dst:
@@ -73,6 +88,13 @@ def translate_events(window_start_ms: int, window_end_ms: int) -> tuple[set[str]
             sym = e.get("sym") or e.get("symbol") or ""
             if not sym:
                 continue
+            # Mode filter: keep only events for syms where matching entry was seen.
+            # Exits don't have mode field, but we keep them for already-tracked syms.
+            if mode_filter:
+                if ev == "entry" and e.get("mode") != mode_filter:
+                    continue
+                if sym not in syms_with_matching_entry:
+                    continue
             price_key = "exit_price" if ev == "exit" else "price"
             price = e.get(price_key) or e.get("price") or e.get("entry_price")
             if price is None:
@@ -154,26 +176,61 @@ def main():
     p.add_argument("--append-to-rl-memory", action="store_true",
                    help="append evaluation_feedback record to .runtime/eval_feedback.jsonl "
                         "(separate file — bot's rl_memory.jsonl is bandit-state)")
+    p.add_argument("--per-mode", action="store_true",
+                   help="run skill once per signal_mode (trend, impulse_speed, "
+                        "alignment, etc.) — separate report dir per mode. "
+                        "Helps when modes operate on different scales (15m vs 1h).")
     args = p.parse_args()
 
     end = datetime.now(timezone.utc)
     start = end - timedelta(days=args.window_days)
     print(f"[wrapper] window: {start.isoformat()} → {end.isoformat()}")
 
+    # Discover modes if --per-mode
+    if args.per_mode:
+        modes_seen: set[str] = set()
+        with io.open(EVENTS_PATH, encoding="utf-8") as f:
+            for ln in f:
+                try: e = json.loads(ln)
+                except: continue
+                if e.get("event") == "entry" and e.get("mode"):
+                    ts_str = e.get("ts", "")
+                    try:
+                        dt = datetime.fromisoformat(ts_str.replace("Z","+00:00"))
+                    except: continue
+                    if start <= dt <= end:
+                        modes_seen.add(e["mode"])
+        if not modes_seen:
+            print("[wrapper] --per-mode: no modes found in window"); return
+        print(f"[wrapper] --per-mode: will run skill for: {sorted(modes_seen)}")
+        # Run once per mode
+        for mode in sorted(modes_seen):
+            print(f"\n{'='*60}\n[wrapper] === mode={mode} ===\n{'='*60}")
+            _run_one(args, start, end, mode_filter=mode,
+                     output_subdir=f"per_mode/{mode}")
+        return
+
+    # Default: single run, all modes
+    _run_one(args, start, end, mode_filter=None, output_subdir=None)
+
+
+def _run_one(args, start, end, mode_filter: str | None, output_subdir: str | None):
     syms, n_events = translate_events(int(start.timestamp()*1000),
-                                       int(end.timestamp()*1000))
-    print(f"[wrapper] translated events: {n_events} across {len(syms)} symbols")
+                                       int(end.timestamp()*1000),
+                                       mode_filter=mode_filter)
+    label = f" mode={mode_filter}" if mode_filter else ""
+    print(f"[wrapper]{label} translated events: {n_events} across {len(syms)} symbols")
     if not n_events:
-        print("[wrapper] no events in window — nothing to evaluate"); return
+        print(f"[wrapper]{label} no events — skipping"); return
 
     if args.symbols:
         target_syms = set(s.strip().upper() for s in args.symbols.split(","))
         syms &= target_syms
 
     if not args.skip_prefetch:
-        print(f"[wrapper] pre-fetching klines for {len(syms)} symbols...")
+        print(f"[wrapper]{label} pre-fetching klines for {len(syms)} symbols...")
         cached = asyncio.run(prefetch_klines(syms, args.timeframe, start, end))
-        print(f"[wrapper] cached {cached} kline files in {HISTORY_DIR}")
+        print(f"[wrapper]{label} cached {cached} kline files in {HISTORY_DIR}")
 
     # Invoke the skill
     cmd = [
@@ -186,7 +243,7 @@ def main():
         "--max-intratrend-drawdown-pct", str(args.max_intratrend_drawdown_pct),
         "--min-trend-duration-bars", str(args.min_trend_duration_bars),
         "--fee-pct", str(args.fee_pct),
-        "--output-dir", str(EVAL_DIR),
+        "--output-dir", str(EVAL_DIR / output_subdir) if output_subdir else str(EVAL_DIR),
     ]
     if args.append_to_rl_memory:
         cmd.append("--append-to-rl-memory")
@@ -195,11 +252,10 @@ def main():
         # didn't pre-cache (skill needs `requests` for live fetch — we don't have it).
         cmd.extend(["--symbols", *sorted(syms)])
 
-    print(f"\n[wrapper] running skill: {' '.join(cmd[2:])}")
+    out_label = f" ({output_subdir})" if output_subdir else ""
+    print(f"\n[wrapper]{out_label} running skill (output dir: {cmd[cmd.index('--output-dir')+1]})")
     rc = subprocess.call(cmd)
-    print(f"\n[wrapper] skill exited with code {rc}")
-    if rc == 0:
-        print(f"[wrapper] outputs in {EVAL_DIR}")
+    print(f"\n[wrapper]{out_label} skill exited with code {rc}")
 
 
 if __name__ == "__main__":

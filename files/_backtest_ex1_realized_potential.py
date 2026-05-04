@@ -2,14 +2,20 @@
 
 For each paired (entry, exit) on top-20 winners (last 30 d):
   realized_pct  = (exit_price - entry_price) / entry_price * 100
-  potential_pct = max(eod_return_pct, tg_return_4h, tg_return_since_open)
-                  # best-available proxy of intraday high without klines
+
+Two modes for `potential`:
+  --use-zigzag (Phase D, preferred): potential = matched UpTrend.gain_pct
+                from ZigZag labeler run on history/<sym>_15m.csv.
+                Fall back to proxy if cache missing.
+  default (legacy proxy): potential = max(eod_return_pct, tg_return_4h,
+                tg_return_since_open) from top_gainer_dataset snapshots.
+
   EX1 = clamp(realized_pct / potential_pct, -0.5, 1.5)  if potential_pct > 0
 
-Spec: docs/specs/features/ex1-realized-potential-spec.md
+Spec: docs/specs/features/ex1-realized-potential-spec.md (Phase D wiring).
 """
 from __future__ import annotations
-import json, io, sys
+import argparse, csv, io, json, sys
 from pathlib import Path
 from collections import defaultdict
 from datetime import datetime, timezone, timedelta
@@ -17,6 +23,75 @@ from datetime import datetime, timezone, timedelta
 sys.stdout.reconfigure(encoding="utf-8")
 ROOT = Path(__file__).resolve().parent.parent
 NOW = datetime.now(timezone.utc); CUT = NOW - timedelta(days=30)
+
+# Phase D: optional ZigZag-based potential
+_HISTORY_DIR = ROOT / "history"
+try:
+    sys.path.insert(0, str(ROOT / "files"))
+    from zigzag_labeler import detect_uptrends, UpTrend
+    _ZIGZAG_AVAILABLE = True
+except Exception:
+    _ZIGZAG_AVAILABLE = False
+
+
+def _load_klines_csv(sym: str, tf: str = "15m") -> list[dict]:
+    """Load history/<sym>_<tf>.csv produced by _run_signal_evaluator wrapper."""
+    path = _HISTORY_DIR / f"{sym}_{tf}.csv"
+    if not path.exists():
+        return []
+    bars = []
+    with io.open(path, encoding="utf-8") as f:
+        for row in csv.DictReader(f):
+            try:
+                bars.append({
+                    "ts": datetime.fromisoformat(row["ts"]),
+                    "open": float(row["open"]),
+                    "high": float(row["high"]),
+                    "low":  float(row["low"]),
+                    "close":float(row["close"]),
+                    "volume": float(row["volume"]),
+                })
+            except Exception:
+                continue
+    return bars
+
+
+def _zigzag_potential_for_trade(sym: str, entry_dt: datetime,
+                                exit_dt: datetime, tf: str = "15m") -> float | None:
+    """Find UpTrend covering this trade interval, return gain_pct (or None)."""
+    bars = _load_klines_csv(sym, tf)
+    if not bars:
+        return None
+    trends = detect_uptrends(bars, symbol=sym,
+                             swing_pct=4.0, max_drawdown_pct=2.0,
+                             min_duration_bars=4)
+    if not trends:
+        return None
+    # Find trend whose interval overlaps with [entry_dt, exit_dt]
+    best = None
+    for t in trends:
+        if t.end_ts < entry_dt: continue
+        if t.start_ts > exit_dt: continue
+        # Prefer trend that started closest BEFORE or AT entry
+        if best is None or abs((t.start_ts - entry_dt).total_seconds()) < \
+                           abs((best.start_ts - entry_dt).total_seconds()):
+            best = t
+    return best.gain_pct if best else None
+
+
+# Phase D CLI flag — argparse only kicks in when run directly (not when imported)
+if __name__ == "__main__":
+    _argp = argparse.ArgumentParser()
+    _argp.add_argument("--use-zigzag", action="store_true",
+                       help="Phase D: use ZigZag-detected uptrend as `potential` "
+                            "(falls back to proxy if klines cache missing).")
+    _args, _ = _argp.parse_known_args()
+    USE_ZIGZAG = _args.use_zigzag and _ZIGZAG_AVAILABLE
+    if _args.use_zigzag and not _ZIGZAG_AVAILABLE:
+        print("[ex1] WARNING: --use-zigzag requested but zigzag_labeler "
+              "unavailable; falling back to proxy.", file=sys.stderr)
+else:
+    USE_ZIGZAG = False
 
 
 def _normalize_pct(v):
@@ -102,10 +177,21 @@ with io.open(ROOT/"files"/"bot_events.jsonl", encoding="utf-8") as f:
                 exit_class = "macd"
             else:
                 exit_class = "other"
+            # Phase D: try ZigZag potential first if cache available, else proxy
+            potential = None
+            potential_source = "proxy"
+            if USE_ZIGZAG:
+                zz = _zigzag_potential_for_trade(sym, ent["entry_dt"], dt, tf=ent["tf"])
+                if zz is not None:
+                    potential = zz
+                    potential_source = "zigzag"
+            if potential is None:
+                potential = potential_proxy.get((ent["d"], sym))
             pairs.append({
                 "d": ent["d"], "sym": sym, "mode": ent["mode"], "tf": ent["tf"],
                 "pnl": pnl_pct, "is_top20": (ent["d"], sym) in top20,
-                "potential": potential_proxy.get((ent["d"], sym)),
+                "potential": potential,
+                "potential_source": potential_source,
                 "exit_class": exit_class,
                 "exit_reason": reason[:60],
             })

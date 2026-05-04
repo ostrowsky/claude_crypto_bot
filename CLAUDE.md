@@ -239,6 +239,21 @@ H5_BREAK_EVEN_PCT = 0.5
 ```
 Spec: `docs/specs/features/h5-trailing-only-break-even-spec.md`.
 
+### Skill integration Phase B+D (2026-05-04) · v2.10.0
+ZigZag-labeler выделен в `files/zigzag_labeler.py` — bot-internal модуль
+(не дублирует skill, тот же алгоритм). Используется EX1 backtest’ом
+с `--use-zigzag` флагом для замены proxy-knowledge intraday-high
+на честный `matched_uptrend.gain_pct`.
+Wrapper `_run_signal_evaluator.py` поддерживает `--per-mode` —
+запускает skill отдельно на каждом signal_mode (alignment, trend,
+impulse_speed, …) с separate output dir. Видно сразу: `impulse_speed`
+alpha +6.93 %, `alignment` −0.33 %, `impulse` −4.34 % за 3 d.
+Phase C (verdict-reward для бандита) — drafted, не реализовано.
+
+Canonical-metrics spec: `docs/specs/features/metrics-canonical-spec.md`
+— один canonical metric per business question. Защита от metric-soup
+после добавления skill (всего теперь 13 framework + 8 skill метрик).
+
 ### H3 trend-surge precedence (2026-05-02) · v2.7.0
 Detector `check_trend_surge_conditions` существовал, но в основном
 pipeline шёл ПОСЛЕ `entry_ok` — фактически dead-code. Добавлен
