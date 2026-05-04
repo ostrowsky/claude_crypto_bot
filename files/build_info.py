@@ -22,9 +22,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 # ── Source of truth ────────────────────────────────────────────────────────
-BUILD_VERSION: str = "2.8.0"
-BUILD_APPLIED_AT_UTC: str = "2026-05-02T09:29:29Z"
-BUILD_NOTES: str = "H5 trailing-only after break-even (shadow-on, enabled-off)"
+BUILD_VERSION: str = "2.9.0"
+BUILD_APPLIED_AT_UTC: str = "2026-05-04T20:37:59Z"
+BUILD_NOTES: str = "signal-efficiency-evaluator skill integrated (Phase A: wrapper + adapter)"
 
 # ── Helpers ────────────────────────────────────────────────────────────────
 _ROOT = Path(__file__).resolve().parent.parent

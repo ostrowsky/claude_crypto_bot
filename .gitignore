@@ -82,3 +82,8 @@ stage1_warning_patch_v2.zip
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Skill / evaluator runtime artifacts
+history/
+evaluation_output/
+skills/*/__pycache__/
