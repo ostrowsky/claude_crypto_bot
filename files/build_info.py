@@ -22,9 +22,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 # ── Source of truth ────────────────────────────────────────────────────────
-BUILD_VERSION: str = "2.12.0"
-BUILD_APPLIED_AT_UTC: str = "2026-05-05T19:40:21Z"
-BUILD_NOTES: str = "H5 ACTIVATED + hybrid skill->scout architecture (skill_missed_trends.json bridge)"
+BUILD_VERSION: str = "2.13.0"
+BUILD_APPLIED_AT_UTC: str = "2026-05-05T20:53:23Z"
+BUILD_NOTES: str = "skill cadence hierarchy: daily(silent)/weekly(auto-apply)/monthly(strategic)"
 
 # ── Helpers ────────────────────────────────────────────────────────────────
 _ROOT = Path(__file__).resolve().parent.parent

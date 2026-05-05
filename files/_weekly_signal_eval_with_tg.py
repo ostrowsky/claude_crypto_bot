@@ -1,15 +1,18 @@
-"""Weekly signal-evaluator runner with TG digest.
+"""Signal-evaluator runner with TG digest at three cadences.
 
-Designed to be invoked by Windows Scheduled Task on Sundays 03:30 local.
+Three modes triggered by Windows Scheduled Tasks:
+  daily   — last 24h, silent unless incidents (premature exits, big misses)
+  weekly  — last 7d (default), full digest + scout auto-apply
+  monthly — last 30d, regime / trend / model decision summary
 
 Flow:
-  1) Run skill via wrapper (--per-mode, last 7 d).
+  1) Run skill via wrapper (--per-mode, --window-days N).
   2) Parse evaluation_output/per_mode/<mode>/report.json for each mode.
-  3) Build compact TG digest (top-3 highlights per mode).
-  4) Send to TG admin chat(s) via existing infrastructure.
+  3) Build cadence-specific TG digest.
+  4) Send to TG admin chat(s).
+  5) Trigger scout (weekly / monthly only — daily is too noisy).
 
 Spec: docs/specs/features/signal-evaluator-integration-spec.md
-      (operational follow-up §8: scheduled CryptoBot_SignalEvaluator_Weekly).
 """
 from __future__ import annotations
 import asyncio, io, json, subprocess, sys
@@ -79,9 +82,10 @@ async def send_tg(text: str) -> None:
                 print(f"[weekly-eval] tg send failed {cid}: {e}")
 
 
-def run_evaluator() -> int:
-    cmd = [str(PYEMBED), str(WRAPPER), "--window-days", "7", "--per-mode"]
-    print(f"[weekly-eval] running: {' '.join(cmd[1:])}")
+def run_evaluator(window_days: int) -> int:
+    cmd = [str(PYEMBED), str(WRAPPER),
+           "--window-days", str(window_days), "--per-mode"]
+    print(f"[skill-eval] running: {' '.join(cmd[1:])}")
     return subprocess.call(cmd, cwd=str(ROOT))
 
 
@@ -109,7 +113,151 @@ def parse_per_mode_reports() -> dict[str, dict]:
     return out
 
 
-def build_digest(reports: dict[str, dict]) -> str:
+def _collect_verdicts(reports: dict[str, dict]) -> list[dict]:
+    out = []
+    for mode, r in reports.items():
+        for v in r.get("trade_verdicts", []) or []:
+            v = dict(v); v["_mode"] = mode
+            out.append(v)
+    return out
+
+
+def build_digest(reports: dict[str, dict], cadence: str = "weekly") -> str | None:
+    """Returns digest string, or None if cadence == daily and nothing notable."""
+    if cadence == "daily":
+        return _build_daily_digest(reports)
+    if cadence == "monthly":
+        return _build_monthly_digest(reports)
+    return _build_weekly_digest(reports)
+
+
+def _build_daily_digest(reports: dict[str, dict]) -> str | None:
+    """Silent unless incidents:
+      - premature exits where capture < 0.3 AND pnl > 0
+      - missed sustained trends with gain >= 5%
+      - losing trades < -1.5%
+    """
+    if not reports:
+        return None
+
+    verdicts = _collect_verdicts(reports)
+    premature = [v for v in verdicts
+                 if v.get("sell_lateness_bars") is not None
+                 and v.get("sell_lateness_bars") < -3
+                 and (v.get("captured_pnl_pct") or 0) > 0
+                 and (v.get("capture_ratio") or 1.0) < 0.3]
+    losers = [v for v in verdicts if (v.get("captured_pnl_pct") or 0) < -1.5]
+
+    # De-dup missed opps across modes (same coin appears in each per-mode report)
+    big_misses = []
+    seen_misses = set()
+    for mode, r in reports.items():
+        for t in r.get("missed_opportunities", []) or []:
+            if (t.get("gain_pct") or 0) < 5.0:
+                continue
+            key = (t.get("symbol"), str(t.get("true_start_ts")))
+            if key in seen_misses:
+                continue
+            seen_misses.add(key)
+            big_misses.append({**t, "_mode": mode})
+
+    if not (premature or losers or big_misses):
+        return None  # silent — nothing to alert on
+
+    lines = [f"⚠️ *Skill daily check (24h)*",
+             f"_{datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M')} UTC_",
+             ""]
+
+    if premature:
+        lines.append(f"✂️ *Premature exits* ({len(premature)}):")
+        for v in sorted(premature, key=lambda x: x.get("capture_ratio") or 0)[:3]:
+            cr = (v.get("capture_ratio") or 0) * 100
+            lines.append(f"  · {v.get('symbol')} `[{v.get('_mode')}]` "
+                         f"capture {cr:.0f}%, sold {abs(v.get('sell_lateness_bars',0))}b before peak")
+
+    if big_misses:
+        lines.append("")
+        lines.append(f"🚫 *Missed sustained trends* ({len(big_misses)}):")
+        for t in sorted(big_misses, key=lambda x: -(x.get("gain_pct") or 0))[:3]:
+            lines.append(f"  · {t.get('symbol')} `[{t.get('_mode')}]` "
+                         f"gain {t.get('gain_pct'):+.1f}% — bot missed entry")
+
+    if losers:
+        lines.append("")
+        lines.append(f"🔴 *Losing trades* ({len(losers)}):")
+        for v in sorted(losers, key=lambda x: x.get("captured_pnl_pct") or 0)[:3]:
+            lines.append(f"  · {v.get('symbol')} `[{v.get('_mode')}]` "
+                         f"P&L {v.get('captured_pnl_pct',0):+.2f}%")
+
+    lines.append("")
+    lines.append("_run skill manually for details: pyembed/python.exe files/_run_signal_evaluator.py --window-days 1 --per-mode_")
+    return "\n".join(lines)
+
+
+def _build_monthly_digest(reports: dict[str, dict]) -> str:
+    """30d strategic summary: alpha trend, top recurring blind-spots,
+    architectural recommendations.
+    """
+    if not reports:
+        return "⚠️ *Monthly skill review*: no reports"
+
+    lines = [f"📅 *Monthly skill review (30d)*",
+             f"_{datetime.now(timezone.utc).strftime('%Y-%m-%d')} UTC_",
+             ""]
+
+    # Per-mode alpha rank
+    lines.append("*Mode performance over 30d:*")
+    rows = []
+    for mode, r in reports.items():
+        s = r.get("summary", {})
+        rows.append((float(s.get("alpha_vs_buy_and_hold_pct") or 0),
+                     mode, int(s.get("total_buy_signals") or 0),
+                     float(s.get("median_capture_ratio") or 0)))
+    rows.sort(key=lambda x: -x[0])
+    for alpha, mode, buys, capture in rows:
+        emoji = _verdict_emoji(alpha)
+        lines.append(f"{emoji} `{mode}`: alpha *{alpha:+.2f}%*, buys={buys}, "
+                     f"cap={capture*100:.0f}%")
+
+    # Top recurring missed coins (3+ separate trends in 30d)
+    coin_misses: dict[str, list[float]] = {}
+    # De-dup across modes (same trend appears in each per-mode report)
+    seen_pairs: set[tuple[str, str]] = set()
+    for mode, r in reports.items():
+        for t in r.get("missed_opportunities", []) or []:
+            sym = t.get("symbol")
+            if not sym: continue
+            key = (sym, str(t.get("true_start_ts")))
+            if key in seen_pairs: continue
+            seen_pairs.add(key)
+            coin_misses.setdefault(sym, []).append(float(t.get("gain_pct") or 0))
+    recurring = [(s, len(g), sum(g)) for s, g in coin_misses.items() if len(g) >= 3]
+    recurring.sort(key=lambda x: -x[2])
+    if recurring:
+        lines.append("")
+        lines.append(f"🎯 *Recurring blind-spot coins (3+ missed trends):*")
+        for sym, n, total_gain in recurring[:5]:
+            lines.append(f"  · {sym}: {n} missed trends, total gain {total_gain:+.0f}%")
+
+    # Total verdict-class breakdown
+    verdicts = _collect_verdicts(reports)
+    if verdicts:
+        from collections import Counter
+        vcounts = Counter(v.get("verdict","unknown") for v in verdicts)
+        lines.append("")
+        lines.append(f"📋 *Trade verdicts (n={len(verdicts)}):*")
+        for vk in ("optimal", "late_entry_optimal_exit", "optimal_entry_late_exit",
+                   "late_entry_late_exit", "optimal_entry_premature_exit",
+                   "late_entry_premature_exit", "losing_trade"):
+            if vcounts.get(vk):
+                lines.append(f"  · {vk.replace('_',' ')}: {vcounts[vk]}")
+
+    lines.append("")
+    lines.append("_strategic decisions: architecture review · model retrain · regime audit_")
+    return "\n".join(lines)
+
+
+def _build_weekly_digest(reports: dict[str, dict]) -> str:
     if not reports:
         return "⚠️ *Weekly signal eval*: no reports generated"
     lines = [f"📊 *Weekly signal evaluation*",
@@ -226,42 +374,70 @@ def export_missed_trends_for_scout(reports: dict[str, dict]) -> Path:
     return out_path
 
 
-def trigger_scout_with_skill_recs(missed_path: Path) -> None:
+def trigger_scout_with_skill_recs(missed_path: Path, dry_run: bool = False) -> None:
     """Phase 5 hybrid: invoke trend_scout in skill-fed mode.
 
     Scout reads missed_trends.json instead of running its heuristic scan,
     then runs its existing propose → validate → apply pipeline.
+    dry_run=True (monthly) → proposals computed but NOT applied to config.
     """
     cmd = [str(PYEMBED), str(ROOT / "files" / "trend_scout.py"),
            "--source", "skill", "--missed-file", str(missed_path),
            "--auto-apply-risk", "low"]
-    print(f"[weekly-eval] running scout with skill recs...")
+    if dry_run:
+        cmd.append("--dry-run")
+    label = "dry-run" if dry_run else "auto-apply"
+    print(f"[skill-eval] running scout with skill recs ({label})...")
     rc = subprocess.call(cmd, cwd=str(ROOT))
-    print(f"[weekly-eval] scout exit code {rc}")
+    print(f"[skill-eval] scout exit code {rc}")
 
 
 def main():
-    rc = run_evaluator()
+    import argparse
+    p = argparse.ArgumentParser()
+    p.add_argument("--cadence", choices=["daily", "weekly", "monthly"],
+                   default="weekly",
+                   help="daily=1d silent-on-no-news; weekly=7d full digest+scout; "
+                        "monthly=30d strategic review")
+    args = p.parse_args()
+
+    cadence_to_days = {"daily": 1, "weekly": 7, "monthly": 30}
+    window_days = cadence_to_days[args.cadence]
+    print(f"[skill-eval] cadence={args.cadence}, window={window_days}d")
+
+    rc = run_evaluator(window_days)
     if rc != 0:
-        print(f"[weekly-eval] evaluator exit code {rc}")
+        print(f"[skill-eval] evaluator exit code {rc}")
     reports = parse_per_mode_reports()
-    digest = build_digest(reports)
-    print("\n" + "=" * 60)
-    print("[weekly-eval] DIGEST:")
-    print("=" * 60)
-    print(digest)
-    print("=" * 60 + "\n")
-    asyncio.run(send_tg(digest))
+    digest = build_digest(reports, cadence=args.cadence)
 
-    # Hybrid: export skill missed trends + trigger scout (best-effort)
-    try:
-        missed_path = export_missed_trends_for_scout(reports)
-        if missed_path.exists():
-            trigger_scout_with_skill_recs(missed_path)
-    except Exception as e:
-        print(f"[weekly-eval] scout integration failed (non-fatal): {e}")
+    if digest is None:
+        print(f"[skill-eval] {args.cadence}: no incidents — silent (TG not posted)")
+    else:
+        print("\n" + "=" * 60)
+        print(f"[skill-eval] {args.cadence.upper()} DIGEST:")
+        print("=" * 60)
+        print(digest)
+        print("=" * 60 + "\n")
+        asyncio.run(send_tg(digest))
 
-    print("[weekly-eval] done")
+    # Hybrid scout integration:
+    #   - weekly: full skill→scout→auto-apply (low risk)
+    #   - monthly: skill→scout proposals only (no auto-apply, manual review)
+    #   - daily: SKIP (sample too small, oscillation risk)
+    if args.cadence in ("weekly", "monthly"):
+        try:
+            missed_path = export_missed_trends_for_scout(reports)
+            if missed_path.exists():
+                # Monthly = dry-run; weekly = real auto-apply
+                trigger_scout_with_skill_recs(
+                    missed_path,
+                    dry_run=(args.cadence == "monthly"),
+                )
+        except Exception as e:
+            print(f"[skill-eval] scout integration failed (non-fatal): {e}")
+
+    print(f"[skill-eval] {args.cadence} done")
 
 
 if __name__ == "__main__":
