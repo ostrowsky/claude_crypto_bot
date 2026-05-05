@@ -22,9 +22,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 # ── Source of truth ────────────────────────────────────────────────────────
-BUILD_VERSION: str = "2.11.0"
-BUILD_APPLIED_AT_UTC: str = "2026-05-05T14:11:20Z"
-BUILD_NOTES: str = "skill auto-run: weekly TG digest + daily klines backfill + 30d watchlist cache"
+BUILD_VERSION: str = "2.12.0"
+BUILD_APPLIED_AT_UTC: str = "2026-05-05T19:40:21Z"
+BUILD_NOTES: str = "H5 ACTIVATED + hybrid skill->scout architecture (skill_missed_trends.json bridge)"
 
 # ── Helpers ────────────────────────────────────────────────────────────────
 _ROOT = Path(__file__).resolve().parent.parent

@@ -199,6 +199,58 @@ final_reward = 0.7 * existing_reward + 0.3 * verdict_reward
   potential when `EX1_USE_ZIGZAG_POTENTIAL=True`.
 - [ ] Compare new EX1 median vs current proxy-based.
 
+## 8a. Hybrid skill→scout architecture (shipped 2026-05-05 v2.12.0)
+
+**Проблема:** Trend Scout использовал heuristic `trend_score` (raw price
+counts), что давало шум — он пропускал реальные missed trends, которые
+ZigZag-labeler видит чисто.
+
+**Решение:** skill = **oracle** (произвольно высокая ground-truth quality),
+scout = **controller** (auto-apply machinery с safety-guards). Контракт через
+JSON-файл `evaluation_output/skill_missed_trends.json`.
+
+```
+Weekly run:
+  1. _weekly_signal_eval_with_tg.py
+     ├─ run skill per-mode → reports
+     ├─ build TG digest → send
+     └─ export_missed_trends_for_scout()
+        └─ writes evaluation_output/skill_missed_trends.json
+           (de-duplicated by (symbol, start_ts), 335 trends in 7d test)
+
+  2. trigger_scout_with_skill_recs()
+     └─ trend_scout.py --source skill
+        ├─ load_skill_missed_trends() → list[TrendCandidate]
+        ├─ existing diagnose_misses() → list[MissReport]
+        ├─ existing propose_changes() → list[ConfigProposal]
+        ├─ existing validate_proposal() (critic_dataset backtest)
+        └─ existing apply_approved_changes() (auto-apply if risk=low)
+```
+
+**Smoke test (2026-05-05):**
+- Skill found 335 unique missed trends in 7d (top: DOGS +52%, QI +52%).
+- Scout produced 5 proposals: 2 approve, 2 reject (backtest-driven), 1 inconclusive.
+- ENTRY_SCORE_MIN_15M 40→38 approved (n=34, ret5=+0.12%, win=44%).
+- COOLDOWN_BARS 19→17 approved (n=319, ret5=+0.04%, win=42%).
+
+**CLI usage:**
+```
+pyembed/python.exe files/trend_scout.py --source skill [--dry-run]
+```
+
+**What was kept / changed in scout:**
+- Kept: `propose_changes` / `validate_proposal` / `apply_approved_changes`
+  (the critic-backed safety pipeline).
+- Added: `load_skill_missed_trends()`, source switch in `run_pipeline`.
+- Heuristic `scan_trend_candidates` remains for daily/intra-day runs;
+  hybrid mode triggers weekly via skill output.
+
+**Net effect:**
+- Heuristic scout misses ICP-style cases (single coin, ADX 10-13).
+- Skill scout sees them via ZigZag and feeds scout's machinery.
+- Scout's existing safety net (backtest validation, risk gating)
+  prevents bad recommendations from auto-applying.
+
 ## 8. Follow-ups
 
 - Scheduled task `CryptoBot_SignalEvaluator_Weekly` cron Sundays

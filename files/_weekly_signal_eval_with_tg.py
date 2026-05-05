@@ -177,6 +177,69 @@ def build_digest(reports: dict[str, dict]) -> str:
     return "\n".join(lines)
 
 
+def export_missed_trends_for_scout(reports: dict[str, dict]) -> Path:
+    """Hybrid architecture (2026-05-05): write skill-found missed trends
+    to JSON for trend_scout consumption. Each missed trend = a coin where
+    ZigZag confirmed sustainable uptrend but bot did NOT enter.
+
+    File: evaluation_output/skill_missed_trends.json
+
+    Spec: docs/specs/features/signal-evaluator-integration-spec.md
+          (Hybrid section: skill = oracle, scout = controller)
+    """
+    out_path = EVAL_DIR / "skill_missed_trends.json"
+    # De-dup by (symbol, true_start_ts) — same coin can appear in multiple
+    # mode reports (since per-mode runs filter events but evaluate same trends).
+    seen: set[tuple[str, str]] = set()
+    missed: list[dict] = []
+    for mode, r in reports.items():
+        for trend in r.get("missed_opportunities", []) or []:
+            sym = (trend.get("symbol") or "").upper()
+            start_ts = str(trend.get("true_start_ts") or "")
+            key = (sym, start_ts)
+            if not sym or key in seen:
+                continue
+            seen.add(key)
+            missed.append({
+                "symbol": sym,
+                "mode_seen_in": mode,
+                "tf": (r.get("config", {}) or {}).get("timeframe", "15m"),
+                "start_ts": trend.get("true_start_ts"),
+                "end_ts": trend.get("true_end_ts"),
+                "start_price": trend.get("true_start_price"),
+                "end_price": trend.get("true_end_price"),
+                "gain_pct": float(trend.get("gain_pct") or 0.0),
+                "duration_bars": int(trend.get("duration_bars") or 0),
+                # Score: high gain_pct + reasonable duration → high trend_score
+                # Maps to scout's TREND_SCORE_MIN (default 60).
+                "trend_score": min(100.0, 50.0 + float(trend.get("gain_pct") or 0.0) * 4),
+            })
+    payload = {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "skill_version": "signal-efficiency-evaluator-v1",
+        "missed_trends": missed,
+        "n": len(missed),
+    }
+    out_path.parent.mkdir(exist_ok=True)
+    out_path.write_text(json.dumps(payload, indent=2, default=str), encoding="utf-8")
+    print(f"[weekly-eval] wrote {len(missed)} missed trends to {out_path}")
+    return out_path
+
+
+def trigger_scout_with_skill_recs(missed_path: Path) -> None:
+    """Phase 5 hybrid: invoke trend_scout in skill-fed mode.
+
+    Scout reads missed_trends.json instead of running its heuristic scan,
+    then runs its existing propose → validate → apply pipeline.
+    """
+    cmd = [str(PYEMBED), str(ROOT / "files" / "trend_scout.py"),
+           "--source", "skill", "--missed-file", str(missed_path),
+           "--auto-apply-risk", "low"]
+    print(f"[weekly-eval] running scout with skill recs...")
+    rc = subprocess.call(cmd, cwd=str(ROOT))
+    print(f"[weekly-eval] scout exit code {rc}")
+
+
 def main():
     rc = run_evaluator()
     if rc != 0:
@@ -189,6 +252,15 @@ def main():
     print(digest)
     print("=" * 60 + "\n")
     asyncio.run(send_tg(digest))
+
+    # Hybrid: export skill missed trends + trigger scout (best-effort)
+    try:
+        missed_path = export_missed_trends_for_scout(reports)
+        if missed_path.exists():
+            trigger_scout_with_skill_recs(missed_path)
+    except Exception as e:
+        print(f"[weekly-eval] scout integration failed (non-fatal): {e}")
+
     print("[weekly-eval] done")
 
 

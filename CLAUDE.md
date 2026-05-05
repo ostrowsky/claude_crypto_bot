@@ -239,6 +239,21 @@ H5_BREAK_EVEN_PCT = 0.5
 ```
 Spec: `docs/specs/features/h5-trailing-only-break-even-spec.md`.
 
+### H5 ACTIVATED + hybrid skill→scout (2026-05-05) · v2.12.0
+H5 переведён из shadow-only в production: подавление soft EMA-pattern
+exits при `pnl ≥ 0.5 %`. Триггер: ICPUSDT 05-05 — бот вышел на +2.5 %
+по WEAK RSI-divergence, цена пошла на +6.8 % (left +4.3 %).
+```python
+H5_TRAILING_ONLY_AFTER_BREAK_EVEN_ENABLED = True   # was False
+H5_TRAILING_ONLY_SHADOW = False                    # was True
+```
+Гибрид skill↔scout: weekly evaluator пишет
+`evaluation_output/skill_missed_trends.json` (335 trends за 7d на тесте),
+trend_scout читает с `--source skill`, прогоняет через свой
+backtest+auto-apply pipeline. На smoke-тесте: 5 proposals, 2 approve,
+2 reject. CLI: `pyembed/python.exe files/trend_scout.py --source skill`.
+Spec: `docs/specs/features/signal-evaluator-integration-spec.md` §8a.
+
 ### Skill integration Phase B+D (2026-05-04) · v2.10.0
 ZigZag-labeler выделен в `files/zigzag_labeler.py` — bot-internal модуль
 (не дублирует skill, тот же алгоритм). Используется EX1 backtest’ом

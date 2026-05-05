@@ -805,10 +805,65 @@ def _build_telegram_text(report: ScoutReport) -> str:
 # Main Pipeline
 # ─────────────────────────────────────────────────────────────────────────────
 
+def load_skill_missed_trends(missed_file: Path,
+                             lookback_hours: float = 168.0) -> list[TrendCandidate]:
+    """Hybrid architecture (2026-05-05): consume skill-evaluator's missed
+    trends list as scout's input source instead of heuristic scan.
+
+    File format (written by _weekly_signal_eval_with_tg.py):
+      {
+        "missed_trends": [
+          {"symbol": "ICPUSDT", "tf": "15m", "start_ts": "...",
+           "gain_pct": 6.8, "trend_score": 77.2, ...}
+        ]
+      }
+
+    Returns synthetic TrendCandidate list (status='blocked') so existing
+    diagnose_misses() can reuse its bot_events/critic_dataset matching.
+
+    Spec: docs/specs/features/signal-evaluator-integration-spec.md
+          (Hybrid architecture section)
+    """
+    if not missed_file.exists():
+        log.warning("Skill missed-trends file not found: %s", missed_file)
+        return []
+    try:
+        payload = json.loads(missed_file.read_text(encoding="utf-8"))
+    except Exception as e:
+        log.warning("Skill missed-trends parse failed: %s", e)
+        return []
+
+    out: list[TrendCandidate] = []
+    for t in payload.get("missed_trends", []):
+        sym = (t.get("symbol") or "").upper()
+        tf = t.get("tf", "15m")
+        if not sym:
+            continue
+        out.append(TrendCandidate(
+            sym=sym,
+            tf=tf,
+            trend_score=float(t.get("trend_score") or 70.0),
+            bot_status="blocked",  # by skill definition: missed = not entered
+            features={"gain_pct": t.get("gain_pct"),
+                      "duration_bars": t.get("duration_bars"),
+                      "skill_start_ts": t.get("start_ts"),
+                      "source": "skill-evaluator"},
+            last_bar_ts=0,
+            last_price=0.0,
+            signal_type="",
+            block_reasons=[],
+        ))
+    log.info("Loaded %d missed trends from skill (%s)", len(out), missed_file.name)
+    return out
+
+
 async def run_pipeline(
     auto_apply_risk: str = "low",
     lookback_hours: float = 4.0,
     dry_run: bool = False,
+    *,
+    source: str = "heuristic",
+    missed_file: Path | None = None,
 ) -> ScoutReport:
     """
     Запускает полный пайплайн Trend Scout (Phase 1–5).
@@ -817,23 +872,36 @@ async def run_pipeline(
         auto_apply_risk: максимальный риск для авто-применения ("low" | "medium")
         lookback_hours: период сканирования
         dry_run: если True — не писать в config.py
+        source: "heuristic" (default, scan_trend_candidates) or "skill"
+                (read evaluation_output/skill_missed_trends.json).
+        missed_file: explicit path for source="skill". Defaults to
+                     <repo>/evaluation_output/skill_missed_trends.json.
 
     Returns:
         ScoutReport с полными результатами
     """
     import asyncio
     ts = datetime.now(timezone.utc).isoformat()
-    log.info("Trend Scout pipeline started (lookback=%.1fh, auto_apply=%s, dry_run=%s)",
-             lookback_hours, auto_apply_risk, dry_run)
+    log.info("Trend Scout pipeline started (source=%s, lookback=%.1fh, "
+             "auto_apply=%s, dry_run=%s)",
+             source, lookback_hours, auto_apply_risk, dry_run)
 
-    # Phase 1
-    try:
-        candidates = await asyncio.to_thread(
-            scan_trend_candidates, lookback_hours
-        )
-    except Exception as e:
-        log.exception("Phase 1 failed: %s", e)
-        candidates = []
+    # Phase 1: choose data source
+    if source == "skill":
+        # Hybrid: skill-fed input (week-long lookback for missed-trends file)
+        if missed_file is None:
+            missed_file = WORKSPACE_ROOT / "evaluation_output" / "skill_missed_trends.json"
+        candidates = load_skill_missed_trends(missed_file)
+        # Skill mode uses 7-day window for upstream context
+        lookback_hours = max(lookback_hours, 24.0 * 7)
+    else:
+        try:
+            candidates = await asyncio.to_thread(
+                scan_trend_candidates, lookback_hours
+            )
+        except Exception as e:
+            log.exception("Phase 1 failed: %s", e)
+            candidates = []
 
     trending = [c for c in candidates if c.trend_score >= TREND_SCORE_MIN]
     entered = [c for c in trending if c.bot_status == "entered"]
@@ -947,12 +1015,36 @@ async def run_pipeline(
 
 
 if __name__ == "__main__":
+    import argparse
     import asyncio
     import sys
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
+    p = argparse.ArgumentParser()
+    p.add_argument("--dry-run", action="store_true")
+    p.add_argument("--source", choices=["heuristic", "skill"], default="heuristic",
+                   help="heuristic = scan_trend_candidates (default); "
+                        "skill = read evaluation_output/skill_missed_trends.json "
+                        "(hybrid architecture, 2026-05-05).")
+    p.add_argument("--missed-file", type=Path, default=None,
+                   help="explicit path for --source skill")
+    p.add_argument("--auto-apply-risk", choices=["low", "medium", "high"],
+                   default="low")
+    p.add_argument("--lookback-hours", type=float, default=4.0)
+    args = p.parse_args()
+
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s  %(levelname)-8s  %(message)s",
     )
-    dry = "--dry-run" in sys.argv
-    report = asyncio.run(run_pipeline(dry_run=dry))
+    report = asyncio.run(run_pipeline(
+        dry_run=args.dry_run,
+        source=args.source,
+        missed_file=args.missed_file,
+        auto_apply_risk=args.auto_apply_risk,
+        lookback_hours=args.lookback_hours,
+    ))
     print(report.telegram_text)

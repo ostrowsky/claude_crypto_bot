@@ -872,8 +872,15 @@ ATR_TRAIL_K_TREND_SURGE: float = 2.5  # = STRONG default; trail для ново�
 # and let ATR-trail handle reversals. Backtest 30d: 4/982 eligible exits,
 # 1 top-20 winner left +471% on table (APEUSDT 04-30).
 # Default: SHADOW on, ENABLED off (logging-only mode for 7d acceptance).
-H5_TRAILING_ONLY_AFTER_BREAK_EVEN_ENABLED: bool = False
-H5_TRAILING_ONLY_SHADOW: bool = True
+# 2026-05-05 ACTIVATED in production (was: ENABLED=False, SHADOW=True)
+# Trigger: ICPUSDT 05-05 09:35→12:21 — bot exited at +2.5% on RSI divergence
+# WEAK signal, trend continued to +6.8% (left +4.3% on table). Capture
+# ratio 0.37, exact case for which H5 was written. Backtest baseline 4
+# eligible exits in 30d, 1 of them top-20 with +471% potential left. Real
+# expected impact at activation: 1-3 saved trades/week, +0.05 NS estimate.
+# Rollback: flip ENABLED back to False, SHADOW remains as fallback log.
+H5_TRAILING_ONLY_AFTER_BREAK_EVEN_ENABLED: bool = True   # was False (2026-05-05)
+H5_TRAILING_ONLY_SHADOW: bool = False                    # was True  (2026-05-05)
 H5_BREAK_EVEN_PCT: float = 0.5
 # Mode daily-range / slope quality gate (backtest 2026-04-24, 60d, 2197 entries)
 # Root cause: on quiet-market days (daily_range 3-4%) signals are almost all FP
