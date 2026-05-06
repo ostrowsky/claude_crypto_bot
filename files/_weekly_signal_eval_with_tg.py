@@ -57,29 +57,80 @@ def _load_chat_ids() -> list[int]:
     return sorted(set(out))
 
 
+def _resolve_token() -> str:
+    """Resolve TG token. Tries config (env var) first, falls back to
+    parsing .runtime/bot_bg_runner.cmd (where bot wrapper persists it).
+    Scheduled tasks invoke this script without env var, so fallback is
+    required for cron-like execution.
+    """
+    tok = str(getattr(config, "TELEGRAM_BOT_TOKEN", "") or "").strip()
+    if tok:
+        return tok
+    runner = ROOT / ".runtime" / "bot_bg_runner.cmd"
+    if runner.exists():
+        import re
+        for ln in runner.read_text(encoding="utf-8", errors="replace").splitlines():
+            m = re.search(r"set\s+TELEGRAM_BOT_TOKEN\s*=\s*(\S+)", ln, re.IGNORECASE)
+            if m:
+                return m.group(1).strip()
+    return ""
+
+
+def _md_to_html(text: str) -> str:
+    """Convert our digest's lightweight Markdown to HTML.
+    Telegram MarkdownV1 trips on `[mode]` (treated as link), `*` in tokens, etc.
+    HTML is more forgiving for our use case.
+    Substitutions:
+      *bold*        → <b>bold</b>
+      _italic_      → <i>italic</i>
+      `code`        → <code>code</code>
+      <,>,&         → escaped first
+    """
+    import re
+    # 1) Escape HTML metachars first (without breaking already-emitted tags — we
+    #    have no pre-existing tags in our digests).
+    out = (text.replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;"))
+    # 2) Inline replacements. Use non-greedy so multiple per line work.
+    out = re.sub(r"\*([^\*\n]+?)\*",  r"<b>\1</b>",    out)
+    out = re.sub(r"_([^_\n]+?)_",     r"<i>\1</i>",    out)
+    out = re.sub(r"`([^`\n]+?)`",     r"<code>\1</code>", out)
+    return out
+
+
 async def send_tg(text: str) -> None:
-    token = str(getattr(config, "TELEGRAM_BOT_TOKEN", "") or "").strip()
+    token = _resolve_token()
     if not token:
-        print("[weekly-eval] no TELEGRAM_BOT_TOKEN — printing instead:")
+        print("[skill-eval] no TELEGRAM_BOT_TOKEN (env + .runtime fallback) — printing instead:")
         print(text); return
     chat_ids = _load_chat_ids()
     if not chat_ids:
         print("[weekly-eval] no chat IDs — printing instead:")
         print(text); return
     url = f"https://api.telegram.org/bot{token}/sendMessage"
+    html_text = _md_to_html(text)
     timeout = aiohttp.ClientTimeout(total=20)
     async with aiohttp.ClientSession(timeout=timeout) as session:
         for cid in chat_ids:
             payload = {
-                "chat_id": cid, "text": text[:4000],
-                "parse_mode": "Markdown",
+                "chat_id": cid, "text": html_text[:4000],
+                "parse_mode": "HTML",
                 "disable_web_page_preview": True,
             }
             try:
                 async with session.post(url, json=payload) as r:
-                    r.raise_for_status()
+                    if r.status != 200:
+                        body = await r.text()
+                        print(f"[skill-eval] tg send {cid} HTTP {r.status}: {body[:200]}")
+                        # Fallback: plain text (no formatting)
+                        plain = {"chat_id": cid, "text": text[:4000],
+                                 "disable_web_page_preview": True}
+                        async with session.post(url, json=plain) as r2:
+                            if r2.status != 200:
+                                print(f"[skill-eval] plain-text fallback also failed {cid}: HTTP {r2.status}")
             except Exception as e:
-                print(f"[weekly-eval] tg send failed {cid}: {e}")
+                print(f"[skill-eval] tg send failed {cid}: {e}")
 
 
 def run_evaluator(window_days: int) -> int:

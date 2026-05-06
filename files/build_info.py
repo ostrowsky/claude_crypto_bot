@@ -22,9 +22,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 # ── Source of truth ────────────────────────────────────────────────────────
-BUILD_VERSION: str = "2.15.1"
-BUILD_APPLIED_AT_UTC: str = "2026-05-06T22:08:00Z"
-BUILD_NOTES: str = "PumpDetector: include exception type in error log line"
+BUILD_VERSION: str = "2.15.3"
+BUILD_APPLIED_AT_UTC: str = "2026-05-06T22:18:00Z"
+BUILD_NOTES: str = "skill TG: HTML mode + plain-text fallback ([brackets] broke Markdown parser)"
 
 # ── Helpers ────────────────────────────────────────────────────────────────
 _ROOT = Path(__file__).resolve().parent.parent
