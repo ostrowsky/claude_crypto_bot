@@ -1849,7 +1849,8 @@ async def _post_init(app: Application) -> None:
                     if n_injected:
                         log.info("PumpDetector cycle: %d injected", n_injected)
                 except Exception as e:
-                    log.warning("PumpDetector loop error (continuing): %s", e)
+                    log.warning("PumpDetector loop error (continuing): %s: %s",
+                                type(e).__name__, e)
 
         _track_background_task(
             asyncio.create_task(_pump_detector_loop()),

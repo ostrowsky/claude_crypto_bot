@@ -22,9 +22,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 # ── Source of truth ────────────────────────────────────────────────────────
-BUILD_VERSION: str = "2.15.0"
-BUILD_APPLIED_AT_UTC: str = "2026-05-06T11:55:00Z"
-BUILD_NOTES: str = "always-watch pump detector + auto-reanalyze 2h→30min (STRK-class miss fix)"
+BUILD_VERSION: str = "2.15.1"
+BUILD_APPLIED_AT_UTC: str = "2026-05-06T22:08:00Z"
+BUILD_NOTES: str = "PumpDetector: include exception type in error log line"
 
 # ── Helpers ────────────────────────────────────────────────────────────────
 _ROOT = Path(__file__).resolve().parent.parent
