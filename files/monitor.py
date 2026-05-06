@@ -1782,6 +1782,102 @@ def _h5_should_suppress(reason: Optional[str], pnl_pct: float) -> bool:
     return any(m in r for m in soft_markers)
 
 
+def _safe_arr_at(arr, i):
+    """Safe array indexer that returns None on bad access / non-finite."""
+    try:
+        v = arr[i]
+        if v is None:
+            return None
+        v = float(v)
+        if not np.isfinite(v):
+            return None
+        return v
+    except Exception:
+        return None
+
+
+def _build_block_context(
+    *, feat=None, i: int = -1,
+    candidate_score: Optional[float] = None,
+    score_floor: Optional[float] = None,
+    ranker_proba: Optional[float] = None,
+    ranker_info: Optional[dict] = None,
+    is_bull_day: Optional[bool] = None,
+) -> dict:
+    """
+    Assemble standard structured-block context available at any block site.
+    All values are nullable — callers pass what they have, missing pieces
+    safely become None in the JSONL record.
+
+    Spec: docs/specs/features/structured-blocked-logging-spec.md
+    """
+    ctx: dict = {}
+    if feat is not None and i >= 0:
+        ctx["rsi"] = _safe_arr_at(feat.get("rsi", []), i)
+        ctx["adx"] = _safe_arr_at(feat.get("adx", []), i)
+        ctx["vol_x"] = _safe_arr_at(feat.get("vol_x", []), i)
+        ctx["daily_range"] = _safe_arr_at(feat.get("daily_range_pct", []), i)
+        ctx["slope_pct"] = _safe_arr_at(feat.get("slope", []), i)
+        ctx["macd_hist"] = _safe_arr_at(feat.get("macd_hist", []), i)
+        ctx["ema20"] = _safe_arr_at(feat.get("ema_fast", []), i)
+        ctx["ema50"] = _safe_arr_at(feat.get("ema_slow", []), i)
+        e200 = feat.get("ema200")
+        if e200 is not None:
+            ctx["ema200"] = _safe_arr_at(e200, i)
+        # price_edge_ema20: derived if both available
+        c_arr = feat.get("close")
+        ema_fast_arr = feat.get("ema_fast")
+        if c_arr is not None and ema_fast_arr is not None:
+            try:
+                cp = float(c_arr[i]); ef = float(ema_fast_arr[i])
+                if ef > 0 and np.isfinite(cp) and np.isfinite(ef):
+                    ctx["price_edge_ema20_pct"] = round((cp / ef - 1.0) * 100.0, 3)
+            except Exception:
+                pass
+        # atr_pct (if atr array exists)
+        atr_arr = feat.get("atr")
+        if atr_arr is not None and c_arr is not None:
+            try:
+                a = float(atr_arr[i]); cp = float(c_arr[i])
+                if cp > 0 and np.isfinite(a) and np.isfinite(cp):
+                    ctx["atr_pct"] = round(a / cp * 100.0, 4)
+            except Exception:
+                pass
+    if ranker_proba is not None:
+        try:
+            ctx["ml_proba"] = float(ranker_proba)
+        except Exception:
+            pass
+    if ranker_info:
+        for src_k, dst_k in [
+            ("top_gainer_prob", "ranker_top_gainer_prob"),
+            ("ev", "ranker_ev"),
+            ("quality_proba", "ranker_quality_proba"),
+            ("final_score", "ranker_final_score"),
+        ]:
+            v = ranker_info.get(src_k)
+            if v is not None:
+                try:
+                    ctx[dst_k] = float(v)
+                except Exception:
+                    pass
+    if candidate_score is not None:
+        try: ctx["candidate_score"] = float(candidate_score)
+        except: pass
+    if score_floor is not None:
+        try: ctx["score_floor"] = float(score_floor)
+        except: pass
+    if is_bull_day is not None:
+        ctx["is_bull_day"] = bool(is_bull_day)
+    try:
+        ctx["btc_vs_ema50"] = float(getattr(config, "_btc_vs_ema50", 0.0))
+        ctx["market_regime"] = str(getattr(config, "_market_regime", "neutral"))
+    except Exception:
+        pass
+    # Drop None entries — log_blocked already filters but cleaner to send minimal dict
+    return {k: v for k, v in ctx.items() if v is not None}
+
+
 def _trail_min_buffer_pct(mode: str) -> float:
     """
     Returns the minimum trail-stop buffer as a fraction of price for a given mode.
@@ -3461,7 +3557,16 @@ async def _poll_coin(
                     signal_flags=signal_flags,
                 )
                 log.info("IMPULSE GUARD BLOCK %s [%s]: %s", sym, tf, impulse_speed_reason)
-                botlog.log_blocked(sym, tf, float(c[i]), impulse_speed_reason, signal_type="impulse_guard")
+                botlog.log_blocked(
+                    sym, tf, float(c[i]), impulse_speed_reason,
+                    signal_type="impulse_guard",
+                    reason_code="impulse_guard", gate="impulse_speed_guard",
+                    **_build_block_context(
+                        feat=feat, i=i,
+                        ranker_proba=ml_proba,
+                        is_bull_day=is_bull_day_now,
+                    ),
+                )
                 return
 
             if hour_blocked:
@@ -3644,7 +3749,18 @@ async def _poll_coin(
                             signal_flags=signal_flags,
                         )
                         log.info("ML ZONE BLOCK %s [%s]: %s", sym, tf, reason)
-                        botlog.log_blocked(sym, tf, float(c[i]), reason, signal_type="ml_proba_zone")
+                        botlog.log_blocked(
+                            sym, tf, float(c[i]), reason, signal_type="ml_proba_zone",
+                            reason_code="ml_zone", gate="ml_proba_zone",
+                            **_build_block_context(
+                                feat=feat, i=i,
+                                candidate_score=candidate_score,
+                                score_floor=score_floor,
+                                ranker_proba=ml_proba,
+                                ranker_info=None,  # ranker not yet evaluated at this gate
+                                is_bull_day=is_bull_day_now,
+                            ),
+                        )
                         return
             # CatBoost inference (possibly JIT-compiling on first call — can block for
             # minutes). MUST run in a thread to keep the event loop responsive.
@@ -3854,7 +3970,18 @@ async def _poll_coin(
                             bot_action="blocked",
                             reason=reason,
                         )
-                        botlog.log_blocked(sym, tf, float(c[i]), reason, signal_type="entry_score")
+                        botlog.log_blocked(
+                            sym, tf, float(c[i]), reason, signal_type="entry_score",
+                            reason_code="entry_score", gate="entry_score_floor",
+                            **_build_block_context(
+                                feat=feat, i=i,
+                                candidate_score=candidate_score,
+                                score_floor=score_floor,
+                                ranker_proba=ml_proba,
+                                ranker_info=ranker_info,
+                                is_bull_day=is_bull_day_now,
+                            ),
+                        )
                         return
 
             trend_guard_reason = _trend_entry_quality_guard_reason(
@@ -3908,7 +4035,19 @@ async def _poll_coin(
                     bot_action="blocked",
                     reason=trend_guard_reason,
                 )
-                botlog.log_blocked(sym, tf, float(c[i]), trend_guard_reason, signal_type="trend_quality")
+                botlog.log_blocked(
+                    sym, tf, float(c[i]), trend_guard_reason,
+                    signal_type="trend_quality",
+                    reason_code="trend_quality", gate="trend_15m_quality_guard",
+                    **_build_block_context(
+                        feat=feat, i=i,
+                        candidate_score=candidate_score,
+                        score_floor=score_floor,
+                        ranker_proba=ranker_proba,
+                        ranker_info=ranker_info,
+                        is_bull_day=is_bull_day_now,
+                    ),
+                )
                 return
 
             # ── Trend/1h chop-filter (2026-05-01) ─────────────────────────────
@@ -3960,7 +4099,19 @@ async def _poll_coin(
                     bot_action="blocked",
                     reason=chop_guard_reason,
                 )
-                botlog.log_blocked(sym, tf, float(c[i]), chop_guard_reason, signal_type="trend_1h_chop")
+                botlog.log_blocked(
+                    sym, tf, float(c[i]), chop_guard_reason,
+                    signal_type="trend_1h_chop",
+                    reason_code="trend_chop", gate="trend_1h_chop_filter",
+                    **_build_block_context(
+                        feat=feat, i=i,
+                        candidate_score=candidate_score,
+                        score_floor=score_floor,
+                        ranker_proba=ranker_proba,
+                        ranker_info=ranker_info,
+                        is_bull_day=is_bull_day_now,
+                    ),
+                )
                 return
 
             mode_range_guard_reason = _mode_daily_range_guard_reason(
@@ -4103,7 +4254,19 @@ async def _poll_coin(
                     bot_action="blocked",
                     reason=ranker_hard_veto_reason,
                 )
-                botlog.log_blocked(sym, tf, float(c[i]), ranker_hard_veto_reason, signal_type="ranker_hard_veto")
+                botlog.log_blocked(
+                    sym, tf, float(c[i]), ranker_hard_veto_reason,
+                    signal_type="ranker_hard_veto",
+                    reason_code="ranker_hard_veto", gate="ml_candidate_ranker",
+                    **_build_block_context(
+                        feat=feat, i=i,
+                        candidate_score=candidate_score,
+                        score_floor=score_floor,
+                        ranker_proba=ranker_proba,
+                        ranker_info=ranker_info,
+                        is_bull_day=is_bull_day_now,
+                    ),
+                )
                 return
 
             fresh_priority = _is_fresh_priority_candidate(preview_mode, catchup_snapshot)

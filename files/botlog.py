@@ -178,12 +178,38 @@ def log_forward(sym: str, tf: str, mode: str, horizon: int,
 def log_blocked(sym: str, tf: str, price: float, reason: str,
                 rsi: Optional[float] = None, adx: Optional[float] = None,
                 vol_x: Optional[float] = None, daily_range: Optional[float] = None,
-                signal_type: str = "buy") -> None:
+                signal_type: str = "buy",
+                # Structured-block fields (P0.1 2026-05-07)
+                # Spec: docs/specs/features/structured-blocked-logging-spec.md
+                reason_code: Optional[str] = None,
+                gate: Optional[str] = None,
+                slope_pct: Optional[float] = None,
+                macd_hist: Optional[float] = None,
+                ema20: Optional[float] = None,
+                ema50: Optional[float] = None,
+                ema200: Optional[float] = None,
+                price_edge_ema20_pct: Optional[float] = None,
+                atr_pct: Optional[float] = None,
+                ml_proba: Optional[float] = None,
+                ranker_top_gainer_prob: Optional[float] = None,
+                ranker_ev: Optional[float] = None,
+                ranker_quality_proba: Optional[float] = None,
+                ranker_final_score: Optional[float] = None,
+                candidate_score: Optional[float] = None,
+                score_floor: Optional[float] = None,
+                is_bull_day: Optional[bool] = None,
+                btc_vs_ema50: Optional[float] = None,
+                market_regime: Optional[str] = None,
+                extra: Optional[Dict[str, Any]] = None) -> None:
     """
     Сигнал был (все основные условия выполнены), но что-то заблокировало вход.
     Логируем только когда блокировка случилась в мониторинге (не в анализе) —
     иначе будет слишком много записей.
     signal_type: "buy"/"retest"/"breakout" — какой тип сигнала проверялся
+
+    All new fields are optional / nullable; older callers continue to work
+    unchanged. New callers should pass `reason_code` and `gate` for
+    structured aggregation downstream.
     """
     rec: Dict[str, Any] = {
         "event":       "blocked",
@@ -193,10 +219,39 @@ def log_blocked(sym: str, tf: str, price: float, reason: str,
         "price":       price,
         "reason":      reason,
     }
-    if rsi        is not None: rec["rsi"]        = round(rsi, 1)
-    if adx        is not None: rec["adx"]        = round(adx, 1)
-    if vol_x      is not None: rec["vol_x"]      = round(vol_x, 2)
+    if rsi         is not None: rec["rsi"]        = round(rsi, 1)
+    if adx         is not None: rec["adx"]        = round(adx, 1)
+    if vol_x       is not None: rec["vol_x"]      = round(vol_x, 2)
     if daily_range is not None: rec["daily_range"] = round(daily_range, 2)
+    if reason_code is not None: rec["reason_code"] = str(reason_code)
+    if gate        is not None: rec["gate"] = str(gate)
+    if slope_pct   is not None: rec["slope_pct"]   = round(float(slope_pct), 3)
+    if macd_hist   is not None: rec["macd_hist"]   = round(float(macd_hist), 8)
+    if ema20       is not None: rec["ema20"]       = round(float(ema20), 8)
+    if ema50       is not None: rec["ema50"]       = round(float(ema50), 8)
+    if ema200      is not None: rec["ema200"]      = round(float(ema200), 8)
+    if price_edge_ema20_pct is not None:
+        rec["price_edge_ema20_pct"] = round(float(price_edge_ema20_pct), 3)
+    if atr_pct     is not None: rec["atr_pct"]     = round(float(atr_pct), 4)
+    if ml_proba    is not None: rec["ml_proba"]    = round(float(ml_proba), 4)
+    if ranker_top_gainer_prob is not None:
+        rec["ranker_top_gainer_prob"] = round(float(ranker_top_gainer_prob), 4)
+    if ranker_ev   is not None: rec["ranker_ev"]   = round(float(ranker_ev), 4)
+    if ranker_quality_proba is not None:
+        rec["ranker_quality_proba"] = round(float(ranker_quality_proba), 4)
+    if ranker_final_score is not None:
+        rec["ranker_final_score"] = round(float(ranker_final_score), 4)
+    if candidate_score is not None:
+        rec["candidate_score"] = round(float(candidate_score), 2)
+    if score_floor is not None: rec["score_floor"] = round(float(score_floor), 2)
+    if is_bull_day is not None: rec["is_bull_day"] = bool(is_bull_day)
+    if btc_vs_ema50 is not None: rec["btc_vs_ema50"] = round(float(btc_vs_ema50), 4)
+    if market_regime is not None: rec["market_regime"] = str(market_regime)
+    if extra:
+        # Merge but don't overwrite top-level keys
+        for k, v in extra.items():
+            if k not in rec and v is not None:
+                rec[k] = v
     _write(rec)
 
 
