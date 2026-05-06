@@ -22,9 +22,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 # ── Source of truth ────────────────────────────────────────────────────────
-BUILD_VERSION: str = "2.17.0"
-BUILD_APPLIED_AT_UTC: str = "2026-05-07T08:30:00Z"
-BUILD_NOTES: str = "P0.1 structured blocked-candidate logging: reason_code + features + ranker scores + would-be-signal aggregator"
+BUILD_VERSION: str = "2.18.0"
+BUILD_APPLIED_AT_UTC: str = "2026-05-07T08:50:00Z"
+BUILD_NOTES: str = "P0.3 trend_surge_shadow_win counter (≥5 events/7d → flip TREND_SURGE_PRECEDENCE flag)"
 
 # ── Helpers ────────────────────────────────────────────────────────────────
 _ROOT = Path(__file__).resolve().parent.parent

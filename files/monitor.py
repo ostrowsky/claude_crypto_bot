@@ -4703,6 +4703,31 @@ async def _poll_coin(
             elif entry_ok:
                 mode, _  = get_effective_entry_mode(feat, i, c, tf=tf)
                 sig_mode = mode  # "trend" / "strong_trend" / "impulse_speed"
+                # P0.3 (2026-05-07): trend_surge SHADOW counter.
+                # Precedence flag is OFF in production. When surge_ok AND
+                # entry_ok both True, log a `surge_shadow_win` event with
+                # current selected mode vs would-be `trend_surge`. Allows
+                # acceptance-criteria measurement (≥5 events / 7d) before
+                # flipping TREND_SURGE_PRECEDENCE_ENABLED → True.
+                # Spec: docs/specs/features/trend-surge-precedence-spec.md §4
+                if surge_ok and not getattr(config, "TREND_SURGE_PRECEDENCE_ENABLED", False):
+                    try:
+                        log.info(
+                            "SURGE SHADOW WIN %s [%s/%s] selected=%s would_be=trend_surge",
+                            sym, sig_mode, tf, sig_mode,
+                        )
+                        botlog.log_surge_shadow_win(
+                            sym, tf, float(c[i]),
+                            selected_mode=sig_mode,
+                            would_be_mode="trend_surge",
+                            **_build_block_context(
+                                feat=feat, i=i,
+                                ranker_proba=ml_proba,
+                                is_bull_day=is_bull_day_now,
+                            ),
+                        )
+                    except Exception as _ssw_err:
+                        log.debug("surge_shadow log failed: %s", _ssw_err)
                 # impulse_speed: ADX ещё не вырос, но цена уже летит → широкий стоп как у strong_trend
                 if mode in ("strong_trend", "impulse_speed"):
                     trail_k = getattr(config, "ATR_TRAIL_K_STRONG", 2.5)

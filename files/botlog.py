@@ -255,6 +255,33 @@ def log_blocked(sym: str, tf: str, price: float, reason: str,
     _write(rec)
 
 
+def log_surge_shadow_win(sym: str, tf: str, price: float,
+                         selected_mode: str,
+                         would_be_mode: str = "trend_surge",
+                         **context) -> None:
+    """P0.3 (2026-05-07): trend_surge precedence shadow counter.
+
+    Bot is currently using `selected_mode` (e.g. "trend"), but if
+    TREND_SURGE_PRECEDENCE_ENABLED were True, surge would have won and
+    classified as `would_be_mode`. Used to gather acceptance evidence
+    (≥5 events/7d) before flipping the flag.
+
+    Spec: docs/specs/features/trend-surge-precedence-spec.md §4
+    """
+    rec: Dict[str, Any] = {
+        "event":         "surge_shadow_win",
+        "sym":           sym,
+        "tf":            tf,
+        "price":         price,
+        "selected_mode": selected_mode,
+        "would_be_mode": would_be_mode,
+    }
+    for k, v in (context or {}).items():
+        if v is not None and k not in rec:
+            rec[k] = v
+    _write(rec)
+
+
 def log_ranker_shadow(
     sym: str,
     tf: str,
