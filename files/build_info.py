@@ -22,9 +22,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 # ── Source of truth ────────────────────────────────────────────────────────
-BUILD_VERSION: str = "2.15.3"
-BUILD_APPLIED_AT_UTC: str = "2026-05-06T22:18:00Z"
-BUILD_NOTES: str = "skill TG: HTML mode + plain-text fallback ([brackets] broke Markdown parser)"
+BUILD_VERSION: str = "2.16.0"
+BUILD_APPLIED_AT_UTC: str = "2026-05-06T22:35:00Z"
+BUILD_NOTES: str = "TREND_1H_CHOP_SLOPE_MIN 1.2→0.7 (TON pump missed early entry; 39 blocks on slope 0.88-0.90%)"
 
 # ── Helpers ────────────────────────────────────────────────────────────────
 _ROOT = Path(__file__).resolve().parent.parent

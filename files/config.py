@@ -863,7 +863,10 @@ TREND_15M_QUALITY_PRICE_EDGE_MAX_BULL_DAY_PCT: float = 4.00  # wider on bull day
 # Live trigger case: STRKUSDT 2026-05-01 (ADX 20.2, slope +0.70 %, chop range).
 TREND_1H_CHOP_FILTER_ENABLED: bool = True
 TREND_1H_CHOP_ADX_MIN: float = 25.0
-TREND_1H_CHOP_SLOPE_MIN: float = 1.2  # in % (slope_pct)
+# 2026-05-06: 1.2 → 0.7 after TONUSDT case (slope 0.88-0.90% blocked 39 times,
+# trend later +70%). ADX/vol still gate hard. See:
+# docs/specs/features/trend-1h-chop-filter-spec.md §6 (regression risk noted).
+TREND_1H_CHOP_SLOPE_MIN: float = 0.7  # was 1.2 (slow-build trends now allowed)
 TREND_1H_CHOP_VOL_MIN: float = 1.3   # vol_x multiplier
 # Bull-day relaxation (opt-in; not validated on bull-day subsample)
 TREND_1H_CHOP_USE_BULL_DAY_RELAX: bool = False
