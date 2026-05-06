@@ -22,9 +22,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 # ── Source of truth ────────────────────────────────────────────────────────
-BUILD_VERSION: str = "2.13.0"
-BUILD_APPLIED_AT_UTC: str = "2026-05-05T20:53:23Z"
-BUILD_NOTES: str = "skill cadence hierarchy: daily(silent)/weekly(auto-apply)/monthly(strategic)"
+BUILD_VERSION: str = "2.15.0"
+BUILD_APPLIED_AT_UTC: str = "2026-05-06T11:55:00Z"
+BUILD_NOTES: str = "always-watch pump detector + auto-reanalyze 2h→30min (STRK-class miss fix)"
 
 # ── Helpers ────────────────────────────────────────────────────────────────
 _ROOT = Path(__file__).resolve().parent.parent

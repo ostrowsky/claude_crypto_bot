@@ -725,6 +725,13 @@ def _format_analysis_result(in_play, skipped, title: str, scan: bool = False) ->
 # Хранилище chat_id для авто-уведомлений и реанализа
 _known_chat_ids: set[int] = set()
 
+# UI watchdog state (2026-05-06): timestamp of last successfully-processed update.
+# Updated by handlers; checked by _ui_watchdog. If polling task is stuck
+# (e.g. event loop held by heavy monitoring task), this stops advancing,
+# watchdog detects pending Telegram updates → force restart.
+import time as _time_mod
+_last_update_processed_at: float = _time_mod.time()
+
 try:
     _chat_ids_file = Path(".chat_ids")
     if _chat_ids_file.exists():
@@ -1713,6 +1720,145 @@ async def _post_init(app: Application) -> None:
     )
     log.info("RL daily report task scheduled")
 
+    # ── UI Watchdog (2026-05-06) ───────────────────────────────────────────
+    # Symptom: pending Telegram updates pile up while monitoring_loop /
+    # data_collector / impulse_scanner consume the asyncio event loop.
+    # Bot stops reacting to /start, /menu, button callbacks until restart.
+    #
+    # Fix: every 30s probe getUpdates(offset=-1, timeout=0); if pending
+    # updates exist AND no update has been processed by handlers for >90s
+    # → log warning. Optionally force-exit so the bot wrapper restarts.
+    # See: docs/specs/features/ui-watchdog-spec.md (TBD)
+    async def _ui_watchdog() -> None:
+        import time as _time
+        import os as _os
+        global _last_update_processed_at
+        last_warn = 0.0
+        force_exit_after_warns = int(getattr(config, "UI_WATCHDOG_FORCE_EXIT_AFTER_WARNS", 3))
+        warn_count = 0
+        warn_threshold_sec = float(getattr(config, "UI_WATCHDOG_WARN_THRESHOLD_SEC", 90.0))
+        token = config.TELEGRAM_BOT_TOKEN
+        check_interval = 30.0
+        while True:
+            try:
+                await asyncio.sleep(check_interval)
+                now = _time.time()
+                idle_sec = now - _last_update_processed_at
+                if idle_sec < warn_threshold_sec:
+                    warn_count = 0
+                    continue
+                # Are there pending updates we missed?
+                import aiohttp as _aio
+                pending = 0
+                try:
+                    timeout = _aio.ClientTimeout(total=10)
+                    async with _aio.ClientSession(timeout=timeout) as s:
+                        url = f"https://api.telegram.org/bot{token}/getWebhookInfo"
+                        async with s.get(url) as r:
+                            j = await r.json()
+                        pending = int(((j or {}).get("result") or {}).get("pending_update_count") or 0)
+                except Exception:
+                    pending = -1
+                if pending > 0:
+                    warn_count += 1
+                    log.warning(
+                        "UI watchdog: idle=%.0fs, pending updates=%d, warn=%d/%d",
+                        idle_sec, pending, warn_count, force_exit_after_warns
+                    )
+                    if warn_count >= force_exit_after_warns:
+                        log.error("UI watchdog: triggering force-exit so wrapper restarts")
+                        # Best-effort flush; then hard exit (wrapper relaunches).
+                        _os._exit(2)
+                else:
+                    # idle but no pending → quiet period, OK
+                    warn_count = max(0, warn_count - 1)
+            except Exception as e:
+                log.warning("UI watchdog error (continuing): %s", e)
+
+    _track_background_task(
+        asyncio.create_task(_ui_watchdog()),
+        "ui_watchdog",
+    )
+    log.info("UI watchdog task scheduled (warn after %.0fs idle + pending)",
+             float(getattr(config, "UI_WATCHDOG_WARN_THRESHOLD_SEC", 90.0)))
+
+    # ── Pump detector (2026-05-06) ──────────────────────────────────────────
+    # Spec: docs/specs/features/always-watch-pump-detector-spec.md
+    # Polls Binance /ticker/24hr every PUMP_DETECTOR_INTERVAL_SEC, watches
+    # priceChangePct deltas for ALL watchlist coins, injects fast movers
+    # into hot_coins so bot scans them on next monitor poll. Catches
+    # quiet→pump transitions that hot_coins subset would otherwise miss
+    # (e.g. STRKUSDT 2026-05-06).
+    if bool(getattr(config, "PUMP_DETECTOR_ENABLED", True)):
+        async def _pump_detector_loop() -> None:
+            from collections import deque
+            from strategy import CoinReport
+            import aiohttp as _aio
+            interval = float(getattr(config, "PUMP_DETECTOR_INTERVAL_SEC", 300.0))
+            trigger = float(getattr(config, "PUMP_TRIGGER_PCT", 2.0))
+            lookback_min = int(getattr(config, "PUMP_LOOKBACK_MIN", 15))
+            url = f"{config.BINANCE_REST}/api/v3/ticker/24hr"
+            ring: dict[str, deque] = {}  # sym -> deque[(ts, priceChangePct)]
+            log.info("PumpDetector started: every %.0fs, trigger ≥+%.1f%% in %dmin",
+                     interval, trigger, lookback_min)
+            while True:
+                try:
+                    await asyncio.sleep(interval)
+                    wl = set(config.load_watchlist())
+                    timeout = _aio.ClientTimeout(total=20)
+                    async with _aio.ClientSession(timeout=timeout) as s:
+                        async with s.get(url) as r:
+                            r.raise_for_status()
+                            data = await r.json()
+                    now = _time_mod.time()
+                    cutoff = now - lookback_min * 60
+                    hot_syms = {c.symbol for c in state.hot_coins}
+                    n_injected = 0
+                    for entry in data:
+                        sym = entry.get("symbol", "")
+                        if sym not in wl:
+                            continue
+                        try:
+                            cur = float(entry.get("priceChangePercent") or 0.0)
+                        except Exception:
+                            continue
+                        d = ring.setdefault(sym, deque(maxlen=6))
+                        d.append((now, cur))
+                        # Find oldest snapshot still inside lookback
+                        old_in_window = next((p for ts, p in d if ts >= cutoff), None)
+                        if old_in_window is None:
+                            continue
+                        dx = cur - old_in_window
+                        if dx >= trigger and sym not in hot_syms:
+                            log.info("PUMP DETECTED %s: dx=+%.2f%%/24h-pct in ~%dmin → injecting",
+                                     sym, dx, lookback_min)
+                            try:
+                                dummy = CoinReport(
+                                    symbol=sym, tf="15m",
+                                    today_signals=[], today_confirmed=False,
+                                    signal_now=True, today_accuracy={},
+                                    best_horizon=5, best_accuracy=0.0,
+                                    note=f"pump-detector inject (Δ +{dx:.1f}%)",
+                                    in_play=False, from_scan=True,
+                                )
+                                state.hot_coins.append(dummy)
+                                hot_syms.add(sym)
+                                n_injected += 1
+                            except Exception as inj_err:
+                                log.warning("PumpDetector inject failed for %s: %s", sym, inj_err)
+                    if n_injected:
+                        log.info("PumpDetector cycle: %d injected", n_injected)
+                except Exception as e:
+                    log.warning("PumpDetector loop error (continuing): %s", e)
+
+        _track_background_task(
+            asyncio.create_task(_pump_detector_loop()),
+            "pump_detector",
+        )
+        log.info("PumpDetector task scheduled")
+    else:
+        log.info("PumpDetector DISABLED (set PUMP_DETECTOR_ENABLED=True to enable)")
+
     if state.positions and not state.running:
         try:
             _ensure_positions_monitored(state)
@@ -1827,6 +1973,15 @@ def main() -> None:
         .post_init(_post_init)
         .build()
     )
+    # UI watchdog ping: fires on EVERY update before anything else.
+    # Group -1 = highest priority. Records timestamp so _ui_watchdog can
+    # detect when polling task gets blocked by heavy CPU work elsewhere.
+    from telegram.ext import TypeHandler
+    async def _watchdog_ping(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+        global _last_update_processed_at
+        _last_update_processed_at = _time_mod.time()
+    app.add_handler(TypeHandler(Update, _watchdog_ping), group=-1)
+
     app.add_handler(CommandHandler("start", cmd_start, block=False))
     app.add_handler(CommandHandler("menu",  cmd_show_menu, block=False))
     app.add_handler(CommandHandler("hide",  cmd_hide_menu, block=False))
