@@ -22,9 +22,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 # ── Source of truth ────────────────────────────────────────────────────────
-BUILD_VERSION: str = "2.18.0"
-BUILD_APPLIED_AT_UTC: str = "2026-05-07T08:50:00Z"
-BUILD_NOTES: str = "P0.3 trend_surge_shadow_win counter (≥5 events/7d → flip TREND_SURGE_PRECEDENCE flag)"
+BUILD_VERSION: str = "2.19.0"
+BUILD_APPLIED_AT_UTC: str = "2026-05-07T09:15:00Z"
+BUILD_NOTES: str = "P0.2 ML blind-spot training: sample_weight in Logistic+MLP + CLI --blindspot-weight"
 
 # ── Helpers ────────────────────────────────────────────────────────────────
 _ROOT = Path(__file__).resolve().parent.parent

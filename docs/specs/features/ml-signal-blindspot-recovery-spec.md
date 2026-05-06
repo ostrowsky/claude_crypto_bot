@@ -1,7 +1,7 @@
 # ML signal-model blind-spot recovery
 
 - **Slug:** `ml-signal-blindspot-recovery`
-- **Status:** draft
+- **Status:** Phase 1 shipped 2026-05-07 v2.19.0 (training plumbing); Phase 2 awaits user-triggered retrain + 7d shadow A/B
 - **Created:** 2026-04-26
 - **Owner:** core
 - **Related:** `files/ml_signal_model.py`, `_validate_p5_ml_blindspots.py`,
