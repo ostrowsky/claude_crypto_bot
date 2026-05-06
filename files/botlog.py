@@ -255,6 +255,42 @@ def log_blocked(sym: str, tf: str, price: float, reason: str,
     _write(rec)
 
 
+def log_peak_risk_shadow(sym: str, tf: str, price: float,
+                         entry_price: float, pnl_pct: float,
+                         score: float, mode: Optional[str] = None,
+                         **components) -> None:
+    """P1.2 (2026-05-07): peak-risk shadow event for open position.
+
+    Logged when _peak_risk_score crosses bucket thresholds (50/70/90).
+    Components (rsi, price_edge_pct, macd_now, etc.) flow as kwargs.
+    Used to validate detector before activating Phase 2 (TG alerts +
+    trail tightening).
+
+    Spec: docs/specs/features/peak-risk-shadow-spec.md
+    """
+    rec: Dict[str, Any] = {
+        "event":        "peak_risk_shadow",
+        "sym":          sym,
+        "tf":           tf,
+        "price":        price,
+        "entry_price":  entry_price,
+        "pnl_pct":      round(pnl_pct, 3),
+        "score":        round(float(score), 1),
+    }
+    if mode is not None:
+        rec["mode"] = str(mode)
+    for k, v in (components or {}).items():
+        if v is not None and k not in rec:
+            try:
+                if isinstance(v, (int, float)):
+                    rec[k] = round(float(v), 4)
+                else:
+                    rec[k] = v
+            except Exception:
+                rec[k] = v
+    _write(rec)
+
+
 def log_surge_shadow_win(sym: str, tf: str, price: float,
                          selected_mode: str,
                          would_be_mode: str = "trend_surge",

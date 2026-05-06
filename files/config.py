@@ -898,6 +898,33 @@ H5_TRAILING_ONLY_AFTER_BREAK_EVEN_ENABLED: bool = True   # was False (2026-05-05
 H5_TRAILING_ONLY_SHADOW: bool = False                    # was True  (2026-05-05)
 H5_BREAK_EVEN_PCT: float = 0.5
 
+# ── P1.3: H5 per-mode break-even thresholds (2026-05-07) ──────────────────────
+# Spec: docs/specs/features/h5-trailing-only-break-even-spec.md (Phase 2)
+# TON Trade #2 (2026-05-06): pnl=+0.24% at WEAK exit, H5 needed +0.5% so
+# WEAK passed → coin continued to +16% (left ~14% on table). Fast modes
+# (impulse_speed, impulse) need lower threshold for early protection;
+# slow modes (strong_trend) stay patient (ATR-trail wider already).
+# Resolution: H5_BREAK_EVEN_PCT_<MODE>_<TF> > H5_BREAK_EVEN_PCT_<MODE> > H5_BREAK_EVEN_PCT.
+H5_BREAK_EVEN_PCT_IMPULSE_SPEED: float = 0.3   # fast: protect earlier
+H5_BREAK_EVEN_PCT_IMPULSE: float = 0.3
+H5_BREAK_EVEN_PCT_TREND_SURGE: float = 0.3     # if precedence flag flipped
+H5_BREAK_EVEN_PCT_BREAKOUT: float = 0.3
+H5_BREAK_EVEN_PCT_RETEST: float = 0.5
+H5_BREAK_EVEN_PCT_ALIGNMENT: float = 0.5
+H5_BREAK_EVEN_PCT_TREND: float = 0.5
+H5_BREAK_EVEN_PCT_STRONG_TREND: float = 0.7    # slow: more patient
+
+# ── P1.2: PEAK RISK shadow detector (2026-05-07) ──────────────────────────────
+# Spec: docs/specs/features/peak-risk-shadow-spec.md
+# Computes 0-100 risk score for open profitable positions; logs structured
+# events when score crosses bucket thresholds (50/70/90). Shadow-only —
+# no SELL triggered. Phase 2 (separate spec) will add TG alert + tighter
+# trail once 7d shadow data validates the formula.
+PEAK_RISK_SHADOW_ENABLED: bool = True
+PEAK_RISK_SHADOW_THRESHOLD: float = 50.0
+PEAK_RISK_RSI_FLOOR: float = 75.0     # RSI level where component starts ramping
+PEAK_RISK_EDGE_FLOOR_PCT: float = 5.0  # price edge vs EMA20 where component starts
+
 # ── UI watchdog (2026-05-06) ──────────────────────────────────────────────
 # Detects stuck Telegram polling. If no update has been processed by handlers
 # for WARN_THRESHOLD_SEC AND there are pending Telegram updates,

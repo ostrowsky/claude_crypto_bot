@@ -1745,7 +1745,40 @@ def _trend_1h_chop_guard_reason(
     return f"trend/1h chop: " + " OR ".join(fails)
 
 
-def _h5_should_suppress(reason: Optional[str], pnl_pct: float) -> bool:
+def _h5_break_even_pct(mode: Optional[str], tf: Optional[str]) -> float:
+    """P1.3 (2026-05-07): per-mode H5 break-even threshold.
+
+    TON Trade #2 (2026-05-06): pnl=+0.24% at WEAK exit, but H5 needed
+    +0.5% — coin continued to +16% (left ~14% on table). Per-mode
+    threshold lets us suppress sooner for fast-moving setups
+    (impulse_speed, impulse) while staying patient on slow trends.
+
+    Resolution order:
+      1. H5_BREAK_EVEN_PCT_<MODE>_<TF>  (e.g. H5_BREAK_EVEN_PCT_IMPULSE_SPEED_15M)
+      2. H5_BREAK_EVEN_PCT_<MODE>       (e.g. H5_BREAK_EVEN_PCT_IMPULSE_SPEED)
+      3. H5_BREAK_EVEN_PCT              (global default)
+      4. 0.5
+    """
+    base = float(getattr(config, "H5_BREAK_EVEN_PCT", 0.5))
+    if not mode:
+        return base
+    mode_u = mode.upper()
+    tf_u = (tf or "").upper().replace(" ", "")
+    if tf_u:
+        v = getattr(config, f"H5_BREAK_EVEN_PCT_{mode_u}_{tf_u}", None)
+        if v is not None:
+            try: return float(v)
+            except: pass
+    v = getattr(config, f"H5_BREAK_EVEN_PCT_{mode_u}", None)
+    if v is not None:
+        try: return float(v)
+        except: pass
+    return base
+
+
+def _h5_should_suppress(reason: Optional[str], pnl_pct: float,
+                        mode: Optional[str] = None,
+                        tf: Optional[str] = None) -> bool:
     """
     H5: trailing-only after break-even.
     Returns True if soft EMA-pattern exit should be suppressed because
@@ -1759,11 +1792,13 @@ def _h5_should_suppress(reason: Optional[str], pnl_pct: float) -> bool:
     NOT suppressed: WEAK signals (own guard), RSI/MACD/time exits,
     catastrophic reversals (handled by ATR-trail anyway).
 
+    Per-mode threshold (P1.3 2026-05-07): mode/tf-specific via _h5_break_even_pct().
+
     Spec: docs/specs/features/h5-trailing-only-break-even-spec.md
     """
     if not reason:
         return False
-    pnl_min = float(getattr(config, "H5_BREAK_EVEN_PCT", 0.5))
+    pnl_min = _h5_break_even_pct(mode, tf)
     if pnl_pct < pnl_min:
         return False
     r = reason.lower()
@@ -1780,6 +1815,73 @@ def _h5_should_suppress(reason: Optional[str], pnl_pct: float) -> bool:
         "adx ослабевает",
     )
     return any(m in r for m in soft_markers)
+
+
+def _peak_risk_score(pos, feat, i: int, pnl_pct: float) -> tuple[float, dict]:
+    """P1.2 (2026-05-07): peak-risk shadow score 0-100 for open position.
+
+    Components (each capped at 25):
+      RSI overextension     — RSI ≥ 75 ramps 0..25
+      Price edge vs EMA20   — edge ≥ 5% ramps 0..25 up to ~30%
+      MACD deceleration     — 25 if positive hist[i] < hist[i-1]
+      Profit level          — pnl ≥ 1% linear up to pnl ≥ 5% = 25
+
+    Returns (total_score, components_dict). Score < threshold → no peak risk.
+
+    Spec: docs/specs/features/peak-risk-shadow-spec.md
+    """
+    if pnl_pct < 0:
+        return 0.0, {"reason": "not_in_profit"}
+    components = {}
+    # RSI
+    rsi_floor = float(getattr(config, "PEAK_RISK_RSI_FLOOR", 75.0))
+    rsi = _safe_arr_at(feat.get("rsi", []), i)
+    if rsi is not None:
+        components["rsi"] = float(rsi)
+        components["rsi_score"] = max(0.0, min(25.0, (rsi - rsi_floor) * 2.0))
+    else:
+        components["rsi_score"] = 0.0
+
+    # Price edge vs EMA20
+    edge_floor = float(getattr(config, "PEAK_RISK_EDGE_FLOOR_PCT", 5.0))
+    cp = _safe_arr_at(feat.get("close", []), i)
+    ef = _safe_arr_at(feat.get("ema_fast", []), i)
+    if cp is not None and ef and ef > 0:
+        edge_pct = (cp / ef - 1.0) * 100.0
+        components["price_edge_pct"] = round(edge_pct, 2)
+        components["edge_score"] = max(0.0, min(25.0, edge_pct - edge_floor))
+    else:
+        components["edge_score"] = 0.0
+
+    # MACD deceleration
+    mh_arr = feat.get("macd_hist")
+    macd_score = 0.0
+    if mh_arr is not None and i >= 1:
+        m_now = _safe_arr_at(mh_arr, i)
+        m_prev = _safe_arr_at(mh_arr, i - 1)
+        if m_now is not None and m_prev is not None:
+            components["macd_now"] = m_now
+            components["macd_prev"] = m_prev
+            if m_now > 0 and m_now < m_prev:
+                macd_score = 25.0
+    components["macd_score"] = macd_score
+
+    # Profit level
+    if pnl_pct >= 5.0:
+        profit_score = 25.0
+    elif pnl_pct >= 1.0:
+        profit_score = 25.0 * (pnl_pct - 1.0) / 4.0
+    else:
+        profit_score = 0.0
+    components["profit_score"] = profit_score
+    components["pnl_pct"] = pnl_pct
+
+    total = (components.get("rsi_score", 0) +
+             components.get("edge_score", 0) +
+             components.get("macd_score", 0) +
+             components.get("profit_score", 0))
+    components["total"] = total
+    return total, components
 
 
 def _safe_arr_at(arr, i):
@@ -5080,6 +5182,46 @@ async def _poll_coin(
     close_now = float(c[i])
     atr_now   = float(feat["atr"][i]) if np.isfinite(feat["atr"][i]) else 0.0
     current_pnl = pos.pnl_pct(close_now)
+
+    # ── P1.2 PEAK RISK shadow detector (2026-05-07) ───────────────────────────
+    # Compute score for open position; log when score crosses bucket
+    # threshold (50/70/90). Pure observability — no SELL triggered.
+    # Spec: docs/specs/features/peak-risk-shadow-spec.md
+    if bool(getattr(config, "PEAK_RISK_SHADOW_ENABLED", True)):
+        try:
+            _pr_score, _pr_components = _peak_risk_score(pos, feat, i, current_pnl)
+            _pr_thresh = float(getattr(config, "PEAK_RISK_SHADOW_THRESHOLD", 50.0))
+            if _pr_score >= _pr_thresh:
+                _bucket = int(_pr_score // 20) * 20
+                _last_bucket = int(getattr(pos, "_peak_risk_last_bucket", -1) or -1)
+                if _bucket > _last_bucket:
+                    pos._peak_risk_last_bucket = _bucket
+                    log.info(
+                        "PEAK RISK SHADOW %s [%s] score=%.0f pnl=%.2f%% "
+                        "(rsi=%.0f edge=%.1f%% macd_d=%s)",
+                        sym, tf, _pr_score, current_pnl,
+                        _pr_components.get("rsi", 0),
+                        _pr_components.get("price_edge_pct", 0),
+                        bool(_pr_components.get("macd_score", 0) > 0),
+                    )
+                    botlog.log_peak_risk_shadow(
+                        sym, tf, close_now,
+                        entry_price=float(pos.entry_price),
+                        pnl_pct=current_pnl,
+                        score=_pr_score,
+                        mode=getattr(pos, "signal_mode", None),
+                        bars_elapsed=int(getattr(pos, "bars_elapsed", 0)),
+                        rsi=_pr_components.get("rsi"),
+                        rsi_score=_pr_components.get("rsi_score"),
+                        price_edge_pct=_pr_components.get("price_edge_pct"),
+                        edge_score=_pr_components.get("edge_score"),
+                        macd_now=_pr_components.get("macd_now"),
+                        macd_prev=_pr_components.get("macd_prev"),
+                        macd_score=_pr_components.get("macd_score"),
+                        profit_score=_pr_components.get("profit_score"),
+                    )
+        except Exception as _pr_err:
+            log.debug("peak_risk_shadow failed: %s", _pr_err)
     effective_trail_k = pos.trail_k
     continuation_profit_lock_active = _continuation_profit_lock_active(
         tf=tf,
@@ -5566,7 +5708,9 @@ async def _poll_coin(
                 reason,
             )
             reason = None
-        elif _h5_should_suppress(reason, current_pnl):
+        elif _h5_should_suppress(reason, current_pnl,
+                                 mode=getattr(pos, "signal_mode", None),
+                                 tf=tf):
             # H5 (2026-05-02): trailing-only after break-even.
             # On profitable positions (pnl >= H5_BREAK_EVEN_PCT) suppress
             # soft EMA-pattern exits and let ATR-trail handle reversals.
