@@ -335,12 +335,25 @@ class LogisticModel:
         z = np.clip(z, -35.0, 35.0)
         return 1.0 / (1.0 + np.exp(-z))
 
-    def fit(self, X: np.ndarray, y: np.ndarray) -> "LogisticModel":
+    def fit(self, X: np.ndarray, y: np.ndarray,
+            sample_weight: Optional[np.ndarray] = None) -> "LogisticModel":
+        """Weighted gradient descent. Higher sample_weight[i] → row i has
+        proportionally larger gradient contribution. Used by P0.2
+        ML-blindspot recovery: blind-spot winners get weight ×3 so the
+        model corrects systematic miss patterns.
+        """
         n = max(1, X.shape[0])
+        if sample_weight is None:
+            w_sample = np.ones(n, dtype=float)
+        else:
+            w_sample = np.asarray(sample_weight, dtype=float)
+        # Normalise so total mass equals n (preserves learning rate scale)
+        if w_sample.sum() > 0:
+            w_sample = w_sample * (n / w_sample.sum())
         for _ in range(self.epochs):
             logits = X @ self.w + self.b
             p = self._sigmoid(logits)
-            err = p - y
+            err = (p - y) * w_sample
             grad_w = (X.T @ err) / n + self.l2 * self.w
             grad_b = float(err.mean())
             self.w -= self.lr * grad_w
@@ -378,16 +391,23 @@ class MLPModel:
         z = np.clip(z, -35.0, 35.0)
         return 1.0 / (1.0 + np.exp(-z))
 
-    def fit(self, X: np.ndarray, y: np.ndarray) -> "MLPModel":
+    def fit(self, X: np.ndarray, y: np.ndarray,
+            sample_weight: Optional[np.ndarray] = None) -> "MLPModel":
         y2 = y.reshape(-1, 1)
         n = max(1, X.shape[0])
+        if sample_weight is None:
+            w_sample = np.ones((n, 1), dtype=float)
+        else:
+            w_sample = np.asarray(sample_weight, dtype=float).reshape(-1, 1)
+            if w_sample.sum() > 0:
+                w_sample = w_sample * (n / w_sample.sum())
         for _ in range(self.epochs):
             z1 = X @ self.W1 + self.b1
             a1 = np.maximum(z1, 0.0)
             z2 = a1 @ self.W2 + self.b2
             p = self._sigmoid(z2)
 
-            dz2 = p - y2
+            dz2 = (p - y2) * w_sample
             dW2 = (a1.T @ dz2) / n + self.l2 * self.W2
             db2 = dz2.mean(axis=0)
 
@@ -659,12 +679,70 @@ def train_segment_models(
     return reports
 
 
+def _compute_blindspot_weights(
+    X_train: np.ndarray,
+    y_train: np.ndarray,
+    prev_model_path: Optional[Path] = None,
+    weight: float = 3.0,
+    proba_threshold: float = 0.10,
+) -> Optional[np.ndarray]:
+    """P0.2: identify blind-spot rows in training set and return per-row
+    weights. Blind-spot = (y=1 AND prev_model_proba < proba_threshold).
+    Such rows get `weight` (default ×3); others get 1.0.
+
+    Returns None if no previous model available — caller falls back to
+    uniform training (no harm done first time around).
+
+    Spec: docs/specs/features/ml-signal-blindspot-recovery-spec.md
+    """
+    if not prev_model_path or not prev_model_path.exists():
+        return None
+    try:
+        payload = json.loads(prev_model_path.read_text(encoding="utf-8"))
+        # Pre-existing model uses LogisticModel or MLPModel storage.
+        # Re-instantiate via to_dict() shape; quick path: only logistic.
+        m = payload.get("model") or {}
+        if m.get("type") == "logistic":
+            w = np.asarray(m.get("weights", []), dtype=float)
+            b = float(m.get("bias", 0.0))
+            if w.shape[0] != X_train.shape[1]:
+                return None
+            logits = X_train @ w + b
+            logits = np.clip(logits, -35.0, 35.0)
+            probas = 1.0 / (1.0 + np.exp(-logits))
+        else:
+            return None  # MLP shape would need full reload — skip for v1
+    except Exception:
+        return None
+
+    # Apply scaler if present in payload
+    sc_mean = payload.get("scaler_mean"); sc_scale = payload.get("scaler_scale")
+    if sc_mean and sc_scale:
+        # Note: X_train here is already scaled by current scaler. If old
+        # scaler differs, signal is approximate but still useful directionally.
+        pass
+
+    weights = np.ones(X_train.shape[0], dtype=float)
+    blind_mask = (y_train > 0.5) & (probas < proba_threshold)
+    weights[blind_mask] = float(weight)
+    n_blind = int(blind_mask.sum())
+    n_total = int(X_train.shape[0])
+    if n_blind > 0:
+        print(f"[blindspot] upweighted {n_blind}/{n_total} rows "
+              f"({100*n_blind/n_total:.1f}%) at weight={weight} "
+              f"(proba<{proba_threshold} AND y=1)")
+    return weights
+
+
 def train_and_evaluate(
     dataset_path: Path,
     positive_ret_threshold: float = 0.0,
     min_ts: Optional[datetime] = None,
     min_rows: int = 500,
     segment_min_rows: int = 160,
+    blindspot_weight: float = 1.0,
+    blindspot_proba_threshold: float = 0.10,
+    prev_model_path: Optional[Path] = None,
 ) -> dict:
     rows = load_training_rows(dataset_path, min_ts=min_ts)
     if len(rows) < min_rows:
@@ -676,9 +754,19 @@ def train_and_evaluate(
     X_val = scaler.transform(bundle.X_val)
     X_test = scaler.transform(bundle.X_test)
 
+    # P0.2: blind-spot upweighting (no-op when blindspot_weight=1.0)
+    sample_weight = None
+    if blindspot_weight > 1.0 and prev_model_path is not None:
+        sample_weight = _compute_blindspot_weights(
+            X_train, bundle.y_train,
+            prev_model_path=prev_model_path,
+            weight=blindspot_weight,
+            proba_threshold=blindspot_proba_threshold,
+        )
+
     models = {
-        "logistic": LogisticModel(X_train.shape[1]).fit(X_train, bundle.y_train),
-        "mlp": MLPModel(X_train.shape[1]).fit(X_train, bundle.y_train),
+        "logistic": LogisticModel(X_train.shape[1]).fit(X_train, bundle.y_train, sample_weight=sample_weight),
+        "mlp": MLPModel(X_train.shape[1]).fit(X_train, bundle.y_train, sample_weight=sample_weight),
     }
 
     validation: Dict[str, dict] = {}
@@ -854,6 +942,15 @@ def main() -> None:
     parser.add_argument("--model-out", type=Path, default=DEFAULT_MODEL_FILE)
     parser.add_argument("--report-out", type=Path, default=DEFAULT_REPORT_FILE)
     parser.add_argument("--json", action="store_true", dest="as_json")
+    # P0.2 blind-spot recovery (default 1.0 = disabled)
+    parser.add_argument("--blindspot-weight", type=float, default=1.0,
+                        help="Upweight factor for (y=1 AND prev_proba<thr) rows. "
+                             "1.0 = disabled. 3.0 = recommended for first try.")
+    parser.add_argument("--blindspot-proba-threshold", type=float, default=0.10,
+                        help="Define blind-spot as: y=1 AND prev_model_proba < this.")
+    parser.add_argument("--prev-model", type=Path, default=DEFAULT_MODEL_FILE,
+                        help="Existing model to identify blind-spot rows from. "
+                             "Default = current ml_signal_model.json.")
     args = parser.parse_args()
 
     min_ts = _parse_ts(args.min_date) if args.min_date else None
@@ -861,6 +958,9 @@ def main() -> None:
         args.dataset,
         positive_ret_threshold=args.positive_ret_threshold,
         min_ts=min_ts,
+        blindspot_weight=args.blindspot_weight,
+        blindspot_proba_threshold=args.blindspot_proba_threshold,
+        prev_model_path=args.prev_model if args.blindspot_weight > 1.0 else None,
     )
     save_json(args.model_out, build_live_model_payload(report))
     save_json(args.report_out, {k: v for k, v in report.items() if k != "model_payload"})

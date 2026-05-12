@@ -22,9 +22,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 # ── Source of truth ────────────────────────────────────────────────────────
-BUILD_VERSION: str = "2.8.0"
-BUILD_APPLIED_AT_UTC: str = "2026-05-02T09:29:29Z"
-BUILD_NOTES: str = "H5 trailing-only after break-even (shadow-on, enabled-off)"
+BUILD_VERSION: str = "2.20.0"
+BUILD_APPLIED_AT_UTC: str = "2026-05-07T09:55:00Z"
+BUILD_NOTES: str = "P1.1 sustained-uptrend label + P1.2 PEAK RISK shadow + P1.3 H5 per-mode threshold"
 
 # ── Helpers ────────────────────────────────────────────────────────────────
 _ROOT = Path(__file__).resolve().parent.parent

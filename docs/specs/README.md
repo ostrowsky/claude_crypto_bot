@@ -29,6 +29,8 @@ Spec-first workflow. См. [`../../AGENTS.md`](../../AGENTS.md) для проц�
 | [`trend-1h-chop-filter`](./features/trend-1h-chop-filter-spec.md) | shipped 2026-05-01 v2.6.0 | Block `trend/1h` if `(ADX<25) OR (slope<1.2) OR (vol_x<1.3)`. Backtest: precision 1.2 %→16.7 %, recall 100 %, avg_pnl −0.17 %→+1.58 %. |
 | [`trend-surge-precedence`](./features/trend-surge-precedence-spec.md) | shipped 2026-05-02 v2.7.0 (flagged off) | H3: surge_ok идёт ПЕРЕД entry_ok. Активация `TREND_SURGE_PRECEDENCE_ENABLED=True`. Acceptance: ≥5 reclassifications за 7 d shadow. |
 | [`ex1-realized-potential`](./features/ex1-realized-potential-spec.md) | shipped 2026-05-02 v2.7.0 | Exit-side метрика. Baseline median EX1 = +0.001 на top-20. `_backtest_ex1_realized_potential.py` + интеграция в daily aggregator. |
+| [`signal-evaluator-integration`](./features/signal-evaluator-integration-spec.md) | Phase A+B+D shipped v2.10.0 | Phase A wrapper + Phase B `files/zigzag_labeler.py` module + Phase D EX1 `--use-zigzag` + per-mode wrapper option. Phase C (bandit verdict-reward) — drafted. |
+| [`metrics-canonical`](./features/metrics-canonical-spec.md) | shipped 2026-05-04 v2.10.0 | Canonical map: 1 metric per business question. Защита от metric-soup при добавлении skill. |
 | [`h5-trailing-only-break-even`](./features/h5-trailing-only-break-even-spec.md) | shipped 2026-05-02 v2.8.0 (shadow-on, enabled-off) | Suppress soft EMA-pattern exits when pnl >= +0.5 %. Backtest: 4 eligible / 30 d, 1 top-20 worth +471 % left on table. Acceptance: 7 d shadow с ≥3 events. |
 
 ## How to add a new spec

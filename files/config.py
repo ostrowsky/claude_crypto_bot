@@ -95,8 +95,15 @@ TOP_GAINER_CRITIC_TIMEZONE: str = "Europe/Budapest"
 TOP_GAINER_CRITIC_TOP_N: int = 15
 TOP_GAINER_CRITIC_MIN_QUOTE_VOLUME_24H: float = 1_000_000.0
 RL_TELEGRAM_REPORTS_ENABLED: bool = True
-RL_TRAIN_TELEGRAM_REPORTS_ENABLED: bool = True
-TOP_GAINER_CRITIC_TELEGRAM_REPORTS_ENABLED: bool = True
+# 2026-05-12: B+ plan — single daily Telegram via pipeline_notify.py.
+# Each of these used to fire its own message at random hours, with overlapping
+# or contradictory numbers vs the unified health snapshot. Folded into the
+# daily pipeline report. Rollback: flip back to True; the standalone message
+# returns immediately (no other change required).
+RL_TRAIN_TELEGRAM_REPORTS_ENABLED:           bool = False  # rl_headless_worker.py:651
+TOP_GAINER_CRITIC_TELEGRAM_REPORTS_ENABLED:  bool = False  # rl_headless_worker.py:742
+DAILY_LEARNING_TELEGRAM_REPORTS_ENABLED:     bool = False  # daily_learning.py — full retrain digest
+SIGNAL_EVALUATOR_TELEGRAM_REPORTS_ENABLED:   bool = False  # _weekly_signal_eval_with_tg.py — daily incidents
 RL_WORKER_ENABLE_COLLECTOR: bool = False
 BOT_ENABLE_DATA_COLLECTOR: bool = False
 
@@ -415,9 +422,21 @@ TODAY_T3_MIN: float = 60.0
 TODAY_T10_MIN: float = 40.0
 
 # Интервал авто-реанализа в секундах (0 = выключен)
-# 7200 = каждые 2 часа бот сам пересчитывает список монет
-AUTO_REANALYZE_SEC: int = 7200
+# 2026-05-06: 7200 → 1800 (2h → 30min) per always-watch-pump-detector-spec.
+# Trigger: STRKUSDT silent miss case (pump start within 2h gap window).
+# Pump detector below catches sub-30min bursts; this catches medium-cycle
+# transitions from quiet→active.
+AUTO_REANALYZE_SEC: int = 1800   # was 7200
 AUTO_REANALYZE_FIRST_DELAY_SEC: int = 90
+
+# ── Always-watch pump detector (2026-05-06) ──────────────────────────────────
+# Spec: docs/specs/features/always-watch-pump-detector-spec.md
+# Polls Binance /ticker/24hr every PUMP_DETECTOR_INTERVAL_SEC, tracks
+# priceChangePct delta per watchlist coin, injects to hot_coins on pump.
+PUMP_DETECTOR_ENABLED: bool = True
+PUMP_DETECTOR_INTERVAL_SEC: int = 300   # 5 min
+PUMP_TRIGGER_PCT: float = 2.0           # min Δ in priceChangePct
+PUMP_LOOKBACK_MIN: int = 15             # delta window
 POSITIONS_FILE: str = "positions.json"
 
 ATR_TRAIL_K: float = 2.0   # множитель ATR для трейлинг-стопа
@@ -851,7 +870,10 @@ TREND_15M_QUALITY_PRICE_EDGE_MAX_BULL_DAY_PCT: float = 4.00  # wider on bull day
 # Live trigger case: STRKUSDT 2026-05-01 (ADX 20.2, slope +0.70 %, chop range).
 TREND_1H_CHOP_FILTER_ENABLED: bool = True
 TREND_1H_CHOP_ADX_MIN: float = 25.0
-TREND_1H_CHOP_SLOPE_MIN: float = 1.2  # in % (slope_pct)
+# 2026-05-06: 1.2 → 0.7 after TONUSDT case (slope 0.88-0.90% blocked 39 times,
+# trend later +70%). ADX/vol still gate hard. See:
+# docs/specs/features/trend-1h-chop-filter-spec.md §6 (regression risk noted).
+TREND_1H_CHOP_SLOPE_MIN: float = 0.7  # was 1.2 (slow-build trends now allowed)
 TREND_1H_CHOP_VOL_MIN: float = 1.3   # vol_x multiplier
 # Bull-day relaxation (opt-in; not validated on bull-day subsample)
 TREND_1H_CHOP_USE_BULL_DAY_RELAX: bool = False
@@ -872,9 +894,51 @@ ATR_TRAIL_K_TREND_SURGE: float = 2.5  # = STRONG default; trail для ново�
 # and let ATR-trail handle reversals. Backtest 30d: 4/982 eligible exits,
 # 1 top-20 winner left +471% on table (APEUSDT 04-30).
 # Default: SHADOW on, ENABLED off (logging-only mode for 7d acceptance).
-H5_TRAILING_ONLY_AFTER_BREAK_EVEN_ENABLED: bool = False
-H5_TRAILING_ONLY_SHADOW: bool = True
+# 2026-05-05 ACTIVATED in production (was: ENABLED=False, SHADOW=True)
+# Trigger: ICPUSDT 05-05 09:35→12:21 — bot exited at +2.5% on RSI divergence
+# WEAK signal, trend continued to +6.8% (left +4.3% on table). Capture
+# ratio 0.37, exact case for which H5 was written. Backtest baseline 4
+# eligible exits in 30d, 1 of them top-20 with +471% potential left. Real
+# expected impact at activation: 1-3 saved trades/week, +0.05 NS estimate.
+# Rollback: flip ENABLED back to False, SHADOW remains as fallback log.
+H5_TRAILING_ONLY_AFTER_BREAK_EVEN_ENABLED: bool = True   # was False (2026-05-05)
+H5_TRAILING_ONLY_SHADOW: bool = False                    # was True  (2026-05-05)
 H5_BREAK_EVEN_PCT: float = 0.5
+
+# ── P1.3: H5 per-mode break-even thresholds (2026-05-07) ──────────────────────
+# Spec: docs/specs/features/h5-trailing-only-break-even-spec.md (Phase 2)
+# TON Trade #2 (2026-05-06): pnl=+0.24% at WEAK exit, H5 needed +0.5% so
+# WEAK passed → coin continued to +16% (left ~14% on table). Fast modes
+# (impulse_speed, impulse) need lower threshold for early protection;
+# slow modes (strong_trend) stay patient (ATR-trail wider already).
+# Resolution: H5_BREAK_EVEN_PCT_<MODE>_<TF> > H5_BREAK_EVEN_PCT_<MODE> > H5_BREAK_EVEN_PCT.
+H5_BREAK_EVEN_PCT_IMPULSE_SPEED: float = 0.3   # fast: protect earlier
+H5_BREAK_EVEN_PCT_IMPULSE: float = 0.3
+H5_BREAK_EVEN_PCT_TREND_SURGE: float = 0.3     # if precedence flag flipped
+H5_BREAK_EVEN_PCT_BREAKOUT: float = 0.3
+H5_BREAK_EVEN_PCT_RETEST: float = 0.5
+H5_BREAK_EVEN_PCT_ALIGNMENT: float = 0.5
+H5_BREAK_EVEN_PCT_TREND: float = 0.5
+H5_BREAK_EVEN_PCT_STRONG_TREND: float = 0.7    # slow: more patient
+
+# ── P1.2: PEAK RISK shadow detector (2026-05-07) ──────────────────────────────
+# Spec: docs/specs/features/peak-risk-shadow-spec.md
+# Computes 0-100 risk score for open profitable positions; logs structured
+# events when score crosses bucket thresholds (50/70/90). Shadow-only —
+# no SELL triggered. Phase 2 (separate spec) will add TG alert + tighter
+# trail once 7d shadow data validates the formula.
+PEAK_RISK_SHADOW_ENABLED: bool = True
+PEAK_RISK_SHADOW_THRESHOLD: float = 50.0
+PEAK_RISK_RSI_FLOOR: float = 75.0     # RSI level where component starts ramping
+PEAK_RISK_EDGE_FLOOR_PCT: float = 5.0  # price edge vs EMA20 where component starts
+
+# ── UI watchdog (2026-05-06) ──────────────────────────────────────────────
+# Detects stuck Telegram polling. If no update has been processed by handlers
+# for WARN_THRESHOLD_SEC AND there are pending Telegram updates,
+# warn N times then force-exit (wrapper relaunches bot).
+# Spec: docs/specs/features/ui-watchdog-spec.md
+UI_WATCHDOG_WARN_THRESHOLD_SEC: float = 90.0
+UI_WATCHDOG_FORCE_EXIT_AFTER_WARNS: int = 3
 # Mode daily-range / slope quality gate (backtest 2026-04-24, 60d, 2197 entries)
 # Root cause: on quiet-market days (daily_range 3-4%) signals are almost all FP
 # because coins don't make big moves regardless of technical setup.
@@ -928,7 +992,7 @@ OPEN_SIGNAL_CLUSTER_CAP_ENABLED: bool = True
 OPEN_SIGNAL_CLUSTER_CAP_15M_SHORT_BOUNCE_MODES: tuple = ("breakout", "retest")
 OPEN_SIGNAL_CLUSTER_CAP_15M_SHORT_BOUNCE_MAX: int = 2
 OPEN_SIGNAL_CLUSTER_CAP_15M_IMPULSE_MODES: tuple = ("impulse_speed",)
-OPEN_SIGNAL_CLUSTER_CAP_15M_IMPULSE_MAX: int = 5   # was 2 — 149 blocks in recent events (ORDI, FLUX blocked)  # scout:16.04.2026 was 4
+OPEN_SIGNAL_CLUSTER_CAP_15M_IMPULSE_MAX: int = 9   # was 2 — 149 blocks in recent events (ORDI, FLUX blocked)  # scout:10.05.2026 was 9
 OPEN_SIGNAL_CLUSTER_CAP_1H_RETEST_MODES: tuple = ("retest",)
 OPEN_SIGNAL_CLUSTER_CAP_1H_RETEST_MAX: int = 1
 
