@@ -615,6 +615,54 @@ def _is_fresh_priority_mode(mode: str) -> bool:
     return mode in priority_modes
 
 
+def _safe_float(v: Any) -> Optional[float]:
+    """Convert value to float, return None if None or invalid."""
+    if v is None:
+        return None
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def _build_block_context(
+    *,
+    feat: dict,
+    i: int,
+    candidate_score: Optional[float] = None,
+    score_floor: Optional[float] = None,
+    ranker_proba: Optional[float] = None,
+    ranker_info: Optional[dict] = None,
+    is_bull_day_now: Optional[bool] = None,
+) -> dict:
+    """
+    Assemble standard fields available at any block site.
+    Used to populate botlog.log_blocked() context args.
+    All values are optional/nullable to handle partial data.
+    """
+    return {
+        "rsi": _safe_float(feat.get("rsi", [None]*999)[min(i, len(feat.get("rsi", []))-1)] if i < len(feat.get("rsi", [])) else None),
+        "adx": _safe_float(feat.get("adx", [None]*999)[min(i, len(feat.get("adx", []))-1)] if i < len(feat.get("adx", [])) else None),
+        "vol_x": _safe_float(feat.get("vol_x", [None]*999)[min(i, len(feat.get("vol_x", []))-1)] if i < len(feat.get("vol_x", [])) else None),
+        "daily_range": _safe_float(feat.get("daily_range_pct", [None]*999)[min(i, len(feat.get("daily_range_pct", []))-1)] if i < len(feat.get("daily_range_pct", [])) else None),
+        "slope_pct": _safe_float(feat.get("slope", [None]*999)[min(i, len(feat.get("slope", []))-1)] if i < len(feat.get("slope", [])) else None),
+        "macd_hist": _safe_float(feat.get("macd_hist", [None]*999)[min(i, len(feat.get("macd_hist", []))-1)] if i < len(feat.get("macd_hist", [])) else None),
+        "ema20": _safe_float(feat.get("ema_fast", [None]*999)[min(i, len(feat.get("ema_fast", []))-1)] if i < len(feat.get("ema_fast", [])) else None),
+        "ema50": _safe_float(feat.get("ema_slow", [None]*999)[min(i, len(feat.get("ema_slow", []))-1)] if i < len(feat.get("ema_slow", [])) else None),
+        "ema200": _safe_float(feat.get("ema200", [None]*999)[min(i, len(feat.get("ema200", []))-1)] if i < len(feat.get("ema200", [])) else None),
+        "ml_proba": _safe_float(ranker_proba),
+        "ranker_top_gainer_prob": _safe_float((ranker_info or {}).get("top_gainer_prob")),
+        "ranker_ev": _safe_float((ranker_info or {}).get("ev")),
+        "ranker_quality_proba": _safe_float((ranker_info or {}).get("quality_proba")),
+        "ranker_final_score": _safe_float((ranker_info or {}).get("final_score")),
+        "candidate_score": _safe_float(candidate_score),
+        "score_floor": _safe_float(score_floor),
+        "is_bull_day": bool(is_bull_day_now) if is_bull_day_now is not None else None,
+        "btc_vs_ema50": _safe_float(getattr(config, "_btc_vs_ema50", 0.0)),
+        "market_regime": str(getattr(config, "_market_regime", "neutral")),
+    }
+
+
 def _time_block_bypass_allowed(
     *,
     tf: str,
@@ -4263,6 +4311,15 @@ async def _poll_coin(
                 botlog.log_blocked(
                     sym, tf, float(c[i]), mode_range_guard_reason,
                     signal_type="mode_range_quality",
+                    reason_code="mode_range_quality", gate="mode_daily_range_guard",
+                    **_build_block_context(
+                        feat=feat, i=i,
+                        candidate_score=candidate_score,
+                        score_floor=score_floor,
+                        ranker_proba=ranker_proba,
+                        ranker_info=ranker_info,
+                        is_bull_day=is_bull_day_now,
+                    ),
                 )
                 return
 
@@ -4469,7 +4526,18 @@ async def _poll_coin(
                     bot_action="blocked",
                     reason=clone_guard_reason,
                 )
-                botlog.log_blocked(sym, tf, float(c[i]), clone_guard_reason, signal_type="clone_guard")
+                botlog.log_blocked(
+                    sym, tf, float(c[i]), clone_guard_reason, signal_type="clone_guard",
+                    reason_code="clone_signal_guard", gate="clone_guard",
+                    **_build_block_context(
+                        feat=feat, i=i,
+                        candidate_score=candidate_score,
+                        score_floor=score_floor,
+                        ranker_proba=ranker_proba,
+                        ranker_info=ranker_info,
+                        is_bull_day=is_bull_day_now,
+                    ),
+                )
                 return
             cluster_cap_reason = _open_signal_cluster_cap_reason(
                 sym,
@@ -4515,7 +4583,18 @@ async def _poll_coin(
                     bot_action="blocked",
                     reason=cluster_cap_reason,
                 )
-                botlog.log_blocked(sym, tf, float(c[i]), cluster_cap_reason, signal_type="open_cluster_cap")
+                botlog.log_blocked(
+                    sym, tf, float(c[i]), cluster_cap_reason, signal_type="open_cluster_cap",
+                    reason_code="open_cluster_cap", gate="open_cluster_cap",
+                    **_build_block_context(
+                        feat=feat, i=i,
+                        candidate_score=candidate_score,
+                        score_floor=score_floor,
+                        ranker_proba=ranker_proba,
+                        ranker_info=ranker_info,
+                        is_bull_day=is_bull_day_now,
+                    ),
+                )
                 return
 
             # ── Correlation Guard — блокировка клонов по пирсоновской rho ──────
@@ -4567,7 +4646,18 @@ async def _poll_coin(
                         bot_action="blocked",
                         reason=_cg_result.reason,
                     )
-                    botlog.log_blocked(sym, tf, float(c[i]), _cg_result.reason, signal_type="correlation_guard")
+                    botlog.log_blocked(
+                        sym, tf, float(c[i]), _cg_result.reason, signal_type="correlation_guard",
+                        reason_code="correlation_guard", gate="correlation_guard",
+                        **_build_block_context(
+                            feat=feat, i=i,
+                            candidate_score=candidate_score,
+                            score_floor=score_floor,
+                            ranker_proba=ranker_proba,
+                            ranker_info=ranker_info,
+                            is_bull_day=is_bull_day_now,
+                        ),
+                    )
                     return
 
             port_ok, port_reason = _check_portfolio_limits(
