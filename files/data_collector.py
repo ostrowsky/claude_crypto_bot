@@ -170,6 +170,7 @@ def _process_coin_sync(
         t_arr=data["t"].astype(int),
         c_arr=c,
         bar_ms=bar_ms,
+        l_arr=data.get("l").astype(float) if "l" in data else None,  # RM-3: pass lows for fast-reversal label
     )
     return True
 

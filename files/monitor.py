@@ -5060,6 +5060,10 @@ async def _poll_coin(
             # ── КРИТИЧНО: позиция сохраняется ПЕРВОЙ, до любых внешних вызовов.
             # Если ml_dataset или botlog выбросят исключение — позиция уже в state
             # и не потеряется. Именно это было причиной "нет позиций при сигналах".
+            # RM-3: compute atr_pct for fast-reversal labeling
+            atr_val = float(feat.get("atr", [0.0])[i]) if i < len(feat.get("atr", [])) else 0.0
+            atr_pct = (atr_val / price * 100.0) if price > 0 else 0.0
+
             pos.critic_record_id = _log_critic_candidate(
                 sym=sym,
                 tf=tf,
@@ -5082,6 +5086,8 @@ async def _poll_coin(
                 fresh_priority=fresh_priority,
                 catchup=catchup_snapshot is not None,
                 continuation_profile=continuation_profile,
+                atr_pct=atr_pct,  # RM-3: fast-reversal label computation
+                trail_k=trail_k,  # RM-3: fast-reversal label computation
                 signal_flags=signal_flags,
             )
             state.positions[sym] = pos
