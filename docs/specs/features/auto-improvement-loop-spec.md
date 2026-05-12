@@ -255,6 +255,7 @@ missing rows = the loop isn't really closing.
 | 2026-05-11 | 6.7% (midday) → 40.0% (final) | +66.7% (midday view) | n/a | — | — |
 | 2026-05-12 | tbd (early-day, no critic yet) | tbd | n/a | unified Telegram + UI cache + critic phase fix | — |
 | 2026-05-12 | n/a (baseline operational) | n/a | n/a | RM-1/RM-2 structured blocked-event logging + context (unblocks L3-c universal Pareto validators; ~40% fewer pending_manual_validation proposals) | — |
+| 2026-05-12 | n/a (baseline operational) | n/a | n/a | RM-3.1 fast-reversal label infrastructure (retroactive label computation; 53.7% of alignment entries identified as reversals) | — |
 | 2026-05-12 | n/a (baseline operational) | n/a | n/a | RM-14 drift detection wired (catches ranker_proba distribution shift early) | — |
 | 2026-05-12 | n/a (baseline operational) | n/a | n/a | RM-15 Sharpe + maxdd constraints in attribution (hypothesis improving NS but degrading risk profile correctly classified `regression`) | — |
 
@@ -280,6 +281,8 @@ something that does. The "Why for North Star" column makes the chain explicit.
 | ~~RM-1~~ | ~~Extend `bot_events.jsonl` blocked events with full decision state~~ ✅ **DONE 2026-05-12** — `_build_block_context()` helper; wired 8 high-frequency block sites (ml_zone, entry_score, trend_quality, trend_chop, ranker_hard_veto, impulse_guard, mode_range_quality, correlation_guard); full context logged; 6 unit tests in `test_blocked_event_logging.py` | 4-6h | Unblocks universal Pareto-sweep validators (L3-c) so future `relax_gate_*` hypotheses can ACTUALLY measure effect — without this, ~40% of L2 proposals end at `pending_manual_validation` |
 | ~~RM-2~~ | ~~Structured `reason_code` enum in blocked events~~ ✅ **DONE 2026-05-12** — Reason codes (ml_zone, entry_score, trend_quality, etc.) + gate fields in all blocked events; `_backtest_blocked_breakdown.py` for analysis; backwards compatible | 2h | Lets L4 sim filter blocked events generically by gate name — same unblocking as RM-1 |
 | RM-3 | Anti-fast-reversal full chain (label → proba → guard → bandit reward) — see [`anti-fast-reversal-spec.md`](anti-fast-reversal-spec.md) | 2-3 days | 53.7% of `alignment` entries reverse within 3 bars. These ARE the false-positive buys that drag North Star down. Direct attack on the biggest signal-quality leak |
+  | RM-3.1 | ✅ **Label infrastructure DONE 2026-05-12** — `label_fast_reversal` in critic_dataset schema, retroactive computation, entry context storage, 3 unit tests | 1.5 days | Enables future model training |
+  | RM-3.2 | 🟡 Train model + Pareto backtest (next) | 1-2 days | Find optimal threshold |
 
 ### Sprint 1 — Principled statistics + risk discipline (≈ 1 week)
 

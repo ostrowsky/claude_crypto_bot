@@ -95,7 +95,12 @@ Rollout: сначала `False` (только label/model/feature/reward, без
 
 Implementation order (строго):
 
-- [ ] **Label** в обоих dataset’ах.
+- [x] **Label** в обоих dataset’ах. ✅ DONE 2026-05-12
+  * Added `label_fast_reversal` to critic_dataset schema
+  * Compute retroactively: `label = 1` if `low(t+1..t+3) ≤ entry × (1 - ATR_pct × trail_k)`
+  * Store entry context (atr_pct, trail_k) at entry time
+  * 3 unit tests passing (hit/miss/volatility scenarios)
+  * Spec: docs/specs/features/anti-fast-reversal-spec.md
 - [ ] **Train** модель + AUC отчёт.
 - [ ] **60-day backtest** — посчитать recall@top20 при разных порогах
       `FAST_REVERSAL_PROBA_MAX`, выбрать Pareto-точку.
