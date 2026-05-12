@@ -119,6 +119,11 @@ def main():
     # L7 — monitor (legacy naive before/after — keep for backward compat)
     results.append(run_step("L7 monitor", [py, f"{files}/pipeline_monitor.py", "--check-after-days", "7"]))
 
+    # Drift detection (RM-14) — KS test on ranker_proba etc. distributions.
+    # Cheap (sub-second) and catches market-regime shift BEFORE recall@20
+    # collapses. Drift reports go to .runtime/pipeline/drift/.
+    results.append(run_step("drift", [py, f"{files}/pipeline_drift.py"]))
+
     # Attribution — normalised delta + bootstrap CI for every approved decision
     # that has both a pinned baseline and >= 4 post-apply health reports.
     # Skips silently for fresh decisions ("needs_data" verdict).

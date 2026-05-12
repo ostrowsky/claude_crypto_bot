@@ -55,6 +55,19 @@ ATTRIBUTION_DIR = PL.PIPELINE / "attribution"
 ATTRIBUTION_DIR.mkdir(parents=True, exist_ok=True)
 ATTRIBUTION_LOG = ATTRIBUTION_DIR / "attribution.jsonl"
 
+# --- Multi-objective constraints (RM-15) -----------------------------------
+#
+# A hypothesis that improves its target metric while regressing portfolio
+# Sharpe or worsening max drawdown is NOT a win. These thresholds are the
+# acceptable degradation budget per change:
+#   * Sharpe may not drop more than 10% relative to baseline
+#   * Max drawdown may not grow more than 10pp absolute
+# A change that violates either is recorded as `regression` even if the
+# target metric improved.
+MULTI_OBJ_SHARPE_REL_MAX_DROP  = 0.10
+MULTI_OBJ_MAXDD_ABS_MAX_GROWTH = 0.10
+MULTI_OBJ_MIN_TRADES           = 10     # need a minimum of post-window trades to estimate
+
 DEFAULT_DAYS_AFTER = 14
 MIN_POST_SAMPLES   = 4
 BOOTSTRAP_N        = 1000
@@ -110,6 +123,149 @@ def _sign_test_prop(pre: list[float], post: list[float]) -> float:
         return float("nan")
     pre_med = median(pre)
     return sum(1 for v in post if v > pre_med) / len(post)
+
+
+# --- Portfolio-level multi-objective metrics (Sharpe + max drawdown) -------
+#
+# We compute these from `critic_dataset.jsonl` rows in the relevant window.
+# Each `take` row has `labels.trade_exit_pnl` (or `labels.ret_5` fallback)
+# which we treat as the realized return of the trade. Sharpe = mean / std.
+# Max drawdown = largest peak-to-trough drop on the cumulative return curve.
+
+CRITIC_DATASET = PL.FILES_DIR / "critic_dataset.jsonl"
+
+
+def _trade_returns_in_window(start: datetime, end: datetime) -> list[float]:
+    """All realized per-trade returns whose timestamp falls in [start, end].
+
+    Empty list if file missing or no trades. Same ts-parsing convention as
+    pipeline_drift / pipeline_shadow (accept ISO or ms-since-epoch).
+    """
+    if not CRITIC_DATASET.exists():
+        return []
+    out: list[float] = []
+    for ev in PL.iter_jsonl(CRITIC_DATASET):
+        dec = ev.get("decision") or {}
+        if dec.get("action") != "take":
+            continue
+        ts_raw = ev.get("bar_ts") or ev.get("ts_signal")
+        if ts_raw is None:
+            continue
+        if isinstance(ts_raw, (int, float)):
+            try:
+                ts = datetime.fromtimestamp(float(ts_raw) / 1000.0, tz=timezone.utc)
+            except (OverflowError, OSError, ValueError):
+                continue
+        else:
+            try:
+                ts = datetime.fromisoformat(str(ts_raw).replace("Z", "+00:00"))
+            except (AttributeError, ValueError):
+                continue
+        if not (start <= ts <= end):
+            continue
+        labels = ev.get("labels") or {}
+        pnl = labels.get("trade_exit_pnl")
+        if pnl is None:
+            pnl = labels.get("ret_5")
+        if pnl is None:
+            continue
+        try:
+            out.append(float(pnl))
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def _sharpe(returns: list[float]) -> float | None:
+    """Naive Sharpe = mean / stdev. Returns are already in percent units,
+    so the result is a unitless ratio. None if too few samples."""
+    if len(returns) < 2:
+        return None
+    m = sum(returns) / len(returns)
+    var = sum((r - m) ** 2 for r in returns) / (len(returns) - 1)
+    std = var ** 0.5
+    if std == 0:
+        return None
+    return round(m / std, 4)
+
+
+def _max_drawdown_pct(returns: list[float]) -> float | None:
+    """Max peak-to-trough drop on the equity curve built from compounding
+    these returns. Returns are %-units (e.g. 1.2 means +1.2%). Result is in
+    percent points (absolute drawdown, e.g. 0.15 means 15pp drop)."""
+    if not returns:
+        return None
+    equity = 1.0
+    peak = 1.0
+    max_dd = 0.0
+    for r in returns:
+        equity *= (1.0 + r / 100.0)
+        if equity > peak:
+            peak = equity
+        dd = (peak - equity) / peak if peak > 0 else 0.0
+        if dd > max_dd:
+            max_dd = dd
+    return round(max_dd, 4)
+
+
+def _portfolio_objectives(decision_ts: datetime, days_after: int,
+                          baseline: dict) -> dict:
+    """Compute Sharpe + max drawdown for both pre-window (from baseline) and
+    post-window, return deltas. Returns None for any metric we can't compute
+    (not enough trades on one side)."""
+    # Pre: rebuild returns from the same pre-window as the baseline
+    pre_days = baseline.get("pre_window_days", 14)
+    pre_returns = _trade_returns_in_window(
+        decision_ts - timedelta(days=pre_days), decision_ts)
+    post_returns = _trade_returns_in_window(
+        decision_ts, decision_ts + timedelta(days=days_after))
+
+    out = {
+        "n_pre_trades":   len(pre_returns),
+        "n_post_trades":  len(post_returns),
+        "sharpe_pre":     _sharpe(pre_returns),
+        "sharpe_post":    _sharpe(post_returns),
+        "maxdd_pre":      _max_drawdown_pct(pre_returns),
+        "maxdd_post":     _max_drawdown_pct(post_returns),
+    }
+
+    # Skip rule: with too few trades on either side we can't sanely measure
+    if (out["n_pre_trades"] < MULTI_OBJ_MIN_TRADES
+        or out["n_post_trades"] < MULTI_OBJ_MIN_TRADES):
+        out["status"] = "insufficient_trades"
+        return out
+
+    violations = []
+    if out["sharpe_pre"] is not None and out["sharpe_post"] is not None:
+        # Relative drop in Sharpe, only flagged if pre was positive (otherwise
+        # ratios behave weirdly)
+        if out["sharpe_pre"] > 0:
+            rel_drop = (out["sharpe_pre"] - out["sharpe_post"]) / abs(out["sharpe_pre"])
+            out["sharpe_rel_drop"] = round(rel_drop, 4)
+            if rel_drop > MULTI_OBJ_SHARPE_REL_MAX_DROP:
+                violations.append({
+                    "constraint": "sharpe_relative_drop",
+                    "limit":      MULTI_OBJ_SHARPE_REL_MAX_DROP,
+                    "observed":   round(rel_drop, 4),
+                    "pre":        out["sharpe_pre"],
+                    "post":       out["sharpe_post"],
+                })
+
+    if out["maxdd_pre"] is not None and out["maxdd_post"] is not None:
+        growth = out["maxdd_post"] - out["maxdd_pre"]
+        out["maxdd_abs_growth"] = round(growth, 4)
+        if growth > MULTI_OBJ_MAXDD_ABS_MAX_GROWTH:
+            violations.append({
+                "constraint": "maxdd_abs_growth",
+                "limit":      MULTI_OBJ_MAXDD_ABS_MAX_GROWTH,
+                "observed":   round(growth, 4),
+                "pre":        out["maxdd_pre"],
+                "post":       out["maxdd_post"],
+            })
+
+    out["violations"] = violations
+    out["status"] = "violations" if violations else "ok"
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -271,8 +427,21 @@ def attribute(
                 f"CI95_high={pm['ci95_high']:+.4f}"
             )
 
+    # Multi-objective constraints (RM-15): Sharpe + max-drawdown checks.
+    # A target-metric hit is ONLY a real win if the portfolio's risk
+    # profile didn't degrade alongside it. Violations downgrade the
+    # verdict to `regression` so L7 picks it up as a rollback candidate.
+    portfolio_obj = _portfolio_objectives(ts, days_after, baseline)
+    obj_violations = portfolio_obj.get("violations") or []
+    for v in obj_violations:
+        rationale.append(
+            f"MULTI_OBJ violation: {v['constraint']} "
+            f"observed={v['observed']:+.4f} > limit={v['limit']:+.4f} "
+            f"(pre={v['pre']}, post={v['post']})"
+        )
+
     # Final verdict
-    if regressions:
+    if regressions or obj_violations:
         verdict_str = "regression"
     elif not expected:
         verdict_str = "skip"
@@ -295,6 +464,7 @@ def attribute(
         "expected_hits":       expected_hits,
         "expected_misses":     expected_misses,
         "regressions":         regressions,
+        "portfolio_objectives": portfolio_obj,
         "rationale":           rationale,
         "per_metric":          per_metric,
     }

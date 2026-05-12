@@ -3,7 +3,7 @@
 - **Slug:** `auto-improvement-loop`
 - **Status:** in-progress — see component matrix below
 - **Created:** 2026-05-12
-- **Last updated:** 2026-05-12
+- **Last updated:** 2026-05-12 (after Sprint 1 partial: RM-14 + RM-15 landed)
 - **Owner:** Vasiliy Ostrovsky + Claude
 - **North Star:** `watchlist_top_early_capture_pct` (see [PROJECT_CONTEXT.md](../../../PROJECT_CONTEXT.md))
 - **Project priority:** P0 (founding principle, see [CLAUDE.md §0](../../../CLAUDE.md))
@@ -180,6 +180,8 @@ Legend: ✅ done · 🟡 partial · ❌ not implemented · ⏸ deferred
 | L7-f | Rollback recommendations log | ✅ | — | `monitor/rollback_recommendations.jsonl` |
 | L7-g | Rollback rec rendered in Telegram | ✅ | `test_pipeline_notify.py` | de-duped against already-rolled-back |
 | L7-h | Auto-execute rollback | ❌ | — | linked to L6-f |
+| L7-i | **Drift detection on ranker_proba (RM-14)** | ✅ | `test_pipeline_drift.py` (16) | KS two-sample, stdlib-only, wired into `pipeline_run.py --daily` |
+| L7-j | **Multi-objective constraints (RM-15)** | ✅ | `test_pipeline_attribution_multiobj.py` (14) | Sharpe/maxdd checks in attribution; violations promote verdict to `regression` |
 
 ### Memory
 
@@ -252,6 +254,8 @@ missing rows = the loop isn't really closing.
 |------|-------------------|------------------|------------------------|----------------|---------------------|
 | 2026-05-11 | 6.7% (midday) → 40.0% (final) | +66.7% (midday view) | n/a | — | — |
 | 2026-05-12 | tbd (early-day, no critic yet) | tbd | n/a | unified Telegram + UI cache + critic phase fix | — |
+| 2026-05-12 | n/a (baseline operational) | n/a | n/a | RM-14 drift detection wired (catches ranker_proba distribution shift early) | — |
+| 2026-05-12 | n/a (baseline operational) | n/a | n/a | RM-15 Sharpe + maxdd constraints in attribution (a hypothesis that improves NS but degrades risk profile now correctly classified `regression`) | — |
 
 Conventions for filling the table:
 - One row per measurable change. Re-measurements every 7/14/30 days get
@@ -265,47 +269,130 @@ Conventions for filling the table:
 
 ## 5. Roadmap — prioritised
 
-### P0 — Unblock universal validation (loop cannot close without these)
+Each item directly contributes to North Star (`early_capture_pct`) or unblocks
+something that does. The "Why for North Star" column makes the chain explicit.
 
-| ID | Item | Effort | Unblocks |
-|----|------|--------|----------|
-| RM-1 | Extend `bot_events.jsonl` blocked events with full decision state (`ranker_final_score`, `candidate_score`, `score_floor`, `ml_proba`, `gate_threshold`) | 4-6h | L3-c, L4-c, L2-h |
-| RM-2 | Structured `reason_code` enum in blocked events | 2h | L3-c, L2-h |
-| RM-3 | Anti-fast-reversal full chain (label → proba → guard → bandit reward) — see [`anti-fast-reversal-spec.md`](anti-fast-reversal-spec.md) | 2-3 days | ML-f → ML-i |
+### Sprint 0 — P0 unblock (loop cannot close without these)
 
-### P1 — Close the auto-execution gap
+| ID | Item | Effort | Why for North Star |
+|----|------|--------|---------------------|
+| RM-1 | Extend `bot_events.jsonl` blocked events with full decision state (`ranker_final_score`, `candidate_score`, `score_floor`, `ml_proba`, `gate_threshold`) | 4-6h | Unblocks universal Pareto-sweep validators (L3-c) so future `relax_gate_*` hypotheses can ACTUALLY measure effect — without this, ~40% of L2 proposals end at `pending_manual_validation` |
+| RM-2 | Structured `reason_code` enum in blocked events | 2h | Lets L4 sim filter blocked events generically by gate name — same unblocking as RM-1 |
+| RM-3 | Anti-fast-reversal full chain (label → proba → guard → bandit reward) — see [`anti-fast-reversal-spec.md`](anti-fast-reversal-spec.md) | 2-3 days | 53.7% of `alignment` entries reverse within 3 bars. These ARE the false-positive buys that drag North Star down. Direct attack on the biggest signal-quality leak |
 
-| ID | Item | Effort |
-|----|------|--------|
-| RM-4 | Runtime config-override mechanism (`decisions.jsonl` → applied overrides at bot startup, no `config.py` edit needed) | 1 day |
-| RM-5 | Auto-rollback gated by `AUTO_ROLLBACK_ENABLED` flag (default off), uses RM-4 | 4h |
-| RM-6 | ROI dashboard (`pipeline_roi.py`) — quarterly trend of hit_rate, regression_rate, per-target attributions | half day |
+### Sprint 1 — Principled statistics + risk discipline (≈ 1 week)
 
-### P1 — Learning system upgrades
+These add **causal rigour and risk guardrails** the current loop lacks. Most
+production trading systems have these; we don't yet.
 
-| ID | Item | Effort |
-|----|------|--------|
-| RM-7 | Include config-state hash in bandit context | 1h |
-| RM-8 | Outcome-aware hypothesis priority (mini-classifier on `decisions.jsonl` history) | 1 day |
-| RM-9 | Capture operator-vs-advisor disagreement reasons → feedback loop for Claude advisor prompt | half day |
+| ID | Item | Effort | Why for North Star |
+|----|------|--------|---------------------|
+| ~~RM-14~~ | ~~**Drift detection** — KS-test / ADWIN on `ranker_proba` distribution daily; alert + optional force-retrain when drift > threshold~~ ✅ **DONE 2026-05-12** — `pipeline_drift.py` + 16 tests; wired into orchestrator | 1 day | Currently we retrain blindly every night. With drift detection we catch market-regime shift (bull → chop) BEFORE recall@20 collapses. Prevents NS degradation, not improvement, but the baseline matters |
+| ~~RM-15~~ | ~~**Multi-objective approve constraints** — hypothesis must not regress Sharpe or drawdown beyond thresholds, in addition to expected delta~~ ✅ **DONE 2026-05-12** — Sharpe (rel drop > 10%) + max-drawdown (abs growth > 10pp) checks added to `pipeline_attribution._portfolio_objectives`; violations promote verdict to `regression`. 14 tests. | 1 day | Today we optimise `early_capture` in isolation. A hypothesis that improves NS by 5pp while doubling drawdown is currently approved. With this gate it's blocked |
+| RM-16 | **Synthetic control attribution** — for each treated period, build synthetic control from similar non-treated periods (matched on volatility regime + BTC trend) | 3-4 days | Current `market_drift = ref_post − ref_pre` is crude; bootstrap CIs straddle zero on mid-size effects. Synthetic control gives tighter CIs on same data → more decisions correctly classified hit/miss → faster correct iteration |
+| RM-17 | **Bayesian optimization** for numerical thresholds (Optuna) — replace point-estimate rule heuristics with Gaussian Process surrogate over 20 trials | 1 week | For continuous params (`ENTRY_SCORE_FLOOR`, `ML_PROBA_MIN_*`), BO explores the Pareto frontier in 20 backtests where rule-based gives one number. Higher chance of finding the actual optimum |
 
-### P2 — Operator visibility
+### Sprint 2 — Close auto-execution gap (≈ 1 week)
 
-| ID | Item | Effort |
-|----|------|--------|
-| RM-10 | Drill-down: "why did this trade go wrong" (per trade_id step-by-step) | half day |
-| RM-11 | Portfolio-level rolling alpha vs B&H metric | 1 day |
+| ID | Item | Effort | Why for North Star |
+|----|------|--------|---------------------|
+| RM-4 | **Runtime config-override mechanism** — bot reads `decisions.jsonl` at startup and applies approved overrides on top of `config.py` defaults; no daemon writing to `config.py` | 1 day | Today every apply requires 4 manual steps. Auto-execute is unsafe without this layer. Speeds operator cycle from hours to seconds and unblocks RM-5/RM-18 |
+| RM-5 | **Auto-rollback** gated by `AUTO_ROLLBACK_ENABLED=False` default, uses RM-4 | 4h | When attribution says "miss with CI excluding zero on wrong side", system rolls back without operator action. Saves NS from dragging during ignored regression |
+| RM-18 | **Canary rollout** (5% → 25% → 100% by trades-per-day) with mSPRT sequential test gating each promotion | 1 week | Today each apply is full bet on 14 days. Canary cuts initial risk 20× and surfaces a bad change in ~3 days instead of 14 |
 
-### P3 — Robustness
+### Sprint 3 — Learning system upgrades (≈ 1 week)
 
-| ID | Item | Effort |
-|----|------|--------|
-| RM-12 | Stress test catalog expansion (Claude timeout, race conditions, malformed payloads, cold-start path) | 1 day |
-| RM-13 | Time-zone unit tests + UTC normalisation at write time | 3h |
+| ID | Item | Effort | Why for North Star |
+|----|------|--------|---------------------|
+| RM-7 | Include **config-state hash** in bandit context vector | 1h | Bandit currently doesn't know which gates are enabled. When config changes, the policy is silently stale. With hash in context, bandit re-learns per config epoch |
+| RM-8 | **Outcome-aware hypothesis priority** — mini-classifier on `decisions.jsonl` predicting `P(hit \| hypothesis_features)` | 1 day | L2 today ranks by severity only. With this, hypotheses similar to past hits surface first → fewer wasted approve cycles |
+| RM-9 | Capture **operator-vs-advisor disagreement** reasons → calibration dataset for L6 Claude advisor system prompt | half day | When operator overrides Claude's reject, the disagreement signal is lost. With this, Claude advisor gradually learns operator's risk tolerance |
 
-### P4 — Already covered by other specs
+### Sprint 4 — Operator visibility & ROI (≈ 1 week)
 
-- L4-g (bot-side per-config-key shadow) — partial coverage exists; expanding is feature-by-feature, not infrastructure work. Treat as part of each feature's own spec.
+| ID | Item | Effort | Why for North Star |
+|----|------|--------|---------------------|
+| RM-6 | **ROI dashboard** (`pipeline_roi.py`) — quarterly trend of `hit_rate`, `regression_rate`, per-target attribution | half day | Today operator sees one Telegram message per day, no longitudinal view. Dashboard makes "are we improving over time?" answerable in 5 sec |
+| RM-10 | **Drill-down** — per-`trade_id` step-by-step decision path explaining why each premature exit / loss happened | half day | When Telegram says "GLMUSDT premature exit", operator can't act on it. Drill-down points to the specific decision step (trail_k value? EMA cross timing? orderflow signal?) so the next hypothesis is targeted |
+| RM-11 | **Portfolio-level rolling alpha vs B&H** as primary attribution metric | 1 day | Per-trade NS is necessary but not sufficient. Portfolio alpha captures interaction effects between concurrent positions and rotation decisions |
+
+### Sprint 5 — Regime + causal frontier (≈ 2-3 weeks, optional)
+
+These are the highest-effort items; only attempt after Sprints 0-4 are stable.
+
+| ID | Item | Effort | Why for North Star |
+|----|------|--------|---------------------|
+| RM-19 | **Regime-conditional policies** — HMM with changepoint detection; parameters conditional on regime (bull / chop / bear) | 2-3 weeks | Parameters optimal in bull market fail in chop. Regime-conditional config eliminates the worst class of false positives we currently miss |
+| RM-20 | **Causal graph** for hypothesis interactions — Structural Causal Model + mediation analysis | 2 weeks | Apply A + Apply B ≠ sum of individual effects (gates interact). Causal graph predicts interaction; without it we sometimes "improve" NS by combination of changes that individually would be approved but together regress |
+
+### Sprint 6 — Robustness (background, ongoing)
+
+| ID | Item | Effort | Why for North Star |
+|----|------|--------|---------------------|
+| RM-12 | Stress test catalog expansion (Claude timeout, race conditions, malformed payloads, cold-start, concurrent decision retry) | 1 day | Pipeline outage = no NS improvement. Each new failure-mode tested = one less days/weeks of silent stagnation |
+| RM-13 | Time-zone unit tests + UTC normalisation at write time | 3h | Off-by-one-day reports already exist in critic phase mixing; risk of silently using wrong day's data for attribution |
+
+### Already covered by other specs (out of this roadmap)
+
+- L4-g (bot-side per-feature shadow) — partial coverage exists; expanding is feature-by-feature, tracked in each feature's own spec.
+
+---
+
+## 5b. Roadmap → North Star chain (verification)
+
+The user's challenge: "удостоверься, что roadmap ведет к достижению метрик
+назначения бота". Here's the explicit causal chain.
+
+```
+NS = early_capture_pct
+      ↑
+      ├─ depends on signal QUALITY (bot's BUYs hit top-20 early)
+      │     ↑
+      │     ├─ depends on model accuracy (already ML-a..d) ✅
+      │     ├─ depends on filter calibration (gates not blocking winners) ← RM-1, RM-2, RM-17
+      │     ├─ depends on fast-reversal suppression (no whipsaw entries)  ← RM-3
+      │     └─ depends on regime awareness (bull vs chop)                 ← RM-19
+      │
+      ├─ depends on signal QUANTITY (enough BUYs to catch top-20)
+      │     ↑
+      │     ├─ depends on gate looseness                  ← RM-1, RM-2 (validate relax)
+      │     ├─ depends on watchlist coverage              ← RM-4 (apply approved widen)
+      │     └─ depends on canary safety on volume changes ← RM-18
+      │
+      ├─ depends on PIPELINE EFFECTIVENESS at finding & applying improvements
+      │     ↑
+      │     ├─ depends on validation rigour      ← RM-16 (synthetic control)
+      │     ├─ depends on learning from outcomes ← RM-8 (outcome-aware priority)
+      │     ├─ depends on tight cycle time       ← RM-4, RM-5 (auto-execute)
+      │     ├─ depends on multi-objective sanity ← RM-15 (no Sharpe regressions)
+      │     └─ depends on drift detection        ← RM-14 (catch staleness early)
+      │
+      └─ depends on OPERATOR VISIBILITY (acts on right things)
+            ↑
+            ├─ ROI dashboard            ← RM-6
+            ├─ Drill-down incident root ← RM-10
+            └─ Portfolio-level alpha    ← RM-11
+```
+
+**Every RM-N exists to remove one specific friction in this chain.** No roadmap
+item is "nice to have" — each has a target node in the diagram that it
+unblocks or strengthens.
+
+---
+
+## 5c. Sprint priorities (what to do next)
+
+If resources are constrained, follow this order:
+
+1. **Sprint 0 (P0)** — RM-1, RM-2, RM-3. These unblock entire classes of future work.
+2. **Sprint 1** (today's most achievable upgrade) — RM-14 + RM-15 first (≈ 2 days, no dependencies, immediate NS protection); then RM-16 + RM-17 (≈ 2 weeks, jumps to research-quality).
+3. **Sprint 2** — RM-4 (foundation), then RM-5, RM-18 (depend on RM-4).
+4. **Sprints 3-6** — schedule by appetite.
+
+The reason RM-14 + RM-15 come first in Sprint 1: they are **defensive**
+(prevent NS degradation) and have zero dependencies, so they can ship today.
+RM-16 + RM-17 are offensive (improve NS) but heavier — start them once the
+defensive floor is in.
 
 ---
 
