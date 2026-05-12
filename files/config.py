@@ -95,8 +95,15 @@ TOP_GAINER_CRITIC_TIMEZONE: str = "Europe/Budapest"
 TOP_GAINER_CRITIC_TOP_N: int = 15
 TOP_GAINER_CRITIC_MIN_QUOTE_VOLUME_24H: float = 1_000_000.0
 RL_TELEGRAM_REPORTS_ENABLED: bool = True
-RL_TRAIN_TELEGRAM_REPORTS_ENABLED: bool = True
-TOP_GAINER_CRITIC_TELEGRAM_REPORTS_ENABLED: bool = True
+# 2026-05-12: B+ plan — single daily Telegram via pipeline_notify.py.
+# Each of these used to fire its own message at random hours, with overlapping
+# or contradictory numbers vs the unified health snapshot. Folded into the
+# daily pipeline report. Rollback: flip back to True; the standalone message
+# returns immediately (no other change required).
+RL_TRAIN_TELEGRAM_REPORTS_ENABLED:           bool = False  # rl_headless_worker.py:651
+TOP_GAINER_CRITIC_TELEGRAM_REPORTS_ENABLED:  bool = False  # rl_headless_worker.py:742
+DAILY_LEARNING_TELEGRAM_REPORTS_ENABLED:     bool = False  # daily_learning.py — full retrain digest
+SIGNAL_EVALUATOR_TELEGRAM_REPORTS_ENABLED:   bool = False  # _weekly_signal_eval_with_tg.py — daily incidents
 RL_WORKER_ENABLE_COLLECTOR: bool = False
 BOT_ENABLE_DATA_COLLECTOR: bool = False
 
@@ -985,7 +992,7 @@ OPEN_SIGNAL_CLUSTER_CAP_ENABLED: bool = True
 OPEN_SIGNAL_CLUSTER_CAP_15M_SHORT_BOUNCE_MODES: tuple = ("breakout", "retest")
 OPEN_SIGNAL_CLUSTER_CAP_15M_SHORT_BOUNCE_MAX: int = 2
 OPEN_SIGNAL_CLUSTER_CAP_15M_IMPULSE_MODES: tuple = ("impulse_speed",)
-OPEN_SIGNAL_CLUSTER_CAP_15M_IMPULSE_MAX: int = 5   # was 2 — 149 blocks in recent events (ORDI, FLUX blocked)  # scout:16.04.2026 was 4
+OPEN_SIGNAL_CLUSTER_CAP_15M_IMPULSE_MAX: int = 9   # was 2 — 149 blocks in recent events (ORDI, FLUX blocked)  # scout:10.05.2026 was 9
 OPEN_SIGNAL_CLUSTER_CAP_1H_RETEST_MODES: tuple = ("retest",)
 OPEN_SIGNAL_CLUSTER_CAP_1H_RETEST_MAX: int = 1
 

@@ -41,6 +41,7 @@ from telegram.ext import (
 import config
 from monitor import MonitorState, monitoring_loop, load_positions, save_positions
 from strategy import market_scan, check_entry_conditions, check_setup_conditions, analyze_coin, fetch_klines, get_entry_mode
+import bot_ui_cache
 
 logging.basicConfig(
     level=logging.INFO,
@@ -103,9 +104,13 @@ def kb_main() -> InlineKeyboardMarkup:
     #   ▶️ Анализ + Мониторинг  — ни анализа, ни мониторинга нет
     #   🔄 Повторный анализ     — мониторинг уже работает (перезапустить анализ)
     #   ⏹ Стоп мониторинга     — остановить всё
-    pos  = len(state.positions)
-    wl   = len(config.load_watchlist())
-    hot  = len(state.hot_coins)
+    # Hot-path: read counts from cache (no disk I/O). `conf` still scans the
+    # in-memory hot_coins list — it's small, sub-ms, and we want the freshest
+    # "confirmed" count when the operator looks.
+    snap = _ui_snapshot_now()
+    pos  = snap.pos_count
+    wl   = snap.wl_count
+    hot  = snap.hot_count
     conf = len([r for r in state.hot_coins if r.today_confirmed])
 
     if state.running:
@@ -251,9 +256,50 @@ def _safe_truncate(text: str, max_len: int = 4000) -> str:
     return text[:cut] + "\n…"
 
 
+def _ui_snapshot_now() -> bot_ui_cache.UISnapshot:
+    """Return the freshest UI snapshot for menu/positions render.
+
+    Hot-path priority: cached value first (sub-ms read). If the cache is
+    empty (e.g. immediately after restart, before the keeper task has run)
+    we fall back to an in-memory build that may briefly hit disk for
+    `load_watchlist`. The fallback also publishes the snapshot so the next
+    caller is fast.
+
+    Critical: never `_refresh_positions_state` (disk + dict merge) on this
+    path. The monitor task keeps `state.positions` fresh in memory."""
+    cached = bot_ui_cache.get()
+    if cached is not None:
+        return cached
+    try:
+        wl_count = len(config.load_watchlist())
+    except Exception:
+        wl_count = -1
+    return bot_ui_cache.refresh(
+        wl_count=wl_count,
+        hot_count=len(state.hot_coins),
+        pos_count=len(state.positions),
+        running=bool(state.running),
+    )
+
+
+def _publish_ui_snapshot() -> None:
+    """Recompute and publish the snapshot. Called by the background keeper
+    every few seconds AND by any code that knows the state just changed."""
+    try:
+        wl_count = len(config.load_watchlist())
+    except Exception:
+        wl_count = -1
+    bot_ui_cache.refresh(
+        wl_count=wl_count,
+        hot_count=len(state.hot_coins),
+        pos_count=len(state.positions),
+        running=bool(state.running),
+    )
+
+
 def _main_menu_text() -> str:
-    wl = config.load_watchlist()
-    status = "▶️ запущен" if state.running else "⏹ остановлен"
+    snap = _ui_snapshot_now()
+    status = "▶️ запущен" if snap.running else "⏹ остановлен"
     try:
         import build_info as _bi
         _build_str = _bi.get_build_info_str()
@@ -263,9 +309,9 @@ def _main_menu_text() -> str:
         f"👋 *Crypto Trend Bot*\n"
         f"🔖 `{_build_str}`\n\n"
         f"Мониторинг: {status}\n"
-        f"Монет в списке: *{len(wl)}*\n"
-        f"Монет «в игре» сегодня: *{len(state.hot_coins)}*\n"
-        f"Открытых сигналов: *{len(state.positions)}*"
+        f"Монет в списке: *{snap.wl_count}*\n"
+        f"Монет «в игре» сегодня: *{snap.hot_count}*\n"
+        f"Открытых сигналов: *{snap.pos_count}*"
     )
 
 
@@ -418,11 +464,37 @@ def _menu_panel_text(prefix: str | None = None) -> str:
     return text
 
 
+def _schedule_positions_refresh_bg() -> None:
+    """Fire-and-forget background refresh of positions state.
+
+    The UI path used to call `_refresh_positions_state()` inline (disk I/O +
+    dict merge). With the event loop occasionally held by monitoring_loop,
+    that meant the menu didn't render until both the I/O AND whatever was
+    blocking the loop completed. Now: render immediately from in-memory
+    state, schedule the refresh so the NEXT render sees fresh data."""
+    try:
+        loop = asyncio.get_running_loop()
+        _track_background_task(
+            loop.create_task(asyncio.to_thread(_refresh_positions_state)),
+            "positions_refresh_bg",
+        )
+    except RuntimeError:
+        # No running loop (e.g. import-time call) — safe to skip
+        pass
+    except Exception as e:
+        log.debug("positions refresh schedule skipped: %s", e)
+
+
 async def _show_menu_panel_message(msg, force_refresh: bool = False, prefix: str | None = None) -> None:
-    _refresh_positions_state()
+    """Render the main menu. Must complete in <100ms even if the event loop
+    is contended; step timings are logged so any regression is visible."""
+    t0 = time.perf_counter()
+    _schedule_positions_refresh_bg()
     text = _main_menu_text()
     if prefix:
         text = f"{prefix}\n\n{text}"
+    keyboard = kb_main()
+    t_built = time.perf_counter()
     if force_refresh:
         try:
             await _reply_text_with_retry(
@@ -436,30 +508,24 @@ async def _show_menu_panel_message(msg, force_refresh: bool = False, prefix: str
         msg,
         text,
         parse_mode=ParseMode.MARKDOWN,
-        reply_markup=kb_main(),
+        reply_markup=keyboard,
     )
+    t_sent = time.perf_counter()
+    build_ms = (t_built - t0) * 1000
+    send_ms  = (t_sent - t_built) * 1000
+    total_ms = (t_sent - t0) * 1000
+    if total_ms > 1000:
+        log.warning("menu slow: build=%.0fms send=%.0fms total=%.0fms (event loop may be held)",
+                    build_ms, send_ms, total_ms)
+    else:
+        log.info("menu rendered: build=%.0fms send=%.0fms total=%.0fms",
+                 build_ms, send_ms, total_ms)
 
 
 async def _show_main_menu_message(msg, force_refresh: bool = False, prefix: str | None = None) -> None:
-    _refresh_positions_state()
-    text = _main_menu_text()
-    if prefix:
-        text = f"{prefix}\n\n{text}"
-    if force_refresh:
-        try:
-            await _reply_text_with_retry(
-                msg,
-                "Меню активно.",
-                reply_markup=kb_menu_reply(),
-            )
-        except Exception as e:
-            log.warning("menu keyboard refresh failed: %s", e)
-    await _reply_text_with_retry(
-        msg,
-        text,
-        parse_mode=ParseMode.MARKDOWN,
-        reply_markup=kb_main(),
-    )
+    # Same fast-path as _show_menu_panel_message — kept as a separate name
+    # because some callers use it for the "main menu" semantic (e.g. /start).
+    await _show_menu_panel_message(msg, force_refresh=force_refresh, prefix=prefix)
 
 
 class _ReplyActionQuery:
@@ -612,12 +678,28 @@ def _positions_message_html() -> str:
 
 
 async def _show_positions_message(msg) -> None:
+    """Render the positions list. Hot path uses in-memory `state.positions`;
+    a refresh is scheduled in the background so the NEXT render is fresh."""
+    t0 = time.perf_counter()
+    _schedule_positions_refresh_bg()
+    html = _positions_message_html()
+    t_html = time.perf_counter()
     await _reply_text_with_retry(
         msg,
-        _positions_message_html(),
+        html,
         parse_mode=ParseMode.HTML,
         reply_markup=kb_menu_reply(),
     )
+    t_sent = time.perf_counter()
+    render_ms = (t_html - t0) * 1000
+    send_ms   = (t_sent - t_html) * 1000
+    total_ms  = (t_sent - t0) * 1000
+    if total_ms > 1000:
+        log.warning("positions slow: render=%.0fms send=%.0fms total=%.0fms",
+                    render_ms, send_ms, total_ms)
+    else:
+        log.info("positions rendered: render=%.0fms send=%.0fms total=%.0fms",
+                 render_ms, send_ms, total_ms)
 
 
 async def _dispatch_reply_action(update: Update, ctx: ContextTypes.DEFAULT_TYPE, action: str) -> None:
@@ -1781,6 +1863,56 @@ async def _post_init(app: Application) -> None:
     )
     log.info("UI watchdog task scheduled (warn after %.0fs idle + pending)",
              float(getattr(config, "UI_WATCHDOG_WARN_THRESHOLD_SEC", 90.0)))
+
+    # ── UI snapshot keeper ────────────────────────────────────────────────
+    # Holds (wl_count, hot_count, pos_count, running) in bot_ui_cache so the
+    # menu/positions handlers never touch the disk on the hot path. Without
+    # this, every button click reads watchlist.json from disk → blocks the
+    # event loop in tandem with monitoring_loop.
+    async def _ui_snapshot_keeper() -> None:
+        ttl = float(getattr(config, "UI_SNAPSHOT_TTL_SEC", 5.0))
+        # First refresh runs in a worker thread (asyncio.to_thread) so a slow
+        # disk doesn't delay startup.
+        while True:
+            try:
+                await asyncio.to_thread(_publish_ui_snapshot)
+            except Exception as e:
+                log.warning("ui snapshot keeper refresh failed: %s", e)
+            await asyncio.sleep(ttl)
+
+    _track_background_task(
+        asyncio.create_task(_ui_snapshot_keeper()),
+        "ui_snapshot_keeper",
+    )
+    log.info("UI snapshot keeper started (ttl=%.1fs)",
+             float(getattr(config, "UI_SNAPSHOT_TTL_SEC", 5.0)))
+
+    # ── Event-loop lag detector ────────────────────────────────────────────
+    # Goal: surface "event loop held by heavy task" symptoms in the log.
+    # We sleep for SAMPLE_INTERVAL seconds; if asyncio wakes us up much
+    # later than that, the difference is the lag. Steady lag > 500ms means
+    # the loop is being starved by sync work — the actual root cause when
+    # the menu doesn't respond to button clicks.
+    async def _event_loop_lag_detector() -> None:
+        sample = float(getattr(config, "UI_LOOP_LAG_SAMPLE_SEC", 2.0))
+        warn_threshold = float(getattr(config, "UI_LOOP_LAG_WARN_SEC", 0.5))
+        while True:
+            t0 = _time_mod.monotonic()
+            await asyncio.sleep(sample)
+            lag = (_time_mod.monotonic() - t0) - sample
+            if lag > warn_threshold:
+                log.warning(
+                    "event loop lag: %.2fs (target %.1fs, delay %.0fms over budget) "
+                    "— heavy sync task holding loop, UI may stutter",
+                    lag + sample, sample, lag * 1000,
+                )
+
+    _track_background_task(
+        asyncio.create_task(_event_loop_lag_detector()),
+        "event_loop_lag_detector",
+    )
+    log.info("Event-loop lag detector started (warn at >%.0fms lag)",
+             float(getattr(config, "UI_LOOP_LAG_WARN_SEC", 0.5)) * 1000)
 
     # ── Pump detector (2026-05-06) ──────────────────────────────────────────
     # Spec: docs/specs/features/always-watch-pump-detector-spec.md

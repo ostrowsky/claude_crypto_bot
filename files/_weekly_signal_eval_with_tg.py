@@ -100,6 +100,13 @@ def _md_to_html(text: str) -> str:
 
 
 async def send_tg(text: str) -> None:
+    # 2026-05-12: incidents (premature exits, missed trends, losing trades)
+    # are now folded into the unified pipeline_notify daily report. This
+    # standalone Telegram path stays here for ad-hoc/manual runs but is
+    # silent by default to keep the chat to one daily message.
+    if not bool(getattr(config, "SIGNAL_EVALUATOR_TELEGRAM_REPORTS_ENABLED", True)):
+        print("[skill-eval] telegram disabled (SIGNAL_EVALUATOR_TELEGRAM_REPORTS_ENABLED=False) — printing instead:")
+        print(text); return
     token = _resolve_token()
     if not token:
         print("[skill-eval] no TELEGRAM_BOT_TOKEN (env + .runtime fallback) — printing instead:")

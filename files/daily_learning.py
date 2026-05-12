@@ -78,6 +78,12 @@ def _load_chat_ids() -> list[int]:
 
 
 async def _send_telegram(text: str) -> None:
+    # 2026-05-12: folded into the unified daily report (pipeline_notify.py).
+    # Gating here, not at every call site, so /test commands and ad-hoc
+    # invocations also respect the flag.
+    if not bool(getattr(config, "DAILY_LEARNING_TELEGRAM_REPORTS_ENABLED", True)):
+        log.info("daily_learning telegram disabled (DAILY_LEARNING_TELEGRAM_REPORTS_ENABLED=False)")
+        return
     token = str(getattr(config, "TELEGRAM_BOT_TOKEN", "") or "").strip()
     if not token:
         log.warning("No TELEGRAM_BOT_TOKEN — skipping notification")
