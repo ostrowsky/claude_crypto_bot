@@ -5,11 +5,51 @@ Auto-injected into Claude Code's system prompt. Read first, trust it, don't re-d
 
 ---
 
+## 0. Founding principle — continuous learning is P0
+
+**The bot's trading algorithms must continuously learn from data in order to
+improve the bot's purpose metrics (see §1). If the data needed to learn is
+missing, collecting it is part of the work, not a separate effort.**
+
+Continuous self-improvement of the algorithms is the project's **first-priority
+task**. Every subsequent change — config tweaks, refactors, new features —
+**must be validated for alignment with this priority before merging**. The
+specific question to ask before any change:
+
+| Question | Verdict |
+|----------|---------|
+| Does this change improve the bot's ability to learn from data? | ✅ preferred |
+| Does this change leave the learning loop unchanged? | 🟡 allowed |
+| Does this change reduce, slow, or fragment learning? | 🚨 must justify or refactor |
+
+Concrete consequences:
+
+1. **A change blocked by missing logging is a logging-fix-first task.** Don't
+   speculate from incomplete state; instrument the bot.
+2. **Bypassing the pipeline (manual config edits without an approved
+   hypothesis, model retrains decoupled from pipeline decisions, ad-hoc
+   filter tweaks) weakens the loop.** Do it only with documented justification.
+3. **Training metrics that diverge from deployment metrics are the most
+   important diagnostic.** Never collapse them into a single number; never
+   hide the gap.
+4. **Memory is mandatory.** What was tried, what was approved, what was
+   rolled back — these go in `decisions.jsonl` and `already_tried.jsonl`.
+   Skipping the write is a regression.
+
+The full state of the auto-improvement loop — what's implemented, what's not,
+what the North Star metric is doing — lives in
+[`docs/specs/features/auto-improvement-loop-spec.md`](docs/specs/features/auto-improvement-loop-spec.md).
+**That spec is a living document. Every PR that touches a loop component
+must update its status row and the North Star progress table.**
+
+---
+
 ## 1. Purpose & success metric
 
 Telegram bot scanning Binance Futures/Spot in real time, generating early BUY signals on coins that will be in the daily top gainers by EOD.
 
-**Main metric:** earliest possible BUY on a coin that ends up in top-20 daily gainers (before the main move).
+**Main metric (North Star):** earliest possible BUY on a coin that ends up in top-20 daily gainers (before the main move). Operationalised as
+`watchlist_top_early_capture_pct = #(bot bought top-20 with capture_ratio ≥ 0.35) / #(top-20 in watchlist)`.
 
 - Project root: `D:\Projects\claude_crypto_bot\`
 - **DO NOT TOUCH** `D:\Projects\gpt_crypto_bot\` — separate bot, separate Telegram token, independent process. Always check cmdline before killing any python PID.
