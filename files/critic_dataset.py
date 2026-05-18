@@ -353,6 +353,9 @@ def log_candidate(
     btc_vs_ema50: float = 0.0,
     btc_momentum_4h: float = 0.0,
     market_vol_24h: float = 0.0,
+    # RM-3 anti-fast-reversal: store entry context for label computation
+    atr_pct: Optional[float] = None,
+    trail_k: Optional[float] = None,
 ) -> str:
     record_id = _candidate_id(sym, tf, bar_ts)
     if _is_logged(record_id):
@@ -420,12 +423,18 @@ def log_candidate(
         "label_3": None,
         "label_5": None,
         "label_10": None,
+        "label_fast_reversal": None,  # RM-3: 1 if low hits trail-stop in next 3 bars, 0 otherwise
         "trade_taken": action == "take",
         "trade_exit_pnl": None,
         "trade_exit_reason": None,
         "trade_bars_held": None,
         "linked_ml_record_id": "",
     }
+    # RM-3: store entry context for fast-reversal label computation later
+    if atr_pct is not None:
+        rec.setdefault("entry_context", {})["atr_pct"] = round(_safe(atr_pct), 4)
+    if trail_k is not None:
+        rec.setdefault("entry_context", {})["trail_k"] = round(_safe(trail_k), 2)
     try:
         _append(rec)
         _mark_logged(record_id)
@@ -502,7 +511,8 @@ def fill_forward_label(record_id: str, horizon: int, ret_pct: float) -> None:
     _rewrite_records(_mutate)
 
 
-def fill_pending_from_data(sym: str, tf: str, t_arr: Any, c_arr: Any, bar_ms: int) -> None:
+def fill_pending_from_data(sym: str, tf: str, t_arr: Any, c_arr: Any, bar_ms: int,
+                           l_arr: Optional[Any] = None) -> None:
     if not CRITIC_FILE.exists():
         return
 
@@ -517,6 +527,11 @@ def fill_pending_from_data(sym: str, tf: str, t_arr: Any, c_arr: Any, bar_ms: in
         entry_close = float(c_arr[idx_arr[0]])
         if entry_close <= 0:
             return False
+
+        # Store entry price for later use
+        if "entry_price" not in rec:
+            rec["entry_price"] = round(entry_close, 8)
+
         changed = False
         for h in (3, 5, 10):
             key_ret = f"ret_{h}"
@@ -532,6 +547,27 @@ def fill_pending_from_data(sym: str, tf: str, t_arr: Any, c_arr: Any, bar_ms: in
             rec["labels"][key_ret] = round(ret_pct, 4)
             rec["labels"][key_label] = ret_pct > 0
             changed = True
+
+        # RM-3: Compute fast-reversal label (1 if low in next 3 bars hits trail threshold)
+        if lab.get("label_fast_reversal") is None and l_arr is not None:
+            ctx = rec.get("entry_context", {})
+            atr_pct = ctx.get("atr_pct")
+            trail_k = ctx.get("trail_k")
+            if atr_pct is not None and trail_k is not None:
+                trail_buffer_pct = atr_pct * trail_k
+                trail_threshold = entry_close * (1.0 - trail_buffer_pct / 100.0)
+
+                # Check next 3 bars for low breach
+                future_3_ts = rec_bar_ts + 3 * bar_ms
+                fut_3_idx = np.where(t_arr >= future_3_ts)[0]
+                if len(fut_3_idx) > 0:
+                    fut_3_bar_idx = idx_arr[0] + 3  # Look ahead 3 bars
+                    if fut_3_bar_idx < len(l_arr):
+                        # Check if any of the next 3 bars touched or breached trail
+                        min_low = float(np.min(l_arr[idx_arr[0]+1:fut_3_bar_idx+1])) if idx_arr[0]+1 < len(l_arr) else float('inf')
+                        rec["labels"]["label_fast_reversal"] = 1 if min_low <= trail_threshold else 0
+                        changed = True
+
         return changed
 
     _rewrite_records(_mutate)

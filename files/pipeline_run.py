@@ -85,6 +85,18 @@ def main():
     py = str(PL.PYEMBED)
     files = str(PL.FILES_DIR)
 
+    # L0 — canonical metrics (North Star + business metrics).
+    # MUST run before L1: bot_health_report.py reads metrics_daily_latest
+    # for the North Star value. Historically report_metrics_daily.py was
+    # created (2026-05-02) but never scheduled — metrics_daily.jsonl went
+    # 16 days stale, making the project's primary success metric invisible
+    # and Q1 of the progress analyzer unanswerable. Wiring it as the first
+    # daily step closes that data-honesty gap (CLAUDE.md §0).
+    # Runs at ~01:00 UTC, ~30 min after the EOD learning job (00:30 UTC)
+    # resolves critic_dataset labels, so the backtests see fresh outcomes.
+    results.append(run_step(
+        "L0 metrics", [py, f"{files}/report_metrics_daily.py"], timeout=600))
+
     # L1 — daily health
     l1_args = [py, f"{files}/bot_health_report.py"]
     if args.run_evaluator:
@@ -118,6 +130,11 @@ def main():
 
     # L7 — monitor (legacy naive before/after — keep for backward compat)
     results.append(run_step("L7 monitor", [py, f"{files}/pipeline_monitor.py", "--check-after-days", "7"]))
+
+    # Drift detection (RM-14) — KS test on ranker_proba etc. distributions.
+    # Cheap (sub-second) and catches market-regime shift BEFORE recall@20
+    # collapses. Drift reports go to .runtime/pipeline/drift/.
+    results.append(run_step("drift", [py, f"{files}/pipeline_drift.py"]))
 
     # Attribution — normalised delta + bootstrap CI for every approved decision
     # that has both a pinned baseline and >= 4 post-apply health reports.

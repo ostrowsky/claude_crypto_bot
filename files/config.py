@@ -1182,3 +1182,19 @@ HORIZON_ALLOCATION_INTRADAY: float = 0.35
 HORIZON_ALLOCATION_DAILY: float = 0.25
 HORIZON_ALLOCATION_SWING: float = 0.15
 HORIZON_ALLOCATION_POSITION: float = 0.10
+
+# ── RM-3: Anti-fast-reversal guard (2026-05-12) ───────────────────────────────
+# Spec: docs/specs/features/anti-fast-reversal-spec.md
+# Problem: 53.7% of alignment entries reverse within 3 bars at avg P&L -0.348%.
+# Solution: a binary classifier (fast_reversal_model.json) emits
+# proba_fast_reversal at entry time; if proba > threshold, block.
+#
+# Rollout per spec §5:
+#   1. False (initial) — model trains, proba computed for telemetry only
+#   2. After 7d live data — wire into bandit context (no block yet)
+#   3. After 14d backtest validation — flip GUARD_ENABLED to True
+#
+# Rollback at any stage: set FAST_REVERSAL_GUARD_ENABLED back to False.
+FAST_REVERSAL_GUARD_ENABLED: bool = False  # master switch — keep False until validated
+FAST_REVERSAL_PROBA_MAX: float = 0.55      # block if proba_fast_reversal > this
+FAST_REVERSAL_SHADOW: bool = True          # log proba but never block (telemetry)

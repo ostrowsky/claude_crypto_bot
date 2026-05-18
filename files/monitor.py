@@ -615,6 +615,54 @@ def _is_fresh_priority_mode(mode: str) -> bool:
     return mode in priority_modes
 
 
+def _safe_float(v: Any) -> Optional[float]:
+    """Convert value to float, return None if None or invalid."""
+    if v is None:
+        return None
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def _build_block_context(
+    *,
+    feat: dict,
+    i: int,
+    candidate_score: Optional[float] = None,
+    score_floor: Optional[float] = None,
+    ranker_proba: Optional[float] = None,
+    ranker_info: Optional[dict] = None,
+    is_bull_day_now: Optional[bool] = None,
+) -> dict:
+    """
+    Assemble standard fields available at any block site.
+    Used to populate botlog.log_blocked() context args.
+    All values are optional/nullable to handle partial data.
+    """
+    return {
+        "rsi": _safe_float(feat.get("rsi", [None]*999)[min(i, len(feat.get("rsi", []))-1)] if i < len(feat.get("rsi", [])) else None),
+        "adx": _safe_float(feat.get("adx", [None]*999)[min(i, len(feat.get("adx", []))-1)] if i < len(feat.get("adx", [])) else None),
+        "vol_x": _safe_float(feat.get("vol_x", [None]*999)[min(i, len(feat.get("vol_x", []))-1)] if i < len(feat.get("vol_x", [])) else None),
+        "daily_range": _safe_float(feat.get("daily_range_pct", [None]*999)[min(i, len(feat.get("daily_range_pct", []))-1)] if i < len(feat.get("daily_range_pct", [])) else None),
+        "slope_pct": _safe_float(feat.get("slope", [None]*999)[min(i, len(feat.get("slope", []))-1)] if i < len(feat.get("slope", [])) else None),
+        "macd_hist": _safe_float(feat.get("macd_hist", [None]*999)[min(i, len(feat.get("macd_hist", []))-1)] if i < len(feat.get("macd_hist", [])) else None),
+        "ema20": _safe_float(feat.get("ema_fast", [None]*999)[min(i, len(feat.get("ema_fast", []))-1)] if i < len(feat.get("ema_fast", [])) else None),
+        "ema50": _safe_float(feat.get("ema_slow", [None]*999)[min(i, len(feat.get("ema_slow", []))-1)] if i < len(feat.get("ema_slow", [])) else None),
+        "ema200": _safe_float(feat.get("ema200", [None]*999)[min(i, len(feat.get("ema200", []))-1)] if i < len(feat.get("ema200", [])) else None),
+        "ml_proba": _safe_float(ranker_proba),
+        "ranker_top_gainer_prob": _safe_float((ranker_info or {}).get("top_gainer_prob")),
+        "ranker_ev": _safe_float((ranker_info or {}).get("ev")),
+        "ranker_quality_proba": _safe_float((ranker_info or {}).get("quality_proba")),
+        "ranker_final_score": _safe_float((ranker_info or {}).get("final_score")),
+        "candidate_score": _safe_float(candidate_score),
+        "score_floor": _safe_float(score_floor),
+        "is_bull_day": bool(is_bull_day_now) if is_bull_day_now is not None else None,
+        "btc_vs_ema50": _safe_float(getattr(config, "_btc_vs_ema50", 0.0)),
+        "market_regime": str(getattr(config, "_market_regime", "neutral")),
+    }
+
+
 def _time_block_bypass_allowed(
     *,
     tf: str,
@@ -1743,6 +1791,35 @@ def _trend_1h_chop_guard_reason(
     if not fails:
         return None
     return f"trend/1h chop: " + " OR ".join(fails)
+
+
+def _fast_reversal_guard_reason(
+    *,
+    proba_fast_reversal: Optional[float],
+) -> Optional[str]:
+    """
+    RM-3 anti-fast-reversal guard.
+
+    Block entries where the fast-reversal classifier predicts the trail
+    stop will be hit within 3 bars. Default: shadow-only (proba computed
+    and logged but not gating). Activated by flipping
+    `FAST_REVERSAL_GUARD_ENABLED` to True after 14d backtest validation
+    per spec §5.
+
+    Returns reason string if blocked, None if not.
+
+    Spec: docs/specs/features/anti-fast-reversal-spec.md
+    """
+    if not getattr(config, "FAST_REVERSAL_GUARD_ENABLED", False):
+        return None
+    if getattr(config, "FAST_REVERSAL_SHADOW", True):
+        return None  # shadow mode: never block, only log
+    if proba_fast_reversal is None:
+        return None  # model not loaded — fail open
+    threshold = float(getattr(config, "FAST_REVERSAL_PROBA_MAX", 0.55))
+    if proba_fast_reversal > threshold:
+        return f"fast_reversal_risk: proba={proba_fast_reversal:.3f} > {threshold:.2f}"
+    return None
 
 
 def _h5_break_even_pct(mode: Optional[str], tf: Optional[str]) -> float:
@@ -4263,6 +4340,15 @@ async def _poll_coin(
                 botlog.log_blocked(
                     sym, tf, float(c[i]), mode_range_guard_reason,
                     signal_type="mode_range_quality",
+                    reason_code="mode_range_quality", gate="mode_daily_range_guard",
+                    **_build_block_context(
+                        feat=feat, i=i,
+                        candidate_score=candidate_score,
+                        score_floor=score_floor,
+                        ranker_proba=ranker_proba,
+                        ranker_info=ranker_info,
+                        is_bull_day=is_bull_day_now,
+                    ),
                 )
                 return
 
@@ -4469,7 +4555,18 @@ async def _poll_coin(
                     bot_action="blocked",
                     reason=clone_guard_reason,
                 )
-                botlog.log_blocked(sym, tf, float(c[i]), clone_guard_reason, signal_type="clone_guard")
+                botlog.log_blocked(
+                    sym, tf, float(c[i]), clone_guard_reason, signal_type="clone_guard",
+                    reason_code="clone_signal_guard", gate="clone_guard",
+                    **_build_block_context(
+                        feat=feat, i=i,
+                        candidate_score=candidate_score,
+                        score_floor=score_floor,
+                        ranker_proba=ranker_proba,
+                        ranker_info=ranker_info,
+                        is_bull_day=is_bull_day_now,
+                    ),
+                )
                 return
             cluster_cap_reason = _open_signal_cluster_cap_reason(
                 sym,
@@ -4515,7 +4612,18 @@ async def _poll_coin(
                     bot_action="blocked",
                     reason=cluster_cap_reason,
                 )
-                botlog.log_blocked(sym, tf, float(c[i]), cluster_cap_reason, signal_type="open_cluster_cap")
+                botlog.log_blocked(
+                    sym, tf, float(c[i]), cluster_cap_reason, signal_type="open_cluster_cap",
+                    reason_code="open_cluster_cap", gate="open_cluster_cap",
+                    **_build_block_context(
+                        feat=feat, i=i,
+                        candidate_score=candidate_score,
+                        score_floor=score_floor,
+                        ranker_proba=ranker_proba,
+                        ranker_info=ranker_info,
+                        is_bull_day=is_bull_day_now,
+                    ),
+                )
                 return
 
             # ── Correlation Guard — блокировка клонов по пирсоновской rho ──────
@@ -4567,7 +4675,18 @@ async def _poll_coin(
                         bot_action="blocked",
                         reason=_cg_result.reason,
                     )
-                    botlog.log_blocked(sym, tf, float(c[i]), _cg_result.reason, signal_type="correlation_guard")
+                    botlog.log_blocked(
+                        sym, tf, float(c[i]), _cg_result.reason, signal_type="correlation_guard",
+                        reason_code="correlation_guard", gate="correlation_guard",
+                        **_build_block_context(
+                            feat=feat, i=i,
+                            candidate_score=candidate_score,
+                            score_floor=score_floor,
+                            ranker_proba=ranker_proba,
+                            ranker_info=ranker_info,
+                            is_bull_day=is_bull_day_now,
+                        ),
+                    )
                     return
 
             port_ok, port_reason = _check_portfolio_limits(
@@ -4970,6 +5089,10 @@ async def _poll_coin(
             # ── КРИТИЧНО: позиция сохраняется ПЕРВОЙ, до любых внешних вызовов.
             # Если ml_dataset или botlog выбросят исключение — позиция уже в state
             # и не потеряется. Именно это было причиной "нет позиций при сигналах".
+            # RM-3: compute atr_pct for fast-reversal labeling
+            atr_val = float(feat.get("atr", [0.0])[i]) if i < len(feat.get("atr", [])) else 0.0
+            atr_pct = (atr_val / price * 100.0) if price > 0 else 0.0
+
             pos.critic_record_id = _log_critic_candidate(
                 sym=sym,
                 tf=tf,
@@ -4992,6 +5115,8 @@ async def _poll_coin(
                 fresh_priority=fresh_priority,
                 catchup=catchup_snapshot is not None,
                 continuation_profile=continuation_profile,
+                atr_pct=atr_pct,  # RM-3: fast-reversal label computation
+                trail_k=trail_k,  # RM-3: fast-reversal label computation
                 signal_flags=signal_flags,
             )
             state.positions[sym] = pos

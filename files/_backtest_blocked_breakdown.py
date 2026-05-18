@@ -1,166 +1,235 @@
-"""Aggregate structured blocked-candidate events.
+r"""Daily breakdown of blocked candidates by reason_code.
 
-Reads bot_events.jsonl, filters event=blocked, groups by reason_code +
-gate, and produces:
-  1. Top-15 reason_codes by block volume.
-  2. Per-gate breakdown: distribution of features at block time.
-  3. Per-symbol top blockers (helps diagnose «why no signal on X»).
-  4. Would-be-signal estimate: at relaxed threshold, how many blocks would clear?
+Analyzes bot_events.jsonl blocked events to identify over-blocking gates
+and opportunity distribution per gate.
 
-Spec: docs/specs/features/structured-blocked-logging-spec.md
+Usage:
+    pyembed\python.exe files\_backtest_blocked_breakdown.py
+    pyembed\python.exe files\_backtest_blocked_breakdown.py --would-be-signal
+
+Output:
+    - Top-20 reason_codes by frequency
+    - Distribution histograms per gate
+    - Optional would-be-signal analysis
 """
+
 from __future__ import annotations
-import argparse, io, json, sys
-from pathlib import Path
-from collections import defaultdict, Counter
+
+import argparse
+import json
+import sys
+from collections import defaultdict
 from datetime import datetime, timezone, timedelta
+from pathlib import Path
+from typing import Optional, Dict, Any
 
-try:
-    sys.stdout.reconfigure(encoding="utf-8")
-except Exception:
-    pass
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-ROOT = Path(__file__).resolve().parent.parent
+HERE = Path(__file__).resolve().parent
+if str(HERE) not in sys.path:
+    sys.path.insert(0, str(HERE))
+
+LOG_FILE = HERE / "bot_events.jsonl"
+REASON_CODE_TAXONOMY = {
+    "ml_zone": "ML proba outside profitable zone",
+    "ranker_hard_veto": "Ranker final_score below veto threshold",
+    "ranker_soft_veto": "Ranker EV below soft veto",
+    "trend_chop": "Trend/1h chop filter (slope/adx/vol)",
+    "trend_quality": "15m trend quality guard (RSI/edge/range)",
+    "entry_score": "Score below floor",
+    "impulse_guard": "Impulse_speed sub-conditions",
+    "mode_range_quality": "Daily_range outside mode-specific bounds",
+    "clone_signal_guard": "Similar setup limit",
+    "open_cluster_cap": "Cluster open positions cap",
+    "correlation_guard": "High correlation with existing pos",
+    "mtf": "Multi-timeframe disagreement",
+    "late_continuation": "Continuation entry too late",
+    "late_impulse_rotation": "Late rotation candidate",
+    "cooldown": "Symbol-level cooldown",
+    "portfolio": "Portfolio full",
+    "time_block": "Time-of-day block",
+    "strategy_cap": "Strategy-level cap",
+    "enhanced_block": "Phase-2 enhanced filter",
+    "ml_filter": "Generic ML filter (legacy)",
+    "near_miss": "Near-miss edge case",
+}
 
 
-def load_blocked_events(window_hours: float, sym_filter: str | None = None):
-    """Stream bot_events.jsonl, return list[dict] of blocked events in window."""
-    cut = datetime.now(timezone.utc) - timedelta(hours=window_hours)
-    events = []
-    with io.open(ROOT/"files"/"bot_events.jsonl", encoding="utf-8") as f:
-        for ln in f:
-            if '"blocked"' not in ln:
-                continue
+def load_blocked_events() -> list[dict]:
+    """Load all blocked events from bot_events.jsonl."""
+    if not LOG_FILE.exists():
+        print(f"[!] {LOG_FILE} not found")
+        return []
+
+    blocked = []
+    try:
+        with LOG_FILE.open("r", encoding="utf-8") as f:
+            for line in f:
+                if not line.strip():
+                    continue
+                try:
+                    event = json.loads(line)
+                    if event.get("event") == "blocked":
+                        blocked.append(event)
+                except json.JSONDecodeError:
+                    pass
+    except Exception as e:
+        print(f"[!] Error reading {LOG_FILE}: {e}")
+
+    return blocked
+
+
+def aggregate_by_code(blocked: list[dict]) -> Dict[str, list[dict]]:
+    """Group blocked events by reason_code."""
+    by_code = defaultdict(list)
+    for event in blocked:
+        code = event.get("reason_code", "unknown")
+        by_code[code].append(event)
+    return by_code
+
+
+def top_gates_summary(by_code: Dict[str, list[dict]], limit: int = 20) -> None:
+    """Print top-N reason_codes by frequency."""
+    print(f"\n{'='*80}")
+    print(f"TOP-{limit} OVER-BLOCKING GATES (by frequency)")
+    print(f"{'='*80}\n")
+
+    summary = [
+        (code, len(events), REASON_CODE_TAXONOMY.get(code, ""))
+        for code, events in by_code.items()
+    ]
+    summary.sort(key=lambda x: x[1], reverse=True)
+
+    for i, (code, count, desc) in enumerate(summary[:limit], 1):
+        print(f"{i:2d}. {code:25s} {count:4d} blocks  -  {desc}")
+
+    total = sum(count for _, count, _ in summary)
+    print(f"\nTotal blocked events: {total}")
+
+
+def distribution_histogram(events: list[dict], field: str, bins: int = 10) -> None:
+    """Print histogram of a numeric field."""
+    values = []
+    for e in events:
+        v = e.get(field)
+        if v is not None:
             try:
-                e = json.loads(ln)
-            except Exception:
-                continue
-            if e.get("event") != "blocked":
-                continue
-            try:
-                dt = datetime.fromisoformat((e.get("ts") or "").replace("Z", "+00:00"))
-            except Exception:
-                continue
-            if dt < cut:
-                continue
-            if sym_filter and (e.get("sym") or e.get("symbol")) != sym_filter:
-                continue
-            e["_dt"] = dt
-            events.append(e)
-    return events
+                values.append(float(v))
+            except (TypeError, ValueError):
+                pass
+
+    if not values:
+        print(f"  {field}: no data")
+        return
+
+    min_v, max_v = min(values), max(values)
+    print(f"  {field}: min={min_v:.4f}, max={max_v:.4f}, mean={sum(values)/len(values):.4f}, n={len(values)}")
 
 
-def percentile(xs, p):
-    if not xs:
-        return None
-    xs = sorted(xs); n = len(xs)
-    return xs[min(n - 1, int(n * p))]
+def per_gate_analysis(by_code: Dict[str, list[dict]], limit: int = 10) -> None:
+    """Print detailed analysis per top gate."""
+    print(f"\n{'='*80}")
+    print(f"DISTRIBUTION ANALYSIS - TOP-{limit} GATES")
+    print(f"{'='*80}\n")
+
+    summary = sorted(
+        ((code, events) for code, events in by_code.items()),
+        key=lambda x: len(x[1]),
+        reverse=True,
+    )
+
+    for code, events in summary[:limit]:
+        print(f"\n{code.upper()} ({len(events)} events)")
+        print(f"  Symbols: {len(set(e.get('sym') for e in events))} unique")
+        distribution_histogram(events, "ml_proba", 10)
+        distribution_histogram(events, "ranker_final_score", 10)
+        distribution_histogram(events, "candidate_score", 10)
+        distribution_histogram(events, "slope_pct", 10)
+        distribution_histogram(events, "adx", 10)
+        distribution_histogram(events, "vol_x", 10)
+        distribution_histogram(events, "rsi", 10)
+
+
+def would_be_signal_analysis(by_code: Dict[str, list[dict]]) -> None:
+    """Estimate effect of relaxing each gate."""
+    print(f"\n{'='*80}")
+    print(f"WOULD-BE-SIGNAL ANALYSIS - relaxation potential")
+    print(f"{'='*80}\n")
+
+    for code, events in sorted(
+        by_code.items(),
+        key=lambda x: len(x[1]),
+        reverse=True,
+    )[:8]:
+        high_potential = 0
+        for e in events:
+            score = e.get("candidate_score")
+            floor = e.get("score_floor")
+            ml = e.get("ml_proba")
+
+            if score is not None and floor is not None:
+                rel_to_floor = (score - floor) / max(abs(floor), 1.0)
+                if rel_to_floor > -0.20:
+                    high_potential += 1
+            elif ml is not None and ml > 0.40:
+                high_potential += 1
+
+        pct = 100.0 * high_potential / len(events) if events else 0
+        print(f"{code:25s}: {high_potential:3d}/{len(events)} ({pct:5.1f}%) would-be-signals (score >=-20% floor OR ml>0.40)")
 
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--hours", type=float, default=24)
-    ap.add_argument("--sym", type=str, default=None,
-                    help="filter to a single symbol (diagnostic)")
-    ap.add_argument("--top-n", type=int, default=15)
+    ap = argparse.ArgumentParser(
+        description="Analyze blocked candidates by reason_code and gate.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    ap.add_argument(
+        "--would-be-signal",
+        action="store_true",
+        help="Include would-be-signal analysis (relaxation potential per gate)",
+    )
+    ap.add_argument(
+        "--limit",
+        type=int,
+        default=20,
+        help="Limit top gates to show (default: 20)",
+    )
+    ap.add_argument(
+        "--since-hours",
+        type=int,
+        default=72,
+        help="Analyze last N hours of events (default: 72)",
+    )
     args = ap.parse_args()
 
-    events = load_blocked_events(args.hours, sym_filter=args.sym)
-    label = f" sym={args.sym}" if args.sym else ""
-    print(f"=== Blocked-event breakdown · last {args.hours:.0f}h{label} ===")
-    print(f"Total blocks: {len(events)}\n")
-    if not events:
-        return
+    print(f"\n[*] Loading blocked events from {LOG_FILE}...")
+    blocked = load_blocked_events()
 
-    # 1) Top reason_codes
-    by_code = Counter()
-    by_signal_type = Counter()
-    for e in events:
-        rc = e.get("reason_code") or "(unstructured)"
-        by_code[rc] += 1
-        by_signal_type[e.get("signal_type", "?")] += 1
+    if not blocked:
+        print("[!] No blocked events found")
+        return 1
 
-    print(f"Top-{args.top_n} reason_codes:")
-    print(f"  {'reason_code':<26} {'n':>5}  {'share':>6}")
-    for rc, n in by_code.most_common(args.top_n):
-        print(f"  {rc:<26} {n:>5}  {100*n/len(events):>5.1f}%")
+    if args.since_hours > 0:
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=args.since_hours)
+        blocked = [
+            e for e in blocked
+            if datetime.fromisoformat(e.get("ts", "").replace("Z", "+00:00")) > cutoff
+        ]
+        print(f"[*] Filtered to last {args.since_hours}h: {len(blocked)} events")
 
-    print(f"\nLegacy signal_type (older events without reason_code):")
-    for st, n in by_signal_type.most_common(args.top_n):
-        print(f"  {st:<26} {n:>5}")
+    by_code = aggregate_by_code(blocked)
+    print(f"[*] Found {len(by_code)} unique reason_codes")
 
-    # 2) Per-gate feature distributions (only structured events)
-    structured = [e for e in events if e.get("reason_code")]
-    print(f"\n=== Per-gate feature distributions (n_structured={len(structured)}) ===")
-    if structured:
-        per_gate = defaultdict(list)
-        for e in structured:
-            per_gate[e["reason_code"]].append(e)
-        for code, lst in sorted(per_gate.items(), key=lambda x: -len(x[1])):
-            if len(lst) < 3:
-                continue
-            print(f"\n── {code}  (n={len(lst)}) ──")
-            for feat in ("ml_proba", "ranker_top_gainer_prob", "ranker_ev",
-                         "candidate_score", "slope_pct", "adx", "vol_x",
-                         "rsi", "daily_range"):
-                vals = [e.get(feat) for e in lst if e.get(feat) is not None]
-                if not vals:
-                    continue
-                p25 = percentile(vals, 0.25); p50 = percentile(vals, 0.5)
-                p75 = percentile(vals, 0.75)
-                mn = min(vals); mx = max(vals)
-                print(f"  {feat:<24} p25={p25:>7.3f}  p50={p50:>7.3f}  "
-                      f"p75={p75:>7.3f}  min={mn:>7.3f}  max={mx:>7.3f}  n={len(vals)}")
+    top_gates_summary(by_code, args.limit)
+    per_gate_analysis(by_code, min(args.limit, 10))
 
-    # 3) Per-symbol top blockers
-    if not args.sym:
-        print(f"\n=== Per-symbol top blocker (top-15 most-blocked syms) ===")
-        per_sym = defaultdict(Counter)
-        sym_total = Counter()
-        for e in events:
-            sym = e.get("sym") or e.get("symbol", "?")
-            rc = e.get("reason_code") or e.get("signal_type", "?")
-            per_sym[sym][rc] += 1
-            sym_total[sym] += 1
-        for sym, total in sym_total.most_common(15):
-            top_rc, top_n = per_sym[sym].most_common(1)[0]
-            print(f"  {sym:<14} blocks={total:>4}  main_blocker={top_rc:<22} "
-                  f"({top_n}, {100*top_n/total:.0f}%)")
+    if args.would_be_signal:
+        would_be_signal_analysis(by_code)
 
-    # 4) Would-be-signal estimates per gate (heuristic)
-    print(f"\n=== «Would-be-signal» estimates (heuristic threshold relaxation) ===")
-    # ml_zone: would clear if ml_proba >= floor (we extract floor from text)
-    ml_zone_blocks = [e for e in events if e.get("reason_code") == "ml_zone"]
-    if ml_zone_blocks:
-        probas = [e.get("ml_proba") for e in ml_zone_blocks if e.get("ml_proba") is not None]
-        if probas:
-            for thr in (0.05, 0.10, 0.15, 0.20):
-                n_pass = sum(1 for p in probas if p >= thr)
-                print(f"  ml_zone: at threshold {thr:.2f}, would pass: "
-                      f"{n_pass}/{len(probas)} = {100*n_pass/len(probas):.0f}%")
-
-    # trend_chop: slope_pct distribution
-    chop_blocks = [e for e in events if e.get("reason_code") == "trend_chop"]
-    if chop_blocks:
-        slopes = [e.get("slope_pct") for e in chop_blocks if e.get("slope_pct") is not None]
-        if slopes:
-            for thr in (0.5, 0.7, 0.9, 1.0):
-                n_pass = sum(1 for s in slopes if s >= thr)
-                print(f"  trend_chop: at slope_min {thr:.2f}, would pass: "
-                      f"{n_pass}/{len(slopes)} = {100*n_pass/len(slopes):.0f}%")
-
-    # entry_score: distance from floor
-    es_blocks = [e for e in events if e.get("reason_code") == "entry_score"]
-    if es_blocks:
-        deltas = [(e.get("score_floor", 0) - e.get("candidate_score", 0))
-                  for e in es_blocks
-                  if e.get("score_floor") is not None and e.get("candidate_score") is not None]
-        if deltas:
-            for delta_cap in (1, 3, 5, 10):
-                n = sum(1 for d in deltas if d <= delta_cap)
-                print(f"  entry_score: within {delta_cap} of floor: "
-                      f"{n}/{len(deltas)} = {100*n/len(deltas):.0f}%")
+    print(f"\n{'='*80}\n")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

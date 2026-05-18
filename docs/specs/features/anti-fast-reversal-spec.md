@@ -95,15 +95,35 @@ Rollout: сначала `False` (только label/model/feature/reward, без
 
 Implementation order (строго):
 
-- [ ] **Label** в обоих dataset’ах.
-- [ ] **Train** модель + AUC отчёт.
-- [ ] **60-day backtest** — посчитать recall@top20 при разных порогах
-      `FAST_REVERSAL_PROBA_MAX`, выбрать Pareto-точку.
-- [ ] **Wire bandit context** (без блока).
-- [ ] Через 7 дней — включить guard на `False → True`.
+- [x] **Label** — code added 2026-05-12 (c233c12) BUT spec definition
+      (trail-stop hit, needs `entry_context.atr_pct`/`trail_k`) is
+      **structurally impossible on real data**: 0/17437 production
+      records have `entry_context`, and the capture code is branch-only.
+      Replaced with an outcome-based proxy in `train_fast_reversal.py`:
+      `label = 1 if labels.ret_3 <= -0.3%` (mirrors the validated
+      `_backtest_fast_reversal_by_mode.py` v1 definition). Computable on
+      all history. 3 + 11 unit tests passing.
+- [x] **Train** модель + AUC отчёт. ✅ 2026-05-18
+      * Fixed `extract_features` (read non-existent `seq_features` →
+        rewired to scalar `f` dict). AUC 0.53 → **0.63 train / 0.55 val**.
+- [x] **60-day backtest** ✅ 2026-05-18 — `_backtest_fast_reversal_threshold.py`,
+      3217 takes, 33.9% fast-reversal baseline:
+      | T | win-recall | FR-rate | verdict |
+      |---|-----------|---------|---------|
+      | 0.55 (spec default) | 93.2% | 33.9→32.8% | **REJECT** (recall < 95%) |
+      | 0.60 (best safe) | 95.9% | 33.9→33.0% | OK but only −0.9pp |
+- [ ] **Wire bandit context** (без блока) — recommended next (soft signal).
+- [ ] ~~Через 7 дней — включить guard~~ **BLOCKED by verdict below.**
 
-**Гард не включается, пока 60-day backtest не подтверждает
-`recall@top20` ≥ текущего.**
+**VERDICT (2026-05-18):** model (val AUC ~0.55) is too weak for a hard
+guard. Every recall-safe threshold (≥0.60) yields a negligible
+fast-reversal reduction (≤0.9pp) while still costing ~4% of winners at
+the spec default. `FAST_REVERSAL_GUARD_ENABLED` stays **False**.
+`proba_fast_reversal` should be consumed as a **soft LinUCB context
+feature** (step 4), letting the policy weigh it without a hard block.
+The acceptance gate did its job: it prevented shipping a NS-degrading
+guard. Revisit only if a stronger model (richer features / non-linear)
+lifts val AUC materially.
 
 ## 8. Follow-ups
 
