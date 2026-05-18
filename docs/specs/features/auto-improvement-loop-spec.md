@@ -3,7 +3,7 @@
 - **Slug:** `auto-improvement-loop`
 - **Status:** in-progress — see component matrix below
 - **Created:** 2026-05-12
-- **Last updated:** 2026-05-12 (Sprint 0 RM-1/RM-2 + Sprint 1 RM-14/RM-15 landed)
+- **Last updated:** 2026-05-18 (L0 metrics wired -> NS visible+IMPROVING; RM-1/RM-2 honest sweep proven on live data; L3-c unblocked)
 - **Owner:** Vasiliy Ostrovsky + Claude
 - **North Star:** `watchlist_top_early_capture_pct` (see [PROJECT_CONTEXT.md](../../../PROJECT_CONTEXT.md))
 - **Project priority:** P0 (founding principle, see [CLAUDE.md §0](../../../CLAUDE.md))
@@ -132,7 +132,7 @@ Legend: ✅ done · 🟡 partial · ❌ not implemented · ⏸ deferred
 |----|-----------|--------|-------|-------|
 | L3-a | `validate_entry_score_floor` (per-coin replay) | ✅ | — | the only fully wired validator |
 | L3-b | `validate_gate_threshold` (generic) | 🟡 | — | emits diagnostic only, no verdict |
-| L3-c | Universal Pareto sweep over any gate | ❌ | — | **blocked on L1-x: blocked-event state logging** |
+| L3-c | Universal Pareto sweep over any gate | 🟡 | — | **UNBLOCKED** (RM-1/RM-2 done; sweep proven on live data via `_backtest_blocked_breakdown.py`). Remaining: integrate as a formal L3 validator + close 740 `<none>` sites via branch-merge of c479a4c |
 | L3-d | `disable_mode_*` validator | ⏸ | — | covered by L4 sim instead |
 
 ### L4 — Counterfactual / shadow
@@ -258,6 +258,8 @@ missing rows = the loop isn't really closing.
 | 2026-05-12 | n/a (baseline operational) | n/a | n/a | RM-3.1 fast-reversal label infrastructure (retroactive label computation; 53.7% of alignment entries identified as reversals) | — |
 | 2026-05-12 | n/a (baseline operational) | n/a | n/a | RM-14 drift detection wired (catches ranker_proba distribution shift early) | — |
 | 2026-05-12 | n/a (baseline operational) | n/a | n/a | RM-15 Sharpe + maxdd constraints in attribution (hypothesis improving NS but degrading risk profile correctly classified `regression`) | — |
+| 2026-05-18 | **0.074 → 0.104 (+0.030)** | tbd | n/a | **L0 metrics wired into pipeline_run.py** — `report_metrics_daily.py` was created 2026-05-02 but never scheduled; `metrics_daily.jsonl` was 16d stale, NS invisible. Now first daily step; NS visible again and trend flipped FLAT→IMPROVING | — |
+| 2026-05-18 | n/a (infra proven) | n/a | n/a | RM-1/RM-2 honest Pareto sweep **verified on LIVE production data** (7d: ml_zone 994/1063=93.5%, trend_quality 335/335=100%, entry_score 426/852=50% would-be-signals). Confirms blocked-event logging closed the loop. Residual: 740 `<none>` un-wired sites → safe branch-merge of c479a4c + L3-c validator | — |
 
 Conventions for filling the table:
 - One row per measurable change. Re-measurements every 7/14/30 days get
