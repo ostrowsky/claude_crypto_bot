@@ -1,4 +1,4 @@
-"""Daily breakdown of blocked candidates by reason_code.
+r"""Daily breakdown of blocked candidates by reason_code.
 
 Analyzes bot_events.jsonl blocked events to identify over-blocking gates
 and opportunity distribution per gate.
