@@ -23,6 +23,9 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Optional, Dict, Any
 
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 HERE = Path(__file__).resolve().parent
 if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
@@ -99,7 +102,7 @@ def top_gates_summary(by_code: Dict[str, list[dict]], limit: int = 20) -> None:
     summary.sort(key=lambda x: x[1], reverse=True)
 
     for i, (code, count, desc) in enumerate(summary[:limit], 1):
-        print(f"{i:2d}. {code:25s} {count:4d} blocks  —  {desc}")
+        print(f"{i:2d}. {code:25s} {count:4d} blocks  -  {desc}")
 
     total = sum(count for _, count, _ in summary)
     print(f"\nTotal blocked events: {total}")
@@ -127,7 +130,7 @@ def distribution_histogram(events: list[dict], field: str, bins: int = 10) -> No
 def per_gate_analysis(by_code: Dict[str, list[dict]], limit: int = 10) -> None:
     """Print detailed analysis per top gate."""
     print(f"\n{'='*80}")
-    print(f"DISTRIBUTION ANALYSIS — TOP-{limit} GATES")
+    print(f"DISTRIBUTION ANALYSIS - TOP-{limit} GATES")
     print(f"{'='*80}\n")
 
     summary = sorted(
@@ -151,7 +154,7 @@ def per_gate_analysis(by_code: Dict[str, list[dict]], limit: int = 10) -> None:
 def would_be_signal_analysis(by_code: Dict[str, list[dict]]) -> None:
     """Estimate effect of relaxing each gate."""
     print(f"\n{'='*80}")
-    print(f"WOULD-BE-SIGNAL ANALYSIS — relaxation potential")
+    print(f"WOULD-BE-SIGNAL ANALYSIS - relaxation potential")
     print(f"{'='*80}\n")
 
     for code, events in sorted(
@@ -173,7 +176,7 @@ def would_be_signal_analysis(by_code: Dict[str, list[dict]]) -> None:
                 high_potential += 1
 
         pct = 100.0 * high_potential / len(events) if events else 0
-        print(f"{code:25s}: {high_potential:3d}/{len(events)} ({pct:5.1f}%) would-be-signals (score ≥-20% floor OR ml>0.40)")
+        print(f"{code:25s}: {high_potential:3d}/{len(events)} ({pct:5.1f}%) would-be-signals (score >=-20% floor OR ml>0.40)")
 
 
 def main():
