@@ -85,6 +85,18 @@ def main():
     py = str(PL.PYEMBED)
     files = str(PL.FILES_DIR)
 
+    # L0 — canonical metrics (North Star + business metrics).
+    # MUST run before L1: bot_health_report.py reads metrics_daily_latest
+    # for the North Star value. Historically report_metrics_daily.py was
+    # created (2026-05-02) but never scheduled — metrics_daily.jsonl went
+    # 16 days stale, making the project's primary success metric invisible
+    # and Q1 of the progress analyzer unanswerable. Wiring it as the first
+    # daily step closes that data-honesty gap (CLAUDE.md §0).
+    # Runs at ~01:00 UTC, ~30 min after the EOD learning job (00:30 UTC)
+    # resolves critic_dataset labels, so the backtests see fresh outcomes.
+    results.append(run_step(
+        "L0 metrics", [py, f"{files}/report_metrics_daily.py"], timeout=600))
+
     # L1 — daily health
     l1_args = [py, f"{files}/bot_health_report.py"]
     if args.run_evaluator:
