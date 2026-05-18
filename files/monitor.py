@@ -1793,6 +1793,35 @@ def _trend_1h_chop_guard_reason(
     return f"trend/1h chop: " + " OR ".join(fails)
 
 
+def _fast_reversal_guard_reason(
+    *,
+    proba_fast_reversal: Optional[float],
+) -> Optional[str]:
+    """
+    RM-3 anti-fast-reversal guard.
+
+    Block entries where the fast-reversal classifier predicts the trail
+    stop will be hit within 3 bars. Default: shadow-only (proba computed
+    and logged but not gating). Activated by flipping
+    `FAST_REVERSAL_GUARD_ENABLED` to True after 14d backtest validation
+    per spec §5.
+
+    Returns reason string if blocked, None if not.
+
+    Spec: docs/specs/features/anti-fast-reversal-spec.md
+    """
+    if not getattr(config, "FAST_REVERSAL_GUARD_ENABLED", False):
+        return None
+    if getattr(config, "FAST_REVERSAL_SHADOW", True):
+        return None  # shadow mode: never block, only log
+    if proba_fast_reversal is None:
+        return None  # model not loaded — fail open
+    threshold = float(getattr(config, "FAST_REVERSAL_PROBA_MAX", 0.55))
+    if proba_fast_reversal > threshold:
+        return f"fast_reversal_risk: proba={proba_fast_reversal:.3f} > {threshold:.2f}"
+    return None
+
+
 def _h5_break_even_pct(mode: Optional[str], tf: Optional[str]) -> float:
     """P1.3 (2026-05-07): per-mode H5 break-even threshold.
 
