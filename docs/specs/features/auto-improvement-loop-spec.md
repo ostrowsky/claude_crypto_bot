@@ -3,7 +3,7 @@
 - **Slug:** `auto-improvement-loop`
 - **Status:** in-progress — see component matrix below
 - **Created:** 2026-05-12
-- **Last updated:** 2026-05-18 (L0 metrics wired -> NS visible+IMPROVING; RM-1/RM-2 honest sweep proven on live data; L3-c unblocked)
+- **Last updated:** 2026-05-18 (L0 metrics->NS IMPROVING; RM-1/RM-2 sweep proven live; RM-3 backtest = honest negative, guard stays off)
 - **Owner:** Vasiliy Ostrovsky + Claude
 - **North Star:** `watchlist_top_early_capture_pct` (see [PROJECT_CONTEXT.md](../../../PROJECT_CONTEXT.md))
 - **Project priority:** P0 (founding principle, see [CLAUDE.md §0](../../../CLAUDE.md))
@@ -260,6 +260,7 @@ missing rows = the loop isn't really closing.
 | 2026-05-12 | n/a (baseline operational) | n/a | n/a | RM-15 Sharpe + maxdd constraints in attribution (hypothesis improving NS but degrading risk profile correctly classified `regression`) | — |
 | 2026-05-18 | **0.074 → 0.104 (+0.030)** | tbd | n/a | **L0 metrics wired into pipeline_run.py** — `report_metrics_daily.py` was created 2026-05-02 but never scheduled; `metrics_daily.jsonl` was 16d stale, NS invisible. Now first daily step; NS visible again and trend flipped FLAT→IMPROVING | — |
 | 2026-05-18 | n/a (infra proven) | n/a | n/a | RM-1/RM-2 honest Pareto sweep **verified on LIVE production data** (7d: ml_zone 994/1063=93.5%, trend_quality 335/335=100%, entry_score 426/852=50% would-be-signals). Confirms blocked-event logging closed the loop. Residual: 740 `<none>` un-wired sites → safe branch-merge of c479a4c + L3-c validator | — |
+| 2026-05-18 | NS-protective (negative result) | n/a | n/a | RM-3 60-day backtest: anti-fast-reversal hard guard **rejected by data** — val AUC ~0.55, recall-safe threshold gives ≤0.9pp FR reduction at ~4% winner cost. Guard stays OFF; loop correctly prevented a NS-degrading change. Next: proba as soft bandit context | — |
 
 Conventions for filling the table:
 - One row per measurable change. Re-measurements every 7/14/30 days get
@@ -282,7 +283,7 @@ something that does. The "Why for North Star" column makes the chain explicit.
 |----|------|--------|---------------------|
 | ~~RM-1~~ | ~~Extend `bot_events.jsonl` blocked events with full decision state~~ ✅ **DONE 2026-05-12** — `_build_block_context()` helper; wired 8 high-frequency block sites (ml_zone, entry_score, trend_quality, trend_chop, ranker_hard_veto, impulse_guard, mode_range_quality, correlation_guard); full context logged; 6 unit tests in `test_blocked_event_logging.py` | 4-6h | Unblocks universal Pareto-sweep validators (L3-c) so future `relax_gate_*` hypotheses can ACTUALLY measure effect — without this, ~40% of L2 proposals end at `pending_manual_validation` |
 | ~~RM-2~~ | ~~Structured `reason_code` enum in blocked events~~ ✅ **DONE 2026-05-12** — Reason codes (ml_zone, entry_score, trend_quality, etc.) + gate fields in all blocked events; `_backtest_blocked_breakdown.py` for analysis; backwards compatible | 2h | Lets L4 sim filter blocked events generically by gate name — same unblocking as RM-1 |
-| RM-3 | Anti-fast-reversal full chain (label → proba → guard → bandit reward) — see [`anti-fast-reversal-spec.md`](anti-fast-reversal-spec.md) | 2-3 days | 53.7% of `alignment` entries reverse within 3 bars. These ARE the false-positive buys that drag North Star down. Direct attack on the biggest signal-quality leak |
+| RM-3 | Anti-fast-reversal — label+train+backtest **DONE 2026-05-18** (honest negative): proxy label (`ret_3<=-0.3%`, since spec trail-stop label needs never-logged `entry_context`); val AUC ~0.55; 60-day sweep shows hard guard NOT viable (recall-safe T yields ≤0.9pp FR reduction). `FAST_REVERSAL_GUARD_ENABLED` stays False. Remaining: wire `proba_fast_reversal` as **soft LinUCB context** (not a guard) — see [`anti-fast-reversal-spec.md`](anti-fast-reversal-spec.md) | 2-3 days | 33.9% of takes reverse within 3 bars. Surfaced as a negative result: a naive guard would cost ~4% of winners for ~0 NS gain — loop correctly blocked it |
   | RM-3.1 | ✅ **Label infrastructure DONE 2026-05-12** — `label_fast_reversal` in critic_dataset schema, retroactive computation, entry context storage, 3 unit tests | 1.5 days | Enables future model training |
   | RM-3.2 | 🟡 Train model + Pareto backtest (next) | 1-2 days | Find optimal threshold |
 
