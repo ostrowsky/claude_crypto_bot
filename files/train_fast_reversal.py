@@ -36,19 +36,33 @@ DATASET_FILE = HERE / "critic_dataset.jsonl"
 MODEL_FILE = HERE / "fast_reversal_model.json"
 REPORT_FILE = HERE / "fast_reversal_report.json"
 
-FEATURE_NAMES = [
-    "vol_x",
+# Features from the scalar `f` dict (primary source — well-named, matches
+# ml_signal_model.SAFE_SCALAR_FEATURES) + the `decision` block.
+F_FEATURES = [
     "slope",
-    "adx",
     "rsi",
+    "adx",
+    "vol_x",
     "macd_hist_norm",
     "atr_pct",
+    "daily_range",
+    "body_pct",
+    "upper_wick_pct",
+    "lower_wick_pct",
+    "close_vs_ema20",
+    "close_vs_ema50",
+    "close_vs_ema200",
+    "ema20_vs_ema50",
+    "btc_vs_ema50",
+    "btc_momentum_4h",
+]
+DECISION_FEATURES = [
     "candidate_score",
     "ml_proba",
     "forecast_return_pct",
     "today_change_pct",
-    "btc_vs_ema50",
 ]
+FEATURE_NAMES = F_FEATURES + DECISION_FEATURES
 
 
 def _safe_float(v: Any, default: float = 0.0) -> float:
@@ -63,13 +77,35 @@ def _safe_float(v: Any, default: float = 0.0) -> float:
         return default
 
 
-def load_labeled_records(path: Path) -> List[dict]:
+def load_labeled_records(
+    path: Path,
+    *,
+    ret3_fallback: bool = True,
+    ret3_threshold: float = -0.3,
+    take_only: bool = True,
+) -> List[dict]:
+    """Load records with a fast-reversal label.
+
+    The RM-3 spec label (`labels.label_fast_reversal`, trail-stop-hit in
+    next 3 bars) requires `entry_context.atr_pct`+`trail_k` which were
+    never logged to production critic_dataset (0/17437 records). To make
+    the model trainable on real history, fall back to an outcome-based
+    proxy: `label_fast_reversal = 1 if labels.ret_3 <= ret3_threshold`.
+    This mirrors `_backtest_fast_reversal_by_mode.py`'s validated v1
+    definition (price reversed within 3 bars) and is computable on all
+    historical records that have ret_3 filled.
+
+    Records get a synthetic `labels.label_fast_reversal` in-memory so the
+    rest of the pipeline is unchanged.
+    """
     if not path.exists():
         print(f"[!] {path} not found")
         return []
 
     records = []
     skipped = 0
+    n_explicit = 0
+    n_proxy = 0
     with path.open("r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
@@ -80,35 +116,62 @@ def load_labeled_records(path: Path) -> List[dict]:
             except json.JSONDecodeError:
                 skipped += 1
                 continue
-            labels = rec.get("labels", {})
-            if labels.get("label_fast_reversal") is None:
+            labels = rec.get("labels", {}) or {}
+            if take_only:
+                act = (rec.get("decision") or {}).get("action")
+                if act != "take":
+                    continue
+            lab = labels.get("label_fast_reversal")
+            if lab is not None:
+                n_explicit += 1
+                records.append(rec)
                 continue
-            records.append(rec)
+            if ret3_fallback:
+                r3 = labels.get("ret_3")
+                if r3 is None:
+                    continue
+                rec.setdefault("labels", {})["label_fast_reversal"] = (
+                    1 if float(r3) <= ret3_threshold else 0
+                )
+                n_proxy += 1
+                records.append(rec)
 
     if skipped > 0:
         print(f"[*] Skipped {skipped} malformed lines")
+    print(f"[*] Labels: {n_explicit} explicit (spec trail-stop), "
+          f"{n_proxy} proxy (ret_3 <= {ret3_threshold}%)")
     return records
 
 
 def extract_features(rec: dict) -> List[float]:
-    seq = rec.get("seq_features", [])
-    last_bar = seq[-1] if seq else {}
-    if not isinstance(last_bar, dict):
-        last_bar = {}
-    decision = rec.get("decision", {})
-    return [
-        _safe_float(last_bar.get("vol_x")),
-        _safe_float(last_bar.get("slope")),
-        _safe_float(last_bar.get("adx")),
-        _safe_float(last_bar.get("rsi")),
-        _safe_float(last_bar.get("macd_hist_norm")),
-        _safe_float(last_bar.get("atr_pct")),
-        _safe_float(decision.get("candidate_score")),
-        _safe_float(decision.get("ml_proba")),
-        _safe_float(decision.get("forecast_return_pct")),
-        _safe_float(decision.get("today_change_pct")),
-        _safe_float(rec.get("btc_vs_ema50")),
-    ]
+    """Feature vector from the scalar `f` dict + `decision` block.
+
+    Production critic_dataset stores rich scalar features under `f`
+    (close_vs_ema20, slope, rsi, adx, vol_x, ...). The earlier version
+    read a non-existent `seq_features` dict, which silently zeroed every
+    technical feature and capped model AUC at ~0.53. Falls back to the
+    entry bar of the `seq` matrix (column order = seq_feature_names) when
+    a value is missing from `f`.
+    """
+    f = rec.get("f") or {}
+    decision = rec.get("decision") or {}
+
+    # seq[-1] fallback indexed by seq_feature_names
+    seq = rec.get("seq") or []
+    names = rec.get("seq_feature_names") or []
+    seq_last = {}
+    if seq and isinstance(seq[-1], (list, tuple)) and names:
+        seq_last = {n: v for n, v in zip(names, seq[-1])}
+
+    def pick(key: str) -> float:
+        v = f.get(key)
+        if v is None:
+            v = seq_last.get(key)
+        return _safe_float(v)
+
+    vec = [pick(name) for name in F_FEATURES]
+    vec += [_safe_float(decision.get(name)) for name in DECISION_FEATURES]
+    return vec
 
 
 def report_label_distribution(records: List[dict]) -> Dict[str, Any]:
@@ -235,10 +298,20 @@ def main() -> int:
                     help=f"Output report file (default: {REPORT_FILE.name})")
     ap.add_argument("--dataset", type=Path, default=DATASET_FILE,
                     help="Input critic_dataset.jsonl")
+    ap.add_argument("--ret3-threshold", type=float, default=-0.3,
+                    help="ret_3 %% at/below which a take is a fast-reversal "
+                         "(proxy label; default -0.3)")
+    ap.add_argument("--no-ret3-fallback", action="store_true",
+                    help="disable ret_3 proxy; require explicit "
+                         "labels.label_fast_reversal")
     args = ap.parse_args()
 
     print(f"[*] Loading labeled records from {args.dataset}")
-    records = load_labeled_records(args.dataset)
+    records = load_labeled_records(
+        args.dataset,
+        ret3_fallback=not args.no_ret3_fallback,
+        ret3_threshold=args.ret3_threshold,
+    )
     print(f"[*] Found {len(records)} records with label_fast_reversal set")
 
     if len(records) < args.min_samples:
