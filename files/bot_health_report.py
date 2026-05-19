@@ -613,12 +613,31 @@ def render_telegram(r: dict) -> str:
     out.append(f"🩺 <b>Bot Health Report</b> — {r['target_date']}")
     out.append("")
 
+    # ── North Star — ALWAYS first, ALWAYS present ────────────────────────────
+    # §0 honest-measurement: the project's purpose metric must never be
+    # silently dropped. The L1 critic value (ns["value"]) is null until the
+    # EOD critic runs; fall back to the canonical EOD metric from
+    # metrics_daily (NS_EarlyCapture_top20) so the headline is the actual
+    # target, not a saturated training proxy.
+    md = (r.get("metrics_daily_latest") or {}).get("metrics") or {}
+    ns_md = md.get("NS_EarlyCapture_top20") or {}
+    funnel = md.get("C1_C2_coverage_funnel") or {}
     if ns["value"] is not None:
         reg = ""
         if ns["regression_vs_7d_avg"] is not None:
             sign = "+" if ns["regression_vs_7d_avg"] >= 0 else ""
             reg = f" ({sign}{ns['regression_vs_7d_avg']:.1%} vs 7d)"
         out.append(f"{PL.status_emoji(ns['status'])} <b>North-star early_capture</b>: {ns['value']:.1%}{reg}")
+    elif ns_md.get("early_capture") is not None:
+        ec = ns_md["early_capture"]
+        cov = funnel.get("coverage_pct_raw")
+        sm = funnel.get("silent_miss_pct")
+        line = f"🎯 <b>North-star early_capture</b>: {ec:.1%} <i>(EOD canon)</i>"
+        if cov is not None and sm is not None:
+            line += f" | coverage {cov:.0f}% | silent-miss {sm:.0f}%"
+        out.append(line)
+    else:
+        out.append("⚠️ <b>North-star</b>: ещё не измерен сегодня (критик не отработал)")
     if gap.get("available"):
         out.append(f"{PL.status_emoji(gap['severity'])} <b>Training-to-live gap</b>: {gap['value']:+.1%}")
 
@@ -629,10 +648,13 @@ def render_telegram(r: dict) -> str:
         out.append(f"  • early: {dh['watchlist_top_early']}/{dh['watchlist_top_total']} ({dh['watchlist_top_early_capture_pct']:.0%})")
         out.append(f"  • FPR: {dh['false_positive_buys']}/{dh['bot_unique_buys']} ({dh['false_positive_rate']:.0%})")
 
+    # Training — one honest line. recall@20 is omitted on purpose: it has
+    # been pinned at 100% (saturated plateau) since ~Apr 10 and carries no
+    # signal — leading with it implies progress that isn't there. UCB
+    # separation is the only training number that still moves.
     if th.get("available"):
         out.append("")
-        out.append("<b>Training:</b>")
-        out.append(f"  • recall@20: {th['recall_at_20']:.0%} | UCB: {th['ucb_separation']:+.3f} | AUC: {th['auc']:.3f}")
+        out.append(f"<i>Training (учеба, не цель): UCB {th['ucb_separation']:+.3f} | AUC {th['auc']:.3f} | recall@20 saturated</i>")
 
     out.append("")
     if rf_count:
