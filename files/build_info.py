@@ -22,9 +22,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 # ── Source of truth ────────────────────────────────────────────────────────
-BUILD_VERSION: str = "2.20.0"
-BUILD_APPLIED_AT_UTC: str = "2026-05-07T09:55:00Z"
-BUILD_NOTES: str = "P1.1 sustained-uptrend label + P1.2 PEAK RISK shadow + P1.3 H5 per-mode threshold"
+BUILD_VERSION: str = "2.21.0"
+BUILD_APPLIED_AT_UTC: str = "2026-05-19T16:07:00Z"
+BUILD_NOTES: str = "Auto-improvement loop: honest North-Star L0 metrics, RM-1/2/3/14/15, L3-c validator, plain-language daily report + decision resume, entry_context capture, restart_bot full data-collection entry point"
 
 # ── Helpers ────────────────────────────────────────────────────────────────
 _ROOT = Path(__file__).resolve().parent.parent
