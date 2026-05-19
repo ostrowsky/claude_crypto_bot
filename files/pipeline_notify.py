@@ -674,6 +674,20 @@ def _pipeline_verdict(hyp: dict,
     cav = SIM_CAVEATS.get(rule)
 
     if measured is None:
+        # No L4 sim — but L3-c may have an honest counterfactual verdict.
+        l3 = _l3_result(hyp)
+        if l3:
+            v = l3.get("verdict")
+            rsn = (l3.get("reason") or "").strip()
+            if v == "accept":
+                return ("✅", "APPROVE",
+                        rsn or "L3 honest sweep: strong over-block confirmed.")
+            if v == "needs_review":
+                return ("⚠️", "APPROVE с оговоркой",
+                        rsn or "L3 honest sweep: data-supported, moderate n.")
+            if v == "reject":
+                return ("❌", "Не апрувить",
+                        rsn or "L3 honest sweep: gate works correctly.")
         return ("❌", "Не апрувить",
                 "Бэктест не запущен — нет данных для решения.")
 
@@ -744,9 +758,34 @@ def _format_advisor_line(advisor: dict | None) -> str | None:
     return f"🤖 Claude: {label} ({conf})"
 
 
+def _l3_result(hyp: dict) -> dict | None:
+    """Extract a real L3 validation verdict (accept/needs_review/reject)
+    from validation_report.result, ignoring the pending_manual stub."""
+    vr = (hyp.get("validation_report") or {}).get("result") or {}
+    v = vr.get("verdict")
+    if v in ("accept", "needs_review", "reject"):
+        return vr
+    return None
+
+
 def _format_no_measurement_note(hyp: dict) -> list[str]:
-    """For hypotheses without an L4 sim handler — surface what little we know
-    from L3 (rationale snippet) so the operator can still judge."""
+    """No L4 sim handler — but L3-c may still have produced an honest
+    counterfactual verdict (RM-1/RM-2 made blocked events measurable).
+    Surface that; otherwise fall back to the rationale snippet."""
+    l3 = _l3_result(hyp)
+    if l3:
+        cf = l3.get("counterfactual") or {}
+        out = ["📊 <b>L3 honest sweep</b> (counterfactual на critic_dataset):"]
+        if cf.get("available"):
+            out.append(
+                f"  <i>n={cf.get('n')} · blocked avg_r5={cf.get('blocked_avg_r5'):+.3f}% "
+                f"vs take {cf.get('take_baseline_avg_r5'):+.3f}% · "
+                f"miss {cf.get('miss_vs_take'):+.3f}pp · "
+                f"Sharpe×√n={cf.get('sharpe_sqrt_n'):+.2f} · win {cf.get('blocked_win_pct'):.0f}%</i>")
+        rsn = (l3.get("reason") or "").replace("\n", " ")
+        if rsn:
+            out.append(f"  <i>{rsn[:200]}</i>")
+        return out
     out = ["📊 <b>Бэктест:</b> не выполнен (нет sim handler для этого правила)"]
     rat = (hyp.get("rationale") or "").strip()
     if rat:
