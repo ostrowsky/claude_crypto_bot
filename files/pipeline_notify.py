@@ -674,6 +674,20 @@ def _pipeline_verdict(hyp: dict,
     cav = SIM_CAVEATS.get(rule)
 
     if measured is None:
+        # No L4 sim — but L3-c may have an honest counterfactual verdict.
+        l3 = _l3_result(hyp)
+        if l3:
+            v = l3.get("verdict")
+            rsn = (l3.get("reason") or "").strip()
+            if v == "accept":
+                return ("✅", "APPROVE",
+                        rsn or "L3 honest sweep: strong over-block confirmed.")
+            if v == "needs_review":
+                return ("⚠️", "APPROVE с оговоркой",
+                        rsn or "L3 honest sweep: data-supported, moderate n.")
+            if v == "reject":
+                return ("❌", "Не апрувить",
+                        rsn or "L3 honest sweep: gate works correctly.")
         return ("❌", "Не апрувить",
                 "Бэктест не запущен — нет данных для решения.")
 
@@ -744,9 +758,34 @@ def _format_advisor_line(advisor: dict | None) -> str | None:
     return f"🤖 Claude: {label} ({conf})"
 
 
+def _l3_result(hyp: dict) -> dict | None:
+    """Extract a real L3 validation verdict (accept/needs_review/reject)
+    from validation_report.result, ignoring the pending_manual stub."""
+    vr = (hyp.get("validation_report") or {}).get("result") or {}
+    v = vr.get("verdict")
+    if v in ("accept", "needs_review", "reject"):
+        return vr
+    return None
+
+
 def _format_no_measurement_note(hyp: dict) -> list[str]:
-    """For hypotheses without an L4 sim handler — surface what little we know
-    from L3 (rationale snippet) so the operator can still judge."""
+    """No L4 sim handler — but L3-c may still have produced an honest
+    counterfactual verdict (RM-1/RM-2 made blocked events measurable).
+    Surface that; otherwise fall back to the rationale snippet."""
+    l3 = _l3_result(hyp)
+    if l3:
+        cf = l3.get("counterfactual") or {}
+        out = ["📊 <b>L3 honest sweep</b> (counterfactual на critic_dataset):"]
+        if cf.get("available"):
+            out.append(
+                f"  <i>n={cf.get('n')} · blocked avg_r5={cf.get('blocked_avg_r5'):+.3f}% "
+                f"vs take {cf.get('take_baseline_avg_r5'):+.3f}% · "
+                f"miss {cf.get('miss_vs_take'):+.3f}pp · "
+                f"Sharpe×√n={cf.get('sharpe_sqrt_n'):+.2f} · win {cf.get('blocked_win_pct'):.0f}%</i>")
+        rsn = (l3.get("reason") or "").replace("\n", " ")
+        if rsn:
+            out.append(f"  <i>{rsn[:200]}</i>")
+        return out
     out = ["📊 <b>Бэктест:</b> не выполнен (нет sim handler для этого правила)"]
     rat = (hyp.get("rationale") or "").strip()
     if rat:
@@ -854,6 +893,79 @@ def build_hypothesis_review_block(top_n: int = DEFAULT_REVIEW_TOP_N) -> str | No
 
 
 # ---------------------------------------------------------------------------
+# Compact next-step block (replaces the 4 verbose blocks)
+# ---------------------------------------------------------------------------
+
+
+def build_next_step_block(top_n: int = 5) -> str | None:
+    """One focused "what to do next" section.
+
+    Picks the single most actionable hypothesis (best L3/L4 verdict),
+    shows a one-line data-backed reason + the approve command, then a
+    count of the rest. No raw rationale dumps, no per-hypothesis walls —
+    the operator wants the decision, not the essay."""
+    cands = collect_review_candidates(top_n)
+    if not cands:
+        return None
+
+    RANK = {"✅": 0, "⚠️": 1, "❌": 2}
+    scored = []
+    for h in cands:
+        m = _measured_summary(h)
+        adv = _latest_advisor(h.get("hypothesis_id", ""))
+        emoji, head, reason = _pipeline_verdict(h, m, adv)
+        scored.append((RANK.get(emoji, 3), h, emoji, head, reason))
+    scored.sort(key=lambda x: x[0])
+
+    rank, h, emoji, head, reason = scored[0]
+    hid = h.get("hypothesis_id", "")
+    title = humanize_rule(h)
+
+    # Plain-language reason: translate the L3 counterfactual numbers into
+    # one sentence a non-technical operator understands. No Sharpe / pp /
+    # "over-block" — just "the bot wrongly skipped trades that averaged
+    # +X%, its own average about zero".
+    cf = (_l3_result(h) or {}).get("counterfactual") or {}
+    if cf.get("available"):
+        b = cf.get("blocked_avg_r5")
+        t = cf.get("take_baseline_avg_r5")
+        n = cf.get("n")
+        conf = ("высокая" if emoji == "✅"
+                else "средняя" if emoji == "⚠️" else "низкая")
+        plain = (f"бот зря отсеивал сделки: они в среднем давали "
+                 f"{b:+.1f}%, а его собственные — около {t:+.1f}%. "
+                 f"Уверенность: {conf} (примеров: {n}).")
+    else:
+        plain = (reason or "").replace("\n", " ")
+        plain = plain.replace("Бэктест не запущен — нет данных для решения.",
+                              "проверка ещё не проводилась — данных нет.")
+        if len(plain) > 160:
+            plain = plain[:157] + "…"
+
+    head_plain = {"APPROVE": "Можно применить",
+                  "APPROVE с оговоркой": "Можно применить (осторожно)",
+                  "Не апрувить": "Пока не применять",
+                  "Подождать": "Подождать"}.get(head, head)
+
+    cmd = f"▶️ <code>pyembed\\python.exe files\\pipeline_approve.py --hypothesis {hid}</code>"
+    out = ["🎯 <b>ЧТО ДАЛЬШЕ</b>"]
+    if rank <= 1:  # actionable (✅ or ⚠️)
+        out.append(f"{emoji} <b>{head_plain}</b>: {title}")
+        out.append(f"<i>Почему: {plain}</i>")
+        out.append(cmd)
+    else:  # nothing data-backed to approve
+        out.append(f"⏸ Пока одобрять нечего — идей на проверке: "
+                   f"{len(cands)}. Вслепую не применять.")
+        out.append(f"<i>Лучшая: {title} — {plain}</i>")
+        out.append(cmd)
+
+    others = len(cands) - 1
+    if others > 0:
+        out.append(f"<i>+ ещё {others} в очереди (детали — в полном отчёте)</i>")
+    return "\n".join(out)
+
+
+# ---------------------------------------------------------------------------
 # Message assembly
 # ---------------------------------------------------------------------------
 
@@ -878,31 +990,22 @@ def build_full_message(
         return None
     parts = [health_text.rstrip()]
 
-    if incidents_block is ...:
-        incidents_block = build_incidents_block()
-    if incidents_block:
-        parts.append("")
-        parts.append(incidents_block)
-
-    attribution = build_attribution_block(attribution_report)
-    if attribution:
-        parts.append("")
-        parts.append(attribution)
-
-    # Rollback recommendations sit between attribution and review block:
-    # they need action TODAY (something previously approved didn't work),
-    # which is higher priority than new approval candidates.
-    if rollback_block is ...:
-        rollback_block = build_rollback_block()
-    if rollback_block:
-        parts.append("")
-        parts.append(rollback_block)
-
+    # Lean by design: the health core already answers "is the bot
+    # improving / were past approves a mistake". The only thing left the
+    # operator needs is the single next action. The old verbose
+    # incidents / attribution / rollback / full-review blocks are clutter
+    # for a daily glance — they remain in health-*.md for deep dives.
+    # `review_block`/`incidents_block`/`rollback_block` kwargs are kept
+    # for back-compat with tests but, when left as the sentinel, we now
+    # emit only the compact next-step block.
     if review_block is ...:
-        review_block = build_hypothesis_review_block()
+        review_block = build_next_step_block()
+    if isinstance(incidents_block, str) and incidents_block:
+        parts += ["", incidents_block]
+    if isinstance(rollback_block, str) and rollback_block:
+        parts += ["", rollback_block]
     if review_block:
-        parts.append("")
-        parts.append(review_block)
+        parts += ["", review_block]
 
     msg = "\n".join(parts)
     if len(msg) > TG_MAX_CHARS:

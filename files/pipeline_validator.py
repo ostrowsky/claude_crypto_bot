@@ -130,8 +130,71 @@ def validate_entry_score_floor(hyp: dict) -> dict:
     }
 
 
+def _blocked_bucket_counterfactual(gate: str) -> dict:
+    """L3-c honest sweep: for a `reason_code==gate` blocked bucket in
+    critic_dataset, compute forward 5-bar return vs the live `take`
+    baseline. This is the project-canonical over-blocking test
+    (CLAUDE.md §4/§9, same maths as analyze_blocked_gates.py) — now
+    usable for an automatic verdict because RM-1/RM-2 made every blocked
+    event carry `reason_code` + the critic fills `labels.ret_5`.
+
+    A gate is over-blocking iff the events it rejected would, on average,
+    have out-returned our actual entries (miss_vs_take > 0) with a
+    statistically meaningful Sharpe×√n.
+    """
+    import math
+
+    crit = PL.FILES_DIR / "critic_dataset.jsonl"
+    take: list[float] = []
+    bucket: list[float] = []
+    if not crit.exists():
+        return {"available": False, "reason": "critic_dataset.jsonl missing"}
+    for e in PL.iter_jsonl(crit):
+        dec = e.get("decision") or {}
+        lab = e.get("labels") or {}
+        r5 = lab.get("ret_5")
+        if r5 is None:
+            continue
+        try:
+            r5 = float(r5)
+        except (TypeError, ValueError):
+            continue
+        act = dec.get("action")
+        if act == "take":
+            take.append(r5)
+        elif act == "blocked" and dec.get("reason_code") == gate:
+            bucket.append(r5)
+
+    if len(bucket) < 20:
+        return {"available": False, "n": len(bucket),
+                "reason": f"only {len(bucket)} blocked events for '{gate}' (need >=20)"}
+
+    def _avg(xs): return sum(xs) / len(xs) if xs else 0.0
+
+    take_avg = _avg(take)
+    b_avg = _avg(bucket)
+    b_win = 100.0 * sum(1 for x in bucket if x > 0) / len(bucket)
+    if len(bucket) > 1:
+        mean = b_avg
+        sd = (sum((x - mean) ** 2 for x in bucket) / len(bucket)) ** 0.5
+    else:
+        sd = 0.0
+    sharpe = (b_avg / sd * math.sqrt(len(bucket))) if sd > 0 else 0.0
+    miss = b_avg - take_avg
+    return {
+        "available": True,
+        "n": len(bucket),
+        "take_baseline_avg_r5": round(take_avg, 4),
+        "blocked_avg_r5": round(b_avg, 4),
+        "blocked_win_pct": round(b_win, 1),
+        "miss_vs_take": round(miss, 4),
+        "sharpe_sqrt_n": round(sharpe, 2),
+    }
+
+
 def validate_gate_threshold(hyp: dict) -> dict:
-    """Generic gate-threshold relax — uses analyze_blocked_gates output as evidence."""
+    """L3-c generic gate-threshold relax — now emits a real verdict from
+    the honest blocked-bucket counterfactual (no longer pending_manual)."""
     gate = hyp.get("rule", "").replace("relax_gate_", "")
     if not gate:
         return {"verdict": "reject", "reason": "could not extract gate name from rule"}
@@ -140,20 +203,43 @@ def validate_gate_threshold(hyp: dict) -> dict:
     if gate in dnt:
         return {"verdict": "reject", "reason": f"gate '{gate}' is in do_not_touch list"}
 
-    ag = _run_existing_script("analyze_blocked_gates.py")
-    return {
-        "validator": "validate_gate_threshold",
-        "gate": gate,
-        "verdict": "pending_manual_validation",
-        "reason": "v1 emits diagnostic; needs per-gate replay script",
-        "manual_steps": [
-            f"1. Locate gate '{gate}' in files/trend_scout_rules.py or monitor.py",
-            f"2. Identify threshold constant in files/config.py",
-            f"3. Write _backtest_relax_{gate}.py that replays bot_events with threshold sweep",
-            f"4. Reject if recall@20 drops > {REJECT_RECALL_DROP_PP:.0%}",
-        ],
-        "raw_diagnostic": ag.get("stdout", "")[:800] if ag.get("ok") else None,
-    }
+    cf = _blocked_bucket_counterfactual(gate)
+    base = {"validator": "validate_gate_threshold", "gate": gate, "counterfactual": cf}
+
+    if not cf.get("available"):
+        # Not enough data for an honest verdict — say so, don't guess.
+        return {**base, "verdict": "pending_manual_validation",
+                "reason": cf.get("reason", "insufficient data for L3-c sweep")}
+
+    miss = cf["miss_vs_take"]
+    sharpe = cf["sharpe_sqrt_n"]
+    n = cf["n"]
+    MISS_MIN = 0.05      # blocked bucket must beat take by >0.05pp avg ret_5
+    SHARPE_SIG = 2.0     # ~2σ — statistically meaningful over-block
+
+    if miss <= MISS_MIN:
+        verdict, reason = "reject", (
+            f"gate '{gate}' works correctly: blocked avg_r5={cf['blocked_avg_r5']:+.4f}% "
+            f"is not better than take baseline {cf['take_baseline_avg_r5']:+.4f}% "
+            f"(miss {miss:+.4f}pp) — relaxing would admit non-better events")
+    elif sharpe < SHARPE_SIG:
+        verdict, reason = "needs_review", (
+            f"gate '{gate}' over-blocks (miss {miss:+.4f}pp) but weakly: "
+            f"Sharpe×√n={sharpe:+.2f} < {SHARPE_SIG} (n={n}) — positive signal, "
+            f"low confidence; operator decides")
+    elif n >= 200 and sharpe >= 3.0:
+        verdict, reason = "accept", (
+            f"strong over-block: {n} blocked events would avg "
+            f"{cf['blocked_avg_r5']:+.4f}% vs take {cf['take_baseline_avg_r5']:+.4f}% "
+            f"(miss {miss:+.4f}pp, Sharpe×√n={sharpe:+.2f}, win {cf['blocked_win_pct']:.0f}%)")
+    else:
+        verdict, reason = "needs_review", (
+            f"data-supported over-block: {n} blocked events avg "
+            f"{cf['blocked_avg_r5']:+.4f}% vs take {cf['take_baseline_avg_r5']:+.4f}% "
+            f"(miss {miss:+.4f}pp, Sharpe×√n={sharpe:+.2f}, win {cf['blocked_win_pct']:.0f}%) "
+            f"— moderate n; recommend approve with monitoring")
+
+    return {**base, "verdict": verdict, "reason": reason}
 
 
 def validate_tighten_proba(hyp: dict) -> dict:
