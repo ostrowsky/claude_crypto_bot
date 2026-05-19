@@ -503,6 +503,44 @@ def _near_miss_candidate_snapshot(
     return best
 
 
+def _default_trail_k(mode: Optional[str]) -> float:
+    """Config-default trail multiplier for a signal mode.
+
+    Mirrors the entry-block trail_k resolution (~L4890-4978). Used to
+    stamp `entry_context.trail_k` on critic candidates so the RM-3
+    fast-reversal label (`low(t+1..t+3) <= entry*(1-atr_pct*trail_k/100)`)
+    is computable. The live bandit may pick a slightly different arm per
+    trade, but the per-mode config default is the deterministic,
+    reproducible value the label backtest assumes.
+    """
+    m = (mode or "").lower()
+    if m == "breakout":
+        return float(getattr(config, "ATR_TRAIL_K_BREAKOUT", 1.5))
+    if m == "retest":
+        return float(getattr(config, "ATR_TRAIL_K_RETEST", 1.8))
+    if m in ("strong_trend", "impulse_speed"):
+        return float(getattr(config, "ATR_TRAIL_K_STRONG", 2.5))
+    if m == "trend_surge":
+        return float(getattr(config, "ATR_TRAIL_K_TREND_SURGE",
+                             getattr(config, "ATR_TRAIL_K_STRONG", 2.5)))
+    if m == "impulse_cross":
+        return float(getattr(config, "ATR_TRAIL_K_CROSS", 2.5))
+    # trend / alignment / impulse / default
+    return float(getattr(config, "ATR_TRAIL_K", 2.0))
+
+
+def _entry_atr_pct(feat: dict, data: np.ndarray, i: int) -> Optional[float]:
+    """ATR as % of entry close — mirrors ml_signal_model.build_runtime_record."""
+    try:
+        atr = float(feat["atr"][i])
+        close = float(data["c"][i])
+        if close > 0:
+            return round(atr / close * 100.0, 4)
+    except (KeyError, IndexError, TypeError, ValueError):
+        pass
+    return None
+
+
 def _log_critic_candidate(
     *,
     sym: str,
@@ -558,6 +596,10 @@ def _log_critic_candidate(
             signal_flags=signal_flags,
             near_miss=near_miss,
             btc_vs_ema50=float(getattr(config, "_btc_vs_ema50", 0.0)),
+            # RM-3: stamp entry context so the fast-reversal label is
+            # computable later (was the 0/17437 data gap).
+            atr_pct=_entry_atr_pct(feat, data, i),
+            trail_k=_default_trail_k(signal_type),
         )
     except Exception as exc:
         log.warning("critic_dataset.log_candidate failed for %s [%s]: %s", sym, tf, exc)
