@@ -893,6 +893,55 @@ def build_hypothesis_review_block(top_n: int = DEFAULT_REVIEW_TOP_N) -> str | No
 
 
 # ---------------------------------------------------------------------------
+# Compact next-step block (replaces the 4 verbose blocks)
+# ---------------------------------------------------------------------------
+
+
+def build_next_step_block(top_n: int = 5) -> str | None:
+    """One focused "what to do next" section.
+
+    Picks the single most actionable hypothesis (best L3/L4 verdict),
+    shows a one-line data-backed reason + the approve command, then a
+    count of the rest. No raw rationale dumps, no per-hypothesis walls —
+    the operator wants the decision, not the essay."""
+    cands = collect_review_candidates(top_n)
+    if not cands:
+        return None
+
+    RANK = {"✅": 0, "⚠️": 1, "❌": 2}
+    scored = []
+    for h in cands:
+        m = _measured_summary(h)
+        adv = _latest_advisor(h.get("hypothesis_id", ""))
+        emoji, head, reason = _pipeline_verdict(h, m, adv)
+        scored.append((RANK.get(emoji, 3), h, emoji, head, reason))
+    scored.sort(key=lambda x: x[0])
+
+    rank, h, emoji, head, reason = scored[0]
+    hid = h.get("hypothesis_id", "")
+    title = humanize_rule(h)
+    reason = (reason or "").replace("\n", " ")
+    if len(reason) > 180:
+        reason = reason[:177] + "…"
+
+    out = ["🎯 <b>СЛЕДУЮЩИЙ ШАГ</b>"]
+    if rank <= 1:  # actionable (✅ or ⚠️)
+        out.append(f"{emoji} <b>{head}</b>: {title}")
+        out.append(f"<i>{reason}</i>")
+        out.append(f"▶️ <code>pyembed\\python.exe files\\pipeline_approve.py --hypothesis {hid}</code>")
+    else:  # nothing data-backed to approve
+        out.append(f"⏸ Нет гипотез с данными для аппрува "
+                   f"({len(cands)} ждут валидатора). Не апрувить вслепую.")
+        out.append(f"<i>Лучшая: {title} — {reason}</i>")
+        out.append(f"▶️ <code>pyembed\\python.exe files\\pipeline_approve.py --hypothesis {hid}</code>")
+
+    others = len(cands) - 1
+    if others > 0:
+        out.append(f"<i>+ ещё {others} в очереди (полный список — в .md)</i>")
+    return "\n".join(out)
+
+
+# ---------------------------------------------------------------------------
 # Message assembly
 # ---------------------------------------------------------------------------
 
@@ -917,31 +966,22 @@ def build_full_message(
         return None
     parts = [health_text.rstrip()]
 
-    if incidents_block is ...:
-        incidents_block = build_incidents_block()
-    if incidents_block:
-        parts.append("")
-        parts.append(incidents_block)
-
-    attribution = build_attribution_block(attribution_report)
-    if attribution:
-        parts.append("")
-        parts.append(attribution)
-
-    # Rollback recommendations sit between attribution and review block:
-    # they need action TODAY (something previously approved didn't work),
-    # which is higher priority than new approval candidates.
-    if rollback_block is ...:
-        rollback_block = build_rollback_block()
-    if rollback_block:
-        parts.append("")
-        parts.append(rollback_block)
-
+    # Lean by design: the health core already answers "is the bot
+    # improving / were past approves a mistake". The only thing left the
+    # operator needs is the single next action. The old verbose
+    # incidents / attribution / rollback / full-review blocks are clutter
+    # for a daily glance — they remain in health-*.md for deep dives.
+    # `review_block`/`incidents_block`/`rollback_block` kwargs are kept
+    # for back-compat with tests but, when left as the sentinel, we now
+    # emit only the compact next-step block.
     if review_block is ...:
-        review_block = build_hypothesis_review_block()
+        review_block = build_next_step_block()
+    if isinstance(incidents_block, str) and incidents_block:
+        parts += ["", incidents_block]
+    if isinstance(rollback_block, str) and rollback_block:
+        parts += ["", rollback_block]
     if review_block:
-        parts.append("")
-        parts.append(review_block)
+        parts += ["", review_block]
 
     msg = "\n".join(parts)
     if len(msg) > TG_MAX_CHARS:

@@ -292,7 +292,11 @@ class BuildFullMessageTests(unittest.TestCase):
             write(t["attrib"] / "attribution-x.json", json.dumps(report))
             msg = N.build_full_message(date(2026, 5, 12))
             self.assertIn("🩺 ok", msg)
-            self.assertIn("Pipeline Attribution", msg)
+            # Lean redesign: verbose "Pipeline Attribution" block removed
+            # from the daily Telegram (past-approve status now lives in
+            # the health core's "Прошлые апрувы" line; full detail stays
+            # in health-*.md). Assert it is NOT re-introduced.
+            self.assertNotIn("Pipeline Attribution", msg)
 
     def test_truncates_oversize(self):
         with temp_tree() as t:
@@ -1121,7 +1125,10 @@ class FullMessageWithReviewTests(unittest.TestCase):
             write_hyp(t["hypotheses"], make_hyp(hid="h-x", severity="critical"))
             msg = N.build_full_message(date(2026, 5, 12))
             self.assertIn("🩺 ok", msg)
-            self.assertIn("Готовы к применению", msg)
+            # Lean redesign: the verbose "Готовы к применению" wall is
+            # replaced by a single compact "СЛЕДУЮЩИЙ ШАГ" block that
+            # still surfaces the hypothesis id so it stays actionable.
+            self.assertIn("СЛЕДУЮЩИЙ ШАГ", msg)
             self.assertIn("h-x", msg)
 
     def test_no_review_block_when_nothing_ready(self):

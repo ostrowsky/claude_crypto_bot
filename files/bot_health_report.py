@@ -601,7 +601,143 @@ def render_markdown(r: dict) -> str:
     return "\n".join(lines)
 
 
+def _ns_history() -> list[tuple[str, float]]:
+    """(date, early_capture) series from metrics_daily, oldest→newest."""
+    out: list[tuple[str, float]] = []
+    for row in PL.iter_jsonl(PL.METRICS_DAILY):
+        m = row.get("metrics") or row
+        ns = m.get("NS_EarlyCapture_top20") or m.get("_compute_early_capture.py") or {}
+        ec = ns.get("early_capture")
+        if ec is None:
+            continue
+        try:
+            out.append((str(row.get("ts", ""))[:10], float(ec)))
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def _progress_verdict() -> tuple[str, str, str]:
+    """Line-1 answer: is the bot improving / flat / degrading?
+
+    Judged ONLY on the North Star (early_capture) over the longest
+    available history — never on saturated training proxies (§0).
+    Returns (emoji, headline, trend_str).
+    """
+    h = _ns_history()
+    if len(h) < 2:
+        return ("❔", "ПРОГРЕСС НЕИЗВЕСТЕН", "недостаточно истории North Star")
+    first_v = h[0][1]
+    last_d, last_v = h[-1][-2], h[-1][1]
+    delta_pp = (last_v - first_v) * 100
+    trend = (f"{first_v:.1%} → {last_v:.1%} ({delta_pp:+.1f}pp за "
+             f"{len(h)} замеров)")
+    if delta_pp > 1.0:
+        return ("📈", "БОТ СОВЕРШЕНСТВУЕТСЯ", trend)
+    if delta_pp < -1.0:
+        return ("📉", "БОТ ДЕГРАДИРУЕТ", trend)
+    return ("➖", "БОТ СТОИТ НА МЕСТЕ", trend)
+
+
+def _past_decisions_verdict() -> str:
+    """Were previous strategy approvals a mistake or did the bot improve?
+
+    Reads decisions.jsonl (applied/rolled-back) + the latest attribution
+    pipeline_meta. Honest: if changes haven't matured 14d we say the
+    verdict is not yet possible rather than implying success."""
+    applied: list[str] = []
+    rolled: list[str] = []
+    for d in PL.iter_jsonl(PL.DECISIONS_LOG):
+        st = d.get("stage")
+        if st == "approved":
+            applied.append(d.get("hypothesis_id") or d.get("config_key") or "?")
+        elif st == "rolled_back":
+            rolled.append(d.get("rolling_back") or d.get("config_key") or "?")
+
+    meta = {}
+    adir = PL.PIPELINE / "attribution"
+    if adir.exists():
+        files = sorted(adir.glob("attribution-*.json"))
+        if files:
+            try:
+                meta = (json.loads(files[-1].read_text(encoding="utf-8"))
+                        .get("pipeline_meta") or {})
+            except (OSError, json.JSONDecodeError):
+                meta = {}
+
+    n_app = len(applied)
+    if n_app == 0:
+        return "пока ни одна стратегия не применена"
+
+    hr = meta.get("hit_rate")
+    by = meta.get("by_verdict") or {}
+    pending = int(by.get("needs_data", 0)) + int(by.get("no_baseline", 0))
+    if hr is None:
+        tail = f" · {len(rolled)} откат(ов)" if rolled else ""
+        return (f"{n_app} применено · 0 измерено (зреют, нужно 14д после "
+                f"apply){tail} · вердикт «помогло/навредило» пока НЕвозможен")
+    hits = int(by.get("hit", 0))
+    miss = int(by.get("miss", 0))
+    regr = int(by.get("regression", 0))
+    word = ("апрувы РАБОТАЮТ" if hr >= 0.6 else
+            "апрувы НЕ оправдались" if hr < 0.4 else "смешанно")
+    return (f"{n_app} применено · hit_rate {hr:.0%} → {word} "
+            f"({hits}✓ {miss}✗ {regr}⚠ {pending}⏳)")
+
+
 def render_telegram(r: dict) -> str:
+    """Lean, progress-first Telegram summary. Line 1 = the verdict the
+    operator must see instantly: improving / flat / degrading. Then the
+    North Star trend, the leaks, whether past approvals paid off, and the
+    single next action. Everything else is clutter and lives in the .md."""
+    md = (r.get("metrics_daily_latest") or {}).get("metrics") or {}
+    ns_md = md.get("NS_EarlyCapture_top20") or {}
+    funnel = md.get("C1_C2_coverage_funnel") or {}
+    rf = r.get("red_flags") or []
+
+    p_emoji, p_head, p_trend = _progress_verdict()
+
+    out = [f"🩺 <b>Bot</b> — {r['target_date']}", ""]
+    # ── LINE 1: the verdict ──────────────────────────────────────────────
+    out.append(f"{p_emoji} <b>{p_head}</b>")
+    out.append(f"<i>{p_trend}</i>")
+    out.append("")
+
+    # ── North Star value + where the loss is ─────────────────────────────
+    ec = ns_md.get("early_capture")
+    if ec is not None:
+        out.append(f"🎯 <b>North-star</b>: {ec:.1%}")
+        cov = funnel.get("coverage_pct_raw")
+        sm = funnel.get("silent_miss_pct")
+        capm = ns_md.get("decomp_capture_mean")
+        leaks = []
+        if cov is not None:
+            leaks.append(f"покрытие {cov:.0f}%")
+        if capm is not None:
+            leaks.append(f"capture {capm:.0%}")
+        if sm is not None:
+            leaks.append(f"silent-miss {sm:.0f}%")
+        if leaks:
+            out.append(f"<i>течи: {' · '.join(leaks)}</i>")
+    else:
+        out.append("🎯 <b>North-star</b>: ещё не измерен сегодня")
+    out.append("")
+
+    # ── Were past approvals a mistake? ───────────────────────────────────
+    out.append(f"🧪 <b>Прошлые апрувы</b>: {_past_decisions_verdict()}")
+    out.append("")
+
+    # ── Compact risk line (counts only — detail in .md) ──────────────────
+    if rf:
+        crit = sum(1 for x in rf if x.get("severity") == "critical")
+        out.append(f"🚨 {len(rf)} red flags ({crit} critical) — подробно в полном отчёте")
+    else:
+        out.append("✅ Нет red flags")
+
+    return "\n".join(out)
+
+
+def _render_telegram_legacy(r: dict) -> str:
     """Short Telegram summary — single screen."""
     ns = r["north_star"]
     gap = r["training_to_live_gap"]
