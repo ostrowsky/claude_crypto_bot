@@ -525,9 +525,26 @@ def main():
             print(f"ERROR: decision {args.decision} not in log")
             sys.exit(1)
     else:
+        # An approved decision is only "due" if it was actually applied.
+        # A later `deferred` or `rolled_back` record for the same
+        # hypothesis means the change never went live (or was reverted)
+        # — measuring it would pollute hit_rate with a phantom effect.
+        superseded: set[str] = set()
         for rec in PL.iter_jsonl(PL.DECISIONS_LOG):
-            if rec.get("stage") == "approved":
-                targets.append(rec)
+            if rec.get("stage") in ("deferred", "rolled_back"):
+                hid = rec.get("hypothesis_id")
+                if hid:
+                    superseded.add(hid)
+                tgt = rec.get("defers") or rec.get("rolling_back")
+                if tgt:
+                    superseded.add(tgt)
+        for rec in PL.iter_jsonl(PL.DECISIONS_LOG):
+            if rec.get("stage") != "approved":
+                continue
+            if rec.get("hypothesis_id") in superseded \
+                    or rec.get("decision_id") in superseded:
+                continue
+            targets.append(rec)
 
     results: list[dict] = []
     for d in targets:

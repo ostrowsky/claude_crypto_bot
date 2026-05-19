@@ -32,11 +32,97 @@ if hasattr(sys.stdout, "reconfigure"):
 from datetime import datetime, timezone
 from pathlib import Path
 
+import re
+
 import pipeline_lib as PL
 import pipeline_claude_client as CC
 import pipeline_baseline as PB
 
 ADVISORY_LOG = PL.PIPELINE / "approve_advisory.jsonl"
+CONFIG_PY = PL.FILES_DIR / "config.py"
+
+# Rule/gate -> the REAL config.py constant(s) it controls. L2 (and Claude)
+# frequently emit a synthetic `config_key` like
+# GATE_LATE_IMPULSE_ROTATION_THRESHOLD that does NOT exist in config.py,
+# producing an un-appliable instruction. This registry maps a hypothesis
+# to the constants an operator must actually edit. Extend as new rule
+# families gain validators.
+RULE_CONFIG_MAP: dict[str, list[str]] = {
+    "relax_gate_late_impulse_rotation": [
+        "IMPULSE_SPEED_ROTATION_GUARD_15M_RSI_MIN",
+        "IMPULSE_SPEED_ROTATION_GUARD_15M_RANGE_MIN",
+        "IMPULSE_SPEED_ROTATION_GUARD_1H_RSI_MIN",
+        "IMPULSE_SPEED_ROTATION_GUARD_1H_RANGE_MIN",
+    ],
+    "entry_score_floor_relax": ["ENTRY_SCORE_FLOOR_GLOBAL"],
+    "disable_mode_impulse_speed": ["MODE_IMPULSE_SPEED_ENABLED"],
+}
+
+
+def _config_constants() -> dict[str, str]:
+    """Top-level CONST names -> their literal RHS, parsed from config.py
+    without importing it (config.py has import side effects). Matches
+    `NAME: type = value` and `NAME = value`."""
+    out: dict[str, str] = {}
+    if not CONFIG_PY.exists():
+        return out
+    pat = re.compile(r"^([A-Z][A-Z0-9_]*)\s*(?::[^=]+)?=\s*(.+?)\s*(?:#.*)?$")
+    for line in CONFIG_PY.read_text(encoding="utf-8", errors="replace").splitlines():
+        m = pat.match(line)
+        if m:
+            out[m.group(1)] = m.group(2).strip()
+    return out
+
+
+def resolve_config_keys(hyp: dict) -> dict:
+    """Map a hypothesis to REAL config.py constants.
+
+    Returns {"ok": bool, "keys": [...], "missing": [...], "reason": str}.
+    ok=False means the operator literally cannot apply this as written —
+    L2 emitted a placeholder. This is the L2-mapping guard.
+    """
+    consts = _config_constants()
+    rule = hyp.get("rule", "")
+    declared = hyp.get("config_key")
+
+    # 1) explicit registry mapping for the rule (most reliable)
+    if rule in RULE_CONFIG_MAP:
+        keys = RULE_CONFIG_MAP[rule]
+        missing = [k for k in keys if k not in consts]
+        return {
+            "ok": not missing,
+            "keys": keys,
+            "missing": missing,
+            "reason": ("all mapped constants exist" if not missing
+                       else f"registry constants missing from config.py: {missing}"),
+        }
+    # 2) the declared config_key is itself a real constant
+    if declared and declared in consts:
+        return {"ok": True, "keys": [declared], "missing": [],
+                "reason": "declared config_key exists in config.py"}
+    # 3) unresolvable -> L2 emitted a synthetic key
+    return {
+        "ok": False,
+        "keys": [],
+        "missing": [declared] if declared else [],
+        "reason": (f"config_key '{declared}' does not exist in config.py and "
+                   f"rule '{rule}' has no entry in RULE_CONFIG_MAP — L2 emitted "
+                   f"a placeholder; needs a real-constant mapping before apply"),
+    }
+
+
+def _is_concrete_value(v) -> bool:
+    """A diff target is appliable only if it's a real Python literal,
+    not a directive like '+10% looser' or 'current'."""
+    if isinstance(v, (int, float, bool)):
+        return True
+    if isinstance(v, str):
+        s = v.strip().lower()
+        if s in ("current", "") or "%" in s or " " in s or "looser" in s or "tighter" in s:
+            return False
+        # bare numeric / true / false / quoted string
+        return bool(re.fullmatch(r"-?\d+(\.\d+)?|true|false|'[^']*'|\"[^\"]*\"", s))
+    return False
 
 
 _CLAUDE_ADVISOR_SYSTEM = """You are the L6 ADVISOR for an AI-improvement pipeline.
@@ -189,6 +275,16 @@ def safety_checks(hyp: dict) -> list[str]:
     issues = []
     if hyp.get("status") in ("rejected", "rolled_back"):
         issues.append(f"hypothesis already in terminal state: {hyp['status']}")
+    # The hyp-file status doesn't track defer/rollback (those live in
+    # decisions.jsonl). Without this, a deferred hold is not sticky — it
+    # could be silently re-approved, re-polluting attribution.
+    hid = hyp.get("hypothesis_id")
+    for rec in PL.iter_jsonl(PL.DECISIONS_LOG):
+        if rec.get("hypothesis_id") == hid and rec.get("stage") in ("deferred", "rolled_back"):
+            issues.append(
+                f"hypothesis was {rec.get('stage')} in decisions.jsonl "
+                f"({rec.get('decision_id')}): {rec.get('reason') or 'no reason'} "
+                f"— use --force only if intentionally re-opening")
     if hyp.get("config_key") in set(PL.load_do_not_touch().get("config_keys_locked", [])):
         issues.append(f"config_key '{hyp['config_key']}' is in do_not_touch.config_keys_locked")
     if not hyp.get("validation_report"):
@@ -196,6 +292,13 @@ def safety_checks(hyp: dict) -> list[str]:
     vr = (hyp.get("validation_report") or {}).get("result", {})
     if vr.get("verdict") == "reject":
         issues.append(f"L3 verdict=reject: {vr.get('reason')}")
+    # L2-mapping guard: refuse to approve a hypothesis whose config_key
+    # cannot be resolved to a real config.py constant — otherwise the
+    # operator gets an un-appliable instruction (the
+    # GATE_LATE_IMPULSE_ROTATION_THRESHOLD class of bug).
+    rk = resolve_config_keys(hyp)
+    if not rk["ok"]:
+        issues.append(f"unmappable config_key: {rk['reason']}")
     return issues
 
 
@@ -228,22 +331,72 @@ def record_decision(decision_id: str, hyp: dict, stage: str, extra: dict | None 
 
 
 def emit_apply_instructions(hyp: dict) -> None:
-    key = hyp.get("config_key")
     d = hyp.get("diff", {})
+    rk = resolve_config_keys(hyp)
+    consts = _config_constants()
     print("")
     print("=" * 70)
     print("APPLY MANUALLY")
     print("=" * 70)
-    print(f"1. Edit files/config.py:")
-    print(f"     {key} = {d.get('to')}        # was {d.get('from')}")
+
+    if not rk["ok"]:
+        print("⚠️  CANNOT EMIT A SAFE APPLY INSTRUCTION")
+        print(f"   {rk['reason']}")
+        print("   This hypothesis must NOT be pasted into config.py as-is.")
+        print("   Fix the L2 mapping (RULE_CONFIG_MAP) or reject the hypothesis.")
+        return
+
+    keys = rk["keys"]
+    to_val = d.get("to")
+    concrete = _is_concrete_value(to_val)
+    print("1. Edit files/config.py — real constant(s) for this rule:")
+    for k in keys:
+        cur = consts.get(k, "<unknown>")
+        if concrete and len(keys) == 1:
+            print(f"     {k} = {to_val}        # was {cur}")
+        else:
+            # Directive diff ('+10% looser') or multi-constant gate:
+            # show current values + the directive, do NOT fabricate a
+            # paste-ready line the operator might apply wrongly.
+            print(f"     {k}    # current={cur}   apply: {to_val!r} (directive — compute per-constant)")
+    if not concrete:
+        print("   NOTE: diff is a DIRECTIVE, not a literal. Compute each "
+              "constant's new value explicitly and record it.")
     print("")
     print(f"2. Restart bot:  restart_bot.bat")
     print("")
     print(f"3. Suggested commit message:")
-    print(f"     pipeline: apply {hyp['hypothesis_id']} ({key} {d.get('from')}->{d.get('to')})")
+    print(f"     pipeline: apply {hyp['hypothesis_id']} ({','.join(keys)} := {to_val})")
     print("")
     print(f"4. Schedule rollback check in 7 days:")
     print(f"     pyembed\\python.exe files\\pipeline_approve.py --rollback-check {hyp['hypothesis_id']}")
+
+
+def cmd_defer(hyp_path: Path, reason: str) -> None:
+    """Hold an approved hypothesis WITHOUT applying it. Records a
+    `deferred` decision so memory is honest and L7 attribution skips it
+    (it would otherwise measure a change that was never applied)."""
+    hyp = PL.read_json(hyp_path)
+    if not hyp:
+        print(f"ERROR: cannot read {hyp_path}")
+        return
+    hid = hyp.get("hypothesis_id")
+    prior = None
+    for rec in PL.iter_jsonl(PL.DECISIONS_LOG):
+        if rec.get("hypothesis_id") == hid and rec.get("stage") == "approved":
+            prior = rec
+    decision_id = f"d-{datetime.now(timezone.utc).strftime('%Y-%m-%dT%H%M%SZ')}-{uuid.uuid4().hex[:6]}"
+    record_decision(decision_id, hyp, "deferred", extra={
+        "reason": reason,
+        "defers": prior.get("decision_id") if prior else None,
+        "applied": False,
+    })
+    print(f"Deferred: {hid}")
+    print(f"  reason: {reason}")
+    if prior:
+        print(f"  supersedes approved decision {prior.get('decision_id')} "
+              f"(was NOT applied — attribution will skip it)")
+    print(f"  decision_id={decision_id}")
 
 
 def cmd_list_pending() -> None:
@@ -375,6 +528,7 @@ def main():
     g.add_argument("--hypothesis", help="approve/reject this hypothesis_id")
     g.add_argument("--hypothesis-file", help="path to hypothesis JSON")
     g.add_argument("--rollback", help="decision_id to roll back")
+    g.add_argument("--defer", help="hypothesis_id to HOLD (approved but not applied)")
     g.add_argument("--list-pending", action="store_true")
     ap.add_argument("--approve", action="store_true", help="non-interactive approve")
     ap.add_argument("--reject", help="reject with reason")
@@ -388,6 +542,11 @@ def main():
 
     if args.rollback:
         cmd_rollback(args.rollback, args.reason or "unspecified")
+        return
+
+    if args.defer:
+        dp = PL.HYPOTHESES / f"{args.defer}.json"
+        cmd_defer(dp, args.reason or "held: awaiting L4 shadow before apply")
         return
 
     if args.hypothesis_file:
