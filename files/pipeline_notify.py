@@ -920,24 +920,48 @@ def build_next_step_block(top_n: int = 5) -> str | None:
     rank, h, emoji, head, reason = scored[0]
     hid = h.get("hypothesis_id", "")
     title = humanize_rule(h)
-    reason = (reason or "").replace("\n", " ")
-    if len(reason) > 180:
-        reason = reason[:177] + "…"
 
-    out = ["🎯 <b>СЛЕДУЮЩИЙ ШАГ</b>"]
+    # Plain-language reason: translate the L3 counterfactual numbers into
+    # one sentence a non-technical operator understands. No Sharpe / pp /
+    # "over-block" — just "the bot wrongly skipped trades that averaged
+    # +X%, its own average about zero".
+    cf = (_l3_result(h) or {}).get("counterfactual") or {}
+    if cf.get("available"):
+        b = cf.get("blocked_avg_r5")
+        t = cf.get("take_baseline_avg_r5")
+        n = cf.get("n")
+        conf = ("высокая" if emoji == "✅"
+                else "средняя" if emoji == "⚠️" else "низкая")
+        plain = (f"бот зря отсеивал сделки: они в среднем давали "
+                 f"{b:+.1f}%, а его собственные — около {t:+.1f}%. "
+                 f"Уверенность: {conf} (примеров: {n}).")
+    else:
+        plain = (reason or "").replace("\n", " ")
+        plain = plain.replace("Бэктест не запущен — нет данных для решения.",
+                              "проверка ещё не проводилась — данных нет.")
+        if len(plain) > 160:
+            plain = plain[:157] + "…"
+
+    head_plain = {"APPROVE": "Можно применить",
+                  "APPROVE с оговоркой": "Можно применить (осторожно)",
+                  "Не апрувить": "Пока не применять",
+                  "Подождать": "Подождать"}.get(head, head)
+
+    cmd = f"▶️ <code>pyembed\\python.exe files\\pipeline_approve.py --hypothesis {hid}</code>"
+    out = ["🎯 <b>ЧТО ДАЛЬШЕ</b>"]
     if rank <= 1:  # actionable (✅ or ⚠️)
-        out.append(f"{emoji} <b>{head}</b>: {title}")
-        out.append(f"<i>{reason}</i>")
-        out.append(f"▶️ <code>pyembed\\python.exe files\\pipeline_approve.py --hypothesis {hid}</code>")
+        out.append(f"{emoji} <b>{head_plain}</b>: {title}")
+        out.append(f"<i>Почему: {plain}</i>")
+        out.append(cmd)
     else:  # nothing data-backed to approve
-        out.append(f"⏸ Нет гипотез с данными для аппрува "
-                   f"({len(cands)} ждут валидатора). Не апрувить вслепую.")
-        out.append(f"<i>Лучшая: {title} — {reason}</i>")
-        out.append(f"▶️ <code>pyembed\\python.exe files\\pipeline_approve.py --hypothesis {hid}</code>")
+        out.append(f"⏸ Пока одобрять нечего — идей на проверке: "
+                   f"{len(cands)}. Вслепую не применять.")
+        out.append(f"<i>Лучшая: {title} — {plain}</i>")
+        out.append(cmd)
 
     others = len(cands) - 1
     if others > 0:
-        out.append(f"<i>+ ещё {others} в очереди (полный список — в .md)</i>")
+        out.append(f"<i>+ ещё {others} в очереди (детали — в полном отчёте)</i>")
     return "\n".join(out)
 
 

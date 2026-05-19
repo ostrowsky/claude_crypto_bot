@@ -1125,10 +1125,10 @@ class FullMessageWithReviewTests(unittest.TestCase):
             write_hyp(t["hypotheses"], make_hyp(hid="h-x", severity="critical"))
             msg = N.build_full_message(date(2026, 5, 12))
             self.assertIn("🩺 ok", msg)
-            # Lean redesign: the verbose "Готовы к применению" wall is
-            # replaced by a single compact "СЛЕДУЮЩИЙ ШАГ" block that
+            # Plain-language redesign: the verbose "Готовы к применению"
+            # wall is replaced by a single compact "ЧТО ДАЛЬШЕ" block that
             # still surfaces the hypothesis id so it stays actionable.
-            self.assertIn("СЛЕДУЮЩИЙ ШАГ", msg)
+            self.assertIn("ЧТО ДАЛЬШЕ", msg)
             self.assertIn("h-x", msg)
 
     def test_no_review_block_when_nothing_ready(self):

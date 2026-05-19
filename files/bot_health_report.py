@@ -617,42 +617,79 @@ def _ns_history() -> list[tuple[str, float]]:
     return out
 
 
-def _progress_verdict() -> tuple[str, str, str]:
-    """Line-1 answer: is the bot improving / flat / degrading?
+def _per100(frac: float) -> int:
+    """0.106 -> 11  (rockets caught per 100)."""
+    return max(0, round(frac * 100))
 
-    Judged ONLY on the North Star (early_capture) over the longest
-    available history — never on saturated training proxies (§0).
-    Returns (emoji, headline, trend_str).
-    """
+
+def _progress_verdict() -> tuple[str, str, str]:
+    """Line-1 answer in PLAIN words: developing / flat / worse.
+    Judged only on the North Star over the longest history (§0)."""
     h = _ns_history()
     if len(h) < 2:
-        return ("❔", "ПРОГРЕСС НЕИЗВЕСТЕН", "недостаточно истории North Star")
-    first_v = h[0][1]
-    last_d, last_v = h[-1][-2], h[-1][1]
+        return ("❔", "ПОКА НЕ ЯСНО", "мало истории, чтобы судить")
+    first_v, last_v = h[0][1], h[-1][1]
     delta_pp = (last_v - first_v) * 100
-    trend = (f"{first_v:.1%} → {last_v:.1%} ({delta_pp:+.1f}pp за "
-             f"{len(h)} замеров)")
+    trend = f"за период: ~{_per100(first_v)} → ~{_per100(last_v)} из 100 ракет"
     if delta_pp > 1.0:
-        return ("📈", "БОТ СОВЕРШЕНСТВУЕТСЯ", trend)
+        return ("📈", "РАЗВИВАЕТСЯ (медленно)", trend)
     if delta_pp < -1.0:
-        return ("📉", "БОТ ДЕГРАДИРУЕТ", trend)
-    return ("➖", "БОТ СТОИТ НА МЕСТЕ", trend)
+        return ("📉", "СТАЛО ХУЖЕ", trend)
+    return ("➖", "СТОИТ НА МЕСТЕ", trend)
 
 
-def _past_decisions_verdict() -> str:
-    """Were previous strategy approvals a mistake or did the bot improve?
-
-    Reads decisions.jsonl (applied/rolled-back) + the latest attribution
-    pipeline_meta. Honest: if changes haven't matured 14d we say the
-    verdict is not yet possible rather than implying success."""
-    applied: list[str] = []
-    rolled: list[str] = []
+def _superseded_hyps() -> set[str]:
+    """hypothesis_ids that were deferred/rolled_back (terminal — sticky)."""
+    s: set[str] = set()
     for d in PL.iter_jsonl(PL.DECISIONS_LOG):
+        if d.get("stage") in ("deferred", "rolled_back"):
+            if d.get("hypothesis_id"):
+                s.add(d["hypothesis_id"])
+            tgt = d.get("defers") or d.get("rolling_back")
+            if tgt:
+                s.add(tgt)
+    return s
+
+
+_RULE_PLAIN = {
+    "disable_mode_impulse_speed":      "отключение режима «быстрый импульс»",
+    "entry_score_floor_relax":         "порог входа (мягче)",
+    "relax_gate_late_impulse_rotation":"фильтр «поздняя ротация»",
+    "relax_gate_ranker_hard_veto":     "фильтр оценщика",
+    "tighten_proba_impulse_speed":     "строже к «быстрому импульсу»",
+    "widen_watchlist_match_tolerance": "шире сопоставление монет",
+    "reduce_impulse_speed_lateness_window": "окно опоздания «быстрый импульс»",
+    "shorten_late_impulse_rotation_cooldown": "пауза «поздняя ротация»",
+}
+
+
+def _rule_plain(rule: str, hid: str) -> str:
+    if rule in _RULE_PLAIN:
+        return _RULE_PLAIN[rule]
+    return (rule or hid or "изменение").replace("_", " ")
+
+
+def _past_decisions_resume() -> list[str]:
+    """Per-decision plain-language outcome: helped / worsened / too
+    early / rolled back / held. Dedup by hypothesis (terminal wins).
+    Honest: if a change hasn't matured 14d we say 'рано судить'."""
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc)
+    superseded = _superseded_hyps()
+
+    state: dict[str, dict] = {}
+    for d in PL.iter_jsonl(PL.DECISIONS_LOG):
+        hid = d.get("hypothesis_id")
         st = d.get("stage")
-        if st == "approved":
-            applied.append(d.get("hypothesis_id") or d.get("config_key") or "?")
-        elif st == "rolled_back":
-            rolled.append(d.get("rolling_back") or d.get("config_key") or "?")
+        if not hid or st not in ("approved", "rolled_back", "deferred", "rejected"):
+            continue
+        try:
+            age = (now - datetime.fromisoformat(
+                str(d.get("ts", "")).replace("Z", "+00:00"))).days
+        except (ValueError, TypeError):
+            age = None
+        state[hid] = {"stage": st, "rule": d.get("rule"), "age": age}
 
     meta = {}
     adir = PL.PIPELINE / "attribution"
@@ -664,75 +701,102 @@ def _past_decisions_verdict() -> str:
                         .get("pipeline_meta") or {})
             except (OSError, json.JSONDecodeError):
                 meta = {}
-
-    n_app = len(applied)
-    if n_app == 0:
-        return "пока ни одна стратегия не применена"
-
     hr = meta.get("hit_rate")
-    by = meta.get("by_verdict") or {}
-    pending = int(by.get("needs_data", 0)) + int(by.get("no_baseline", 0))
-    if hr is None:
-        tail = f" · {len(rolled)} откат(ов)" if rolled else ""
-        return (f"{n_app} применено · 0 измерено (зреют, нужно 14д после "
-                f"apply){tail} · вердикт «помогло/навредило» пока НЕвозможен")
-    hits = int(by.get("hit", 0))
-    miss = int(by.get("miss", 0))
-    regr = int(by.get("regression", 0))
-    word = ("апрувы РАБОТАЮТ" if hr >= 0.6 else
-            "апрувы НЕ оправдались" if hr < 0.4 else "смешанно")
-    return (f"{n_app} применено · hit_rate {hr:.0%} → {word} "
-            f"({hits}✓ {miss}✗ {regr}⚠ {pending}⏳)")
+
+    lines: list[str] = []
+    for hid, s in state.items():
+        name = _rule_plain(s["rule"], hid)
+        st, age = s["stage"], s["age"]
+        if hid in superseded and st != "rolled_back":
+            lines.append(f"  • {name} — ⏸ придержали до проверки")
+            continue
+        if st == "rejected":
+            continue
+        if st == "rolled_back":
+            lines.append(f"  • {name} — ↩️ откатили")
+            continue
+        if age is not None and age < 14:
+            lines.append(f"  • {name} — применили {age} дн назад · "
+                         f"⏳ рано судить (ещё ~{14 - age} дн)")
+        elif hr is None:
+            lines.append(f"  • {name} — применили · ⏳ ещё считаем")
+        elif hr >= 0.6:
+            lines.append(f"  • {name} — ✅ помогло")
+        elif hr < 0.4:
+            lines.append(f"  • {name} — ❌ не помогло / навредило")
+        else:
+            lines.append(f"  • {name} — ⚠️ эффект смешанный")
+
+    return lines[-4:] if lines else ["  • пока ни одно решение не применяли"]
+
+
+def _action_needed_count() -> int:
+    """How many hypotheses are ACTUALLY actionable for the operator —
+    i.e. validated with a real verdict (accept/needs_review), not held,
+    not still waiting for a validator. Avoids over-promising "N decisions
+    for you" when those N have no data to decide on."""
+    superseded = _superseded_hyps()
+    n = 0
+    for p in PL.HYPOTHESES.glob("h-*.json"):
+        h = PL.read_json(p) or {}
+        if h.get("status") != "pending_validation":
+            continue
+        if h.get("hypothesis_id") in superseded:
+            continue
+        v = ((h.get("validation_report") or {}).get("result") or {}).get("verdict")
+        if v in ("accept", "needs_review"):
+            n += 1
+    return n
 
 
 def render_telegram(r: dict) -> str:
-    """Lean, progress-first Telegram summary. Line 1 = the verdict the
-    operator must see instantly: improving / flat / degrading. Then the
-    North Star trend, the leaks, whether past approvals paid off, and the
-    single next action. Everything else is clutter and lives in the .md."""
+    """Plain-language daily summary: in a few lines the operator sees if
+    the bot is developing, where it loses, what past decisions did, and
+    whether action is needed — zero jargon."""
     md = (r.get("metrics_daily_latest") or {}).get("metrics") or {}
     ns_md = md.get("NS_EarlyCapture_top20") or {}
     funnel = md.get("C1_C2_coverage_funnel") or {}
     rf = r.get("red_flags") or []
 
     p_emoji, p_head, p_trend = _progress_verdict()
+    n_act = _action_needed_count()
+    act = (f"👉 нужно твоё решение ({n_act})" if n_act
+           else "👉 от тебя ничего не требуется")
 
-    out = [f"🩺 <b>Bot</b> — {r['target_date']}", ""]
-    # ── LINE 1: the verdict ──────────────────────────────────────────────
-    out.append(f"{p_emoji} <b>{p_head}</b>")
-    out.append(f"<i>{p_trend}</i>")
+    out = [f"🩺 <b>Бот</b> — {r['target_date']}", ""]
+    out.append(f"{p_emoji} <b>{p_head}</b>   ·   {act}")
     out.append("")
 
-    # ── North Star value + where the loss is ─────────────────────────────
     ec = ns_md.get("early_capture")
     if ec is not None:
-        out.append(f"🎯 <b>North-star</b>: {ec:.1%}")
+        out.append(f"<b>Главное:</b> из 100 ракет бот вовремя ловит "
+                   f"~{_per100(ec)} ({p_trend}). Цель — 25+.")
         cov = funnel.get("coverage_pct_raw")
         sm = funnel.get("silent_miss_pct")
         capm = ns_md.get("decomp_capture_mean")
-        leaks = []
-        if cov is not None:
-            leaks.append(f"покрытие {cov:.0f}%")
-        if capm is not None:
-            leaks.append(f"capture {capm:.0%}")
-        if sm is not None:
-            leaks.append(f"silent-miss {sm:.0f}%")
-        if leaks:
-            out.append(f"<i>течи: {' · '.join(leaks)}</i>")
+        if cov is not None and capm:
+            caught = round(cov / 10.0)
+            fifth = max(1, round(1 / capm))
+            out.append(f"<b>Где теряем:</b> из 10 ракет ~{caught} поймал, "
+                       f"из пойманных взял лишь 1/{fifth} их роста.")
+        if sm is not None and sm > 0:
+            every = max(2, round(100 / sm))
+            out.append(f"<b>Главный тормоз:</b> каждую ~{every}-ю ракету "
+                       f"бот вообще не видит.")
     else:
-        out.append("🎯 <b>North-star</b>: ещё не измерен сегодня")
+        out.append("<b>Главное:</b> результат за сегодня ещё считается.")
     out.append("")
 
-    # ── Were past approvals a mistake? ───────────────────────────────────
-    out.append(f"🧪 <b>Прошлые апрувы</b>: {_past_decisions_verdict()}")
+    out.append("📋 <b>Прошлые решения</b> (помогли или нет):")
+    out.extend(_past_decisions_resume())
     out.append("")
 
-    # ── Compact risk line (counts only — detail in .md) ──────────────────
     if rf:
         crit = sum(1 for x in rf if x.get("severity") == "critical")
-        out.append(f"🚨 {len(rf)} red flags ({crit} critical) — подробно в полном отчёте")
+        tail = f" ({crit} серьёзн.)" if crit else ""
+        out.append(f"🚨 {len(rf)} сигнал(ов) тревоги{tail} — детали в полном отчёте")
     else:
-        out.append("✅ Нет red flags")
+        out.append("✅ Тревог нет")
 
     return "\n".join(out)
 
