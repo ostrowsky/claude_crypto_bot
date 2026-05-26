@@ -3744,6 +3744,12 @@ async def _poll_coin(
                 botlog.log_blocked(sym, tf, float(c[i]), reason, signal_type="late_continuation")
                 return
             is_bull_day_now = bool(getattr(config, "_bull_day_active", False))
+            # ml_proba is only computed later (~L3939) but the early block
+            # paths (e.g. impulse_guard) reference it via _build_block_context
+            # -> initialise here so a pre-compute block can't raise
+            # UnboundLocalError and drop the whole poll (dropped impulse_speed
+            # candidates 2026-05-26).
+            ml_proba = None
             impulse_speed_reason = _impulse_speed_entry_guard(
                 tf=tf,
                 mode=preview_mode,
