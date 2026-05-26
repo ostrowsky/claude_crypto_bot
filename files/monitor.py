@@ -566,6 +566,8 @@ def _log_critic_candidate(
     continuation_profile: bool = False,
     signal_flags: Optional[Dict[str, bool]] = None,
     near_miss: bool = False,
+    atr_pct: Optional[float] = None,
+    trail_k: Optional[float] = None,
 ) -> str:
     if not getattr(config, "CRITIC_DATASET_ENABLED", False):
         return ""
@@ -597,9 +599,11 @@ def _log_critic_candidate(
             near_miss=near_miss,
             btc_vs_ema50=float(getattr(config, "_btc_vs_ema50", 0.0)),
             # RM-3: stamp entry context so the fast-reversal label is
-            # computable later (was the 0/17437 data gap).
-            atr_pct=_entry_atr_pct(feat, data, i),
-            trail_k=_default_trail_k(signal_type),
+            # computable later. Prefer explicit values from the entry call
+            # site (real trail_k chosen by the trail bandit); else derive
+            # (blocked-candidate sites don't pass them).
+            atr_pct=atr_pct if atr_pct is not None else _entry_atr_pct(feat, data, i),
+            trail_k=trail_k if trail_k is not None else _default_trail_k(signal_type),
         )
     except Exception as exc:
         log.warning("critic_dataset.log_candidate failed for %s [%s]: %s", sym, tf, exc)
