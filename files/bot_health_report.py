@@ -769,20 +769,24 @@ def render_telegram(r: dict) -> str:
 
     ec = ns_md.get("early_capture")
     if ec is not None:
-        out.append(f"<b>Главное:</b> из 100 ракет бот вовремя ловит "
-                   f"~{_per100(ec)} ({p_trend}). Цель — 25+.")
+        # All "ракеты" below refer to top-movers OF OUR WATCHLIST only —
+        # the bot can only buy what's in watchlist.json (~105 coins), so
+        # the metric is fairly scoped to watchlist ∩ Binance top-20.
+        out.append(f"<b>Главное:</b> из 100 ракет (из нашего списка) "
+                   f"бот ловит вовремя ~{_per100(ec)} ({p_trend}). Цель — 25+.")
         cov = funnel.get("coverage_pct_raw")
         sm = funnel.get("silent_miss_pct")
         capm = ns_md.get("decomp_capture_mean")
         if cov is not None and capm:
             caught = round(cov / 10.0)
             fifth = max(1, round(1 / capm))
-            out.append(f"<b>Где теряем:</b> из 10 ракет ~{caught} поймал, "
-                       f"из пойманных взял лишь 1/{fifth} их роста.")
+            out.append(f"<b>Где теряем:</b> из 10 ракет нашего списка "
+                       f"~{caught} поймал, из пойманных взял лишь "
+                       f"1/{fifth} их роста.")
         if sm is not None and sm > 0:
             every = max(2, round(100 / sm))
             out.append(f"<b>Главный тормоз:</b> каждую ~{every}-ю ракету "
-                       f"бот вообще не видит.")
+                       f"из нашего списка бот вообще не видит.")
     else:
         out.append("<b>Главное:</b> результат за сегодня ещё считается.")
     out.append("")
