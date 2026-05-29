@@ -54,7 +54,7 @@ RULE_CONFIG_MAP: dict[str, list[str]] = {
         "IMPULSE_SPEED_ROTATION_GUARD_1H_RSI_MIN",
         "IMPULSE_SPEED_ROTATION_GUARD_1H_RANGE_MIN",
     ],
-    "entry_score_floor_relax": ["ENTRY_SCORE_FLOOR_GLOBAL"],
+    "entry_score_floor_relax": ["ENTRY_SCORE_MIN_15M", "ENTRY_SCORE_MIN_1H"],
     "disable_mode_impulse_speed": ["MODE_IMPULSE_SPEED_ENABLED"],
 }
 
@@ -85,16 +85,24 @@ def resolve_config_keys(hyp: dict) -> dict:
     rule = hyp.get("rule", "")
     declared = hyp.get("config_key")
 
-    # 1) explicit registry mapping for the rule (most reliable)
+    # 1) explicit registry mapping for the rule. If the hypothesis ALSO
+    #    declares a config_key that is in the mapped set, narrow to it
+    #    (rule families can cover several tf variants; the hypothesis
+    #    targets one).
     if rule in RULE_CONFIG_MAP:
-        keys = RULE_CONFIG_MAP[rule]
+        mapped = RULE_CONFIG_MAP[rule]
+        if declared and declared in mapped:
+            keys = [declared]
+        else:
+            keys = mapped
         missing = [k for k in keys if k not in consts]
         return {
             "ok": not missing,
             "keys": keys,
             "missing": missing,
-            "reason": ("all mapped constants exist" if not missing
-                       else f"registry constants missing from config.py: {missing}"),
+            "reason": ("declared config_key matches mapped — narrowed" if declared in mapped
+                       else ("all mapped constants exist" if not missing
+                             else f"registry constants missing from config.py: {missing}")),
         }
     # 2) the declared config_key is itself a real constant
     if declared and declared in consts:
