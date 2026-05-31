@@ -825,7 +825,7 @@ PORTFOLIO_REPLACE_POSITION_FINAL_MAX: float = 0.00
 PORTFOLIO_REPLACE_POSITION_TOP_GAINER_MAX: float = 0.20
 WEAK_REENTRY_COOLDOWN_BARS: int = 24  # was 8 — увеличено чтобы пресечь flip-flop после WEAK
 ENTRY_SCORE_MIN_ENABLED: bool = True
-ENTRY_SCORE_MIN_15M: float = 40.0  # was 45.0 — Pareto sweep 2026-04-18: blocked/entry_score n=1374 had avg_r5=+0.123% vs take=-0.016%
+ENTRY_SCORE_MIN_15M: float = 35.0  # was 40.0 — applied 2026-05-31 via h-2026-05-28-entry_score_floor_relax_15m (L3-c sweep n=2416 Sharpe×√n=+3.37). Rollback: revert + restart.
 ENTRY_SCORE_MIN_1H: float = 56.0
 ENTRY_SCORE_BORDERLINE_BYPASS_ENABLED: bool = True
 ENTRY_SCORE_BORDERLINE_ALLOW_1H: bool = False
@@ -992,7 +992,7 @@ OPEN_SIGNAL_CLUSTER_CAP_ENABLED: bool = True
 OPEN_SIGNAL_CLUSTER_CAP_15M_SHORT_BOUNCE_MODES: tuple = ("breakout", "retest")
 OPEN_SIGNAL_CLUSTER_CAP_15M_SHORT_BOUNCE_MAX: int = 2
 OPEN_SIGNAL_CLUSTER_CAP_15M_IMPULSE_MODES: tuple = ("impulse_speed",)
-OPEN_SIGNAL_CLUSTER_CAP_15M_IMPULSE_MAX: int = 9   # was 2 — 149 blocks in recent events (ORDI, FLUX blocked)  # scout:10.05.2026 was 9
+OPEN_SIGNAL_CLUSTER_CAP_15M_IMPULSE_MAX: int = 11   # was 2 — 149 blocks in recent events (ORDI, FLUX blocked)  # scout:17.05.2026 (preserved live scout tuning across deploy; main had 9@10.05)
 OPEN_SIGNAL_CLUSTER_CAP_1H_RETEST_MODES: tuple = ("retest",)
 OPEN_SIGNAL_CLUSTER_CAP_1H_RETEST_MAX: int = 1
 
