@@ -122,6 +122,14 @@ BANDIT_ALPHA: float = 1.5                 # UCB exploration coefficient
 # add ranking signal on its own. Kept OFF per "deploy only on positive backtest"
 # rule. Revisit after RM-22 Step C (soft gate) populates that cell with data.
 BANDIT_REGIME_INTERACTION_ENABLED: bool = False
+# RM-22 Step C: soft entry_score gate. When True, a below-floor candidate is
+# NOT hard-vetoed at the entry_score stage; instead it falls through to the
+# downstream regime-aware entry bandit (should_enter), which makes the final
+# enter/skip call. Backtest 2026-06-01 (_backtest_soft_gate.py, 17d held out):
+# top-gainer coverage 17.7%->20.6% (+2.9pp), admitted entries net-positive
+# (avg_r5 +0.274, win 46.9%, Sharpe 0.90), more selective than relax-all.
+# Rollback = False (exact current hard-veto behaviour).
+REGIME_SOFT_GATE_ENABLED: bool = False
 BANDIT_TRAIL_K_MIN: float = 2.0          # floor: bandit cannot set trail_k below this (prevents 1.05 stops)
 
 # 19.04.2026: opt-in to apply CMA-ES-optimized params from rl_params.json on

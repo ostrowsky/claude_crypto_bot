@@ -4188,6 +4188,34 @@ async def _poll_coin(
                             candidate_score,
                             min_score,
                         )
+                    elif getattr(config, "REGIME_SOFT_GATE_ENABLED", False):
+                        # RM-22 Step C: SOFT GATE. Instead of hard-vetoing a
+                        # below-floor candidate, defer the enter/skip decision
+                        # to the downstream entry bandit (should_enter, ~L5078),
+                        # which is regime-aware and already in the pipeline.
+                        # Backtest 2026-06-01 (_backtest_soft_gate.py, 17d held
+                        # out): +2.9pp top-gainer coverage, admitted entries
+                        # net-positive (avg_r5 +0.274, win 46.9%), more
+                        # selective than relax-all. Rollback = flag False.
+                        log.info(
+                            "ENTRY SCORE SOFT-PASS %s [%s]: %.2f < %.2f -> bandit decides",
+                            sym, tf, candidate_score, min_score,
+                        )
+                        _log_critic_candidate(
+                            sym=sym, tf=tf, bar_ts=int(data["t"][i]),
+                            signal_type=preview_mode, feat=feat, data=data, i=i,
+                            action="soft_pass", reason_code="entry_score_soft_pass",
+                            reason=f"soft-pass {candidate_score:.2f} < {min_score:.2f}",
+                            stage="quality_floor", candidate_score=candidate_score,
+                            base_score=base_score, score_floor=score_floor,
+                            forecast_return_pct=float(getattr(report, "forecast_return_pct", 0.0)),
+                            today_change_pct=float(getattr(report, "today_change_pct", 0.0)),
+                            ml_proba=ml_proba, mtf_soft_penalty=mtf_soft_penalty,
+                            fresh_priority=_is_fresh_priority_candidate(preview_mode, catchup_snapshot),
+                            catchup=catchup_snapshot is not None,
+                            continuation_profile=continuation_profile,
+                            signal_flags=signal_flags,
+                        )
                     else:
                         reason = f"entry score {candidate_score:.2f} < floor {min_score:.2f}"
                         _log_critic_candidate(
