@@ -116,7 +116,12 @@ BANDIT_ALPHA: float = 1.5                 # UCB exploration coefficient
 # (see _backtest_regime_gate.py). Safe by construction: new dims start at
 # theta=0 (zero-padded on migration) so there is no behaviour change until the
 # bandit learns. Rollback = set False (dim stays d=20, features become inert).
-BANDIT_REGIME_INTERACTION_ENABLED: bool = True
+# Backtest 2026-06-01 (_backtest_regime_interaction_critic.py): NEUTRAL out of
+# sample (delta AUC +0.0005, < +0.005 gate). The bull/btcDn cell that motivates
+# it is only ~1.7% of data and 3 samples in the held-out window — too rare to
+# add ranking signal on its own. Kept OFF per "deploy only on positive backtest"
+# rule. Revisit after RM-22 Step C (soft gate) populates that cell with data.
+BANDIT_REGIME_INTERACTION_ENABLED: bool = False
 BANDIT_TRAIL_K_MIN: float = 2.0          # floor: bandit cannot set trail_k below this (prevents 1.05 stops)
 
 # 19.04.2026: opt-in to apply CMA-ES-optimized params from rl_params.json on
