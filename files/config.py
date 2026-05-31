@@ -825,7 +825,7 @@ PORTFOLIO_REPLACE_POSITION_FINAL_MAX: float = 0.00
 PORTFOLIO_REPLACE_POSITION_TOP_GAINER_MAX: float = 0.20
 WEAK_REENTRY_COOLDOWN_BARS: int = 24  # was 8 — увеличено чтобы пресечь flip-flop после WEAK
 ENTRY_SCORE_MIN_ENABLED: bool = True
-ENTRY_SCORE_MIN_15M: float = 35.0  # was 40.0 — applied 2026-05-31 via h-2026-05-28-entry_score_floor_relax_15m (L3-c sweep n=2416 Sharpe×√n=+3.37). Rollback: revert + restart.
+ENTRY_SCORE_MIN_15M: float = 40.0  # DEFAULT — active runtime override may bring this to 35.0 (see decisions.jsonl + .runtime/config_overrides_applied.json). Was 45.0 -> 40.0 in 2026-04-18 Pareto sweep.
 ENTRY_SCORE_MIN_1H: float = 56.0
 ENTRY_SCORE_BORDERLINE_BYPASS_ENABLED: bool = True
 ENTRY_SCORE_BORDERLINE_ALLOW_1H: bool = False
@@ -1198,3 +1198,17 @@ HORIZON_ALLOCATION_POSITION: float = 0.10
 FAST_REVERSAL_GUARD_ENABLED: bool = False  # master switch — keep False until validated
 FAST_REVERSAL_PROBA_MAX: float = 0.55      # block if proba_fast_reversal > this
 FAST_REVERSAL_SHADOW: bool = True          # log proba but never block (telemetry)
+
+# ── RM-4: Auto-apply approved decisions via runtime override ────────────────
+# Everything above is the DEFAULT. Active approved decisions in
+# decisions.jsonl override the relevant constants in-memory at import time,
+# so `pipeline_approve.py` no longer needs the operator to hand-edit config.
+# Failure here NEVER blocks startup — falls back to defaults silently.
+# Audit trail: .runtime/config_overrides_applied.json
+AUTO_APPLY_OVERRIDES_ENABLED: bool = True
+if AUTO_APPLY_OVERRIDES_ENABLED:
+    try:
+        from _config_runtime_overrides import apply_overrides as _apply_overrides
+        _apply_overrides(globals())
+    except Exception:
+        pass

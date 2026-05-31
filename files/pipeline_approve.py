@@ -480,7 +480,57 @@ def cmd_approve(hyp_path: Path, non_interactive: bool, force: bool, reason: str 
     hyp["decision_id"] = decision_id
     PL.write_json(hyp_path, hyp)
     print(f"\nApproved: decision_id={decision_id}")
-    emit_apply_instructions(hyp)
+
+    # RM-4: auto-apply via runtime override + auto-restart.
+    # Concrete diff (literal numeric/bool) -> the override layer in config.py
+    # picks it up at next import; trigger a bot restart so the running
+    # process actually sees the new value. Directive diffs ("+10% looser")
+    # cannot be auto-applied; fall back to printing manual instructions.
+    d = hyp.get("diff", {}) or {}
+    to_val = d.get("to")
+    auto_ok = isinstance(to_val, (int, float, bool)) and not isinstance(to_val, str)
+    if auto_ok and not _maybe_auto_restart(hyp, to_val):
+        emit_apply_instructions(hyp)
+    elif not auto_ok:
+        emit_apply_instructions(hyp)
+
+
+def _maybe_auto_restart(hyp: dict, to_val) -> bool:
+    """Auto-apply path: trigger restart_bot.bat so the override takes effect.
+    Returns True if auto-apply was attempted (success or printed instructions).
+    Stays opt-out-safe via PIPELINE_AUTO_APPLY env var."""
+    import os, subprocess, sys
+    if os.environ.get("PIPELINE_AUTO_APPLY", "1") == "0":
+        print("[auto-apply] disabled via PIPELINE_AUTO_APPLY=0 — manual steps follow")
+        return False
+    rk = resolve_config_keys(hyp)
+    keys = rk.get("keys") or []
+    print("\n" + "=" * 70)
+    print("AUTO-APPLY (RM-4 runtime override + restart)")
+    print("=" * 70)
+    print(f"  override: {', '.join(keys)} -> {to_val}")
+    print(f"  source  : .runtime/pipeline/decisions/decisions.jsonl")
+    print(f"  audit   : .runtime/config_overrides_applied.json")
+    bat = PL.REPO_ROOT / "restart_bot.bat"
+    if not bat.exists():
+        print(f"[auto-apply] restart_bot.bat missing at {bat} — manual restart needed")
+        return False
+    print(f"  restart : spawning {bat.name} (detached)")
+    try:
+        # Detach so this approve command returns immediately
+        flags = 0x00000008  # DETACHED_PROCESS on Windows
+        subprocess.Popen(
+            ["cmd", "/c", "start", "", "/min", str(bat), "--run"],
+            cwd=str(PL.REPO_ROOT),
+            creationflags=flags if sys.platform == "win32" else 0,
+            close_fds=True,
+        )
+        print("[auto-apply] restart launched — bot will load the new override")
+    except OSError as e:
+        print(f"[auto-apply] restart spawn failed: {e} — run restart_bot.bat manually")
+        return False
+    print("=" * 70)
+    return True
 
 
 def cmd_reject(hyp_path: Path, reason: str) -> None:
