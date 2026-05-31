@@ -343,6 +343,16 @@ IMPULSE_SPEED_1H_EXT_ATR_MAX_BULL: float = 9.0   # bull day = wider runway
 # Set to 0 to disable.
 IMPULSE_SPEED_15M_ADX_MIN: float = 15.0   # was 20.0 (backtest 2026-04-20: -5pts, ADX15-20 positive)
 IMPULSE_SPEED_1H_ADX_MIN: float = 14.0  # scout:22.04.2026 was 15.84
+
+# 2026-05-31 high-momentum bypass — L3-c 2D sweep found this exception
+# saves +1.4% avg pocket (RSI>=70 + DR>=10) that the ADX floor currently
+# blocks. Default OFF; activate via approved decision -> runtime override.
+IMPULSE_SPEED_15M_HIGH_MOMENTUM_BYPASS_ENABLED: bool = False
+IMPULSE_SPEED_15M_HIGH_MOMENTUM_BYPASS_RSI_MIN: float = 70.0
+IMPULSE_SPEED_15M_HIGH_MOMENTUM_BYPASS_RANGE_MIN: float = 10.0
+IMPULSE_SPEED_1H_HIGH_MOMENTUM_BYPASS_ENABLED: bool = False
+IMPULSE_SPEED_1H_HIGH_MOMENTUM_BYPASS_RSI_MIN: float = 70.0
+IMPULSE_SPEED_1H_HIGH_MOMENTUM_BYPASS_RANGE_MIN: float = 10.0
 IMPULSE_SPEED_LATE_GUARD_ENABLED: bool = True
 # A/B kill-switches per-tf (added 2026-04-18 after Pareto sweep showed 15m guard
 # blocked +6.77% non-bull winners on 15m). Flip back to True for rollback.

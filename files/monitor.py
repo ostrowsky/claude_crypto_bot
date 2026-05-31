@@ -944,14 +944,40 @@ def _impulse_speed_entry_guard(
     # Hard ADX floor — reject "impulse" signals with no trend strength.
     # Added 2026-04-18 after observing CRVUSDT ADX=17.5 (-2.17%) and
     # OXTUSDT ADX=11.3 enter on volume spikes with no directional trend.
+    #
+    # 2026-05-31 high-momentum bypass (L3-c sweep, n=1058 impulse_guard
+    # blocks): 2D breakdown by RSI x daily_range identified a precise
+    # pocket where this ADX floor over-blocks — high RSI + wide daily
+    # range proves momentum even when ADX is lagging. Recovery pocket:
+    # RSI>=70 + DR>=10 averaged +1.4%; the symmetric RSI<70 + DR>=10
+    # case stayed at -0.40% (correctly blocked). Default OFF; activate
+    # via approved decision -> runtime override (RM-4).
     if tf == "15m":
         adx_floor = float(getattr(config, "IMPULSE_SPEED_15M_ADX_MIN", 20.0))
         if adx < adx_floor:
-            return f"weak 15m impulse: ADX {adx:.1f} < {adx_floor:.0f}"
+            if getattr(config, "IMPULSE_SPEED_15M_HIGH_MOMENTUM_BYPASS_ENABLED", False):
+                bp_rsi = float(getattr(config, "IMPULSE_SPEED_15M_HIGH_MOMENTUM_BYPASS_RSI_MIN", 70.0))
+                bp_dr  = float(getattr(config, "IMPULSE_SPEED_15M_HIGH_MOMENTUM_BYPASS_RANGE_MIN", 10.0))
+                if rsi >= bp_rsi and daily_range >= bp_dr:
+                    log.info("IMPULSE_GUARD bypass 15m %s: ADX %.1f<%.0f but RSI %.1f>=%g AND DR %.2f%%>=%g (high-momentum)",
+                             "" , adx, adx_floor, rsi, bp_rsi, daily_range, bp_dr)
+                else:
+                    return f"weak 15m impulse: ADX {adx:.1f} < {adx_floor:.0f}"
+            else:
+                return f"weak 15m impulse: ADX {adx:.1f} < {adx_floor:.0f}"
     if tf == "1h":
         adx_floor_1h = float(getattr(config, "IMPULSE_SPEED_1H_ADX_MIN", 18.0))
         if adx < adx_floor_1h:
-            return f"weak 1h impulse: ADX {adx:.1f} < {adx_floor_1h:.0f}"
+            if getattr(config, "IMPULSE_SPEED_1H_HIGH_MOMENTUM_BYPASS_ENABLED", False):
+                bp_rsi_1h = float(getattr(config, "IMPULSE_SPEED_1H_HIGH_MOMENTUM_BYPASS_RSI_MIN", 70.0))
+                bp_dr_1h  = float(getattr(config, "IMPULSE_SPEED_1H_HIGH_MOMENTUM_BYPASS_RANGE_MIN", 10.0))
+                if rsi >= bp_rsi_1h and daily_range >= bp_dr_1h:
+                    log.info("IMPULSE_GUARD bypass 1h: ADX %.1f<%.0f but RSI %.1f>=%g AND DR %.2f%%>=%g (high-momentum)",
+                             adx, adx_floor_1h, rsi, bp_rsi_1h, daily_range, bp_dr_1h)
+                else:
+                    return f"weak 1h impulse: ADX {adx:.1f} < {adx_floor_1h:.0f}"
+            else:
+                return f"weak 1h impulse: ADX {adx:.1f} < {adx_floor_1h:.0f}"
 
     if tf == "1h":
         # Compute stateless extension metric: price distance from 1h EMA20 in ATR.

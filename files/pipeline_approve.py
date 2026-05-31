@@ -55,6 +55,10 @@ RULE_CONFIG_MAP: dict[str, list[str]] = {
         "IMPULSE_SPEED_ROTATION_GUARD_1H_RANGE_MIN",
     ],
     "entry_score_floor_relax": ["ENTRY_SCORE_MIN_15M", "ENTRY_SCORE_MIN_1H"],
+    "impulse_guard_high_momentum_bypass": [
+        "IMPULSE_SPEED_15M_HIGH_MOMENTUM_BYPASS_ENABLED",
+        "IMPULSE_SPEED_1H_HIGH_MOMENTUM_BYPASS_ENABLED",
+    ],
     "disable_mode_impulse_speed": ["MODE_IMPULSE_SPEED_ENABLED"],
 }
 
