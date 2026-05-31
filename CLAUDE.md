@@ -231,6 +231,37 @@ stop_rl_headless.bat     - stop RL worker (PID from .runtime/rl_worker_bg.json)
 
 ## 7. Known issues & fixes
 
+### RM-22 regime-conditional learned gating (2026-06-01)
+
+Premise (operator): markets are non-stationary, so re-tuning *fixed* gate
+thresholds is a losing game — the bot should LEARN to gate by market regime.
+Three steps, each backtest-gated before deploy:
+
+- **Step A (premise validation, `_backtest_regime_gate.py`)**: blocked-gate
+  forward returns FLIP sign across regime cells (`bull/flat day × btc up/dn`).
+  `entry_score` blocked pool: bull_day/btc_dn **+0.473** (Sharpe 2.88),
+  bull_day/btc_up +0.093, flat_day/btc_dn +0.033, flat_day/btc_up -0.075
+  (gate correct only here). Spread 0.548pp → premise confirmed.
+- **Step B (regime interaction features, `contextual_bandit.py`)**: added
+  `regime_bull_btc_up`, `regime_bull_btc_dn` (N_FEATURES 18→20) behind
+  `BANDIT_REGIME_INTERACTION_ENABLED`. Backtest NEUTRAL (delta AUC +0.0005,
+  critic_dataset) — the bull/btc_dn cell is too rare yet. **Held OFF**
+  (`= False`). Bandit `load()` now dim-migrates saved A/b (identity/zero pad)
+  so the 2.6M prior updates survive the dimension bump. Revisit once Step C
+  populates the cell.
+- **Step C (soft gate, DEPLOYED `= True` 2026-06-01)**: when
+  `REGIME_SOFT_GATE_ENABLED`, an `entry_score`-below-floor candidate is no
+  longer hard-blocked — it logs `entry_score_soft_pass` and falls through to
+  the downstream regime-aware entry bandit (`should_enter` ~L5078), which
+  decides enter/skip. Backtest (`_backtest_soft_gate.py`, temporal split):
+  top-gainer coverage **17.7%→20.6% (+2.9pp)**, 32 admitted entries avg_r5
+  **+0.274** / win 46.9% / Sharpe 0.90 — selective (RELAX-all additions were
+  -0.031). POSITIVE → operator-approved deploy. Rollback = flag False.
+  Wired in `monitor.py` entry_score floor block (~L4191) as an `elif` before
+  the hard-block `else`.
+
+Spec: `docs/specs/features/auto-improvement-loop-spec.md` (Sprint 0, RM-22).
+
 ### Critical bugs (fixed)
 
 | Date | Problem | Fix |
@@ -430,6 +461,8 @@ TOP_GAINER_CRITIC_TELEGRAM_REPORTS_ENABLED = True
 TREND_15M_QUALITY_GUARD_ENABLED = True
 ML_CANDIDATE_RANKER_HARD_VETO_ENABLED = True
 ROTATION_ENABLED = True
+REGIME_SOFT_GATE_ENABLED = True               # RM-22 Step C (deployed 2026-06-01)
+BANDIT_REGIME_INTERACTION_ENABLED = False     # RM-22 Step B (neutral, held OFF)
 ```
 
 ---
