@@ -110,6 +110,13 @@ BOT_ENABLE_DATA_COLLECTOR: bool = False
 # ── RL: Contextual Bandit + Exit Policy ──────────────────────────────────────
 BANDIT_ENABLED: bool = True               # adaptive trail_k/max_hold via LinUCB
 BANDIT_ALPHA: float = 1.5                 # UCB exploration coefficient
+# RM-22 Step B: explicit regime-interaction features (bull_day x BTC trend) in
+# the LinUCB context. A linear bandit cannot otherwise represent that
+# conjunction, which is exactly where predictive gates over-block winners
+# (see _backtest_regime_gate.py). Safe by construction: new dims start at
+# theta=0 (zero-padded on migration) so there is no behaviour change until the
+# bandit learns. Rollback = set False (dim stays d=20, features become inert).
+BANDIT_REGIME_INTERACTION_ENABLED: bool = True
 BANDIT_TRAIL_K_MIN: float = 2.0          # floor: bandit cannot set trail_k below this (prevents 1.05 stops)
 
 # 19.04.2026: opt-in to apply CMA-ES-optimized params from rl_params.json on

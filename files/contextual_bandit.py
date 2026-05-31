@@ -61,14 +61,27 @@ N_ARMS = N_TRAIL_ARMS
 
 # ── Context feature extraction ────────────────────────────────────────────────
 
+# RM-22 Step B: the last two features are explicit regime INTERACTION
+# one-hots. A LinUCB model is linear in the context, so it physically cannot
+# represent "enter more readily WHEN bull_day AND btc_down" from the separate
+# `is_bull_day` and `btc_vs_ema50_norm` columns — that conjunction is exactly
+# where `_backtest_regime_gate.py` found predictive gates over-block winners
+# (bull_day/btc_dn blocked ret_5 +0.47..+2.6%). Encoding the conjunction
+# directly lets the bandit learn a distinct ENTER propensity per regime cell.
+# They are appended AFTER `bias` so existing trained state (d=18) migrates by
+# zero/identity padding (see LinUCBBandit.load) — no learning is reset.
 FEATURE_NAMES = [
     "slope_norm", "adx_norm", "rsi_norm", "vol_x_norm",
     "ml_proba", "btc_vs_ema50_norm", "daily_range_norm",
     "macd_sign", "is_bull_day", "regime_bull", "regime_bear",
     "tf_1h", "mode_trend", "mode_retest", "mode_breakout",
     "mode_impulse", "mode_alignment", "bias",
+    "regime_bull_btc_up", "regime_bull_btc_dn",
 ]
 N_FEATURES = len(FEATURE_NAMES)
+# Index of the first regime-interaction feature (everything from here on is
+# the RM-22 Step B extension appended after the original 18-dim layout).
+_REGIME_INTERACTION_START = 18
 
 # State files
 ENTRY_STATE_FILE = Path("bandit_entry_state.json")
@@ -94,6 +107,19 @@ def extract_context(
     daily_range = state.get("daily_range", 3.0)
     macd_hist = state.get("macd_hist", 0.0)
 
+    # RM-22 Step B regime-interaction one-hots. Gated by a flag so rollback
+    # keeps the dimension (d=20) but makes the features inert (always 0.0) —
+    # this avoids flip-flopping the saved matrices' shape. When enabled they
+    # start at theta≈0 (zero-padded on migration) so there is NO behaviour
+    # change until the bandit accumulates evidence — inherently shadow-safe.
+    try:
+        import config as _cfg
+        regime_inter_on = bool(getattr(_cfg, "BANDIT_REGIME_INTERACTION_ENABLED", True))
+    except Exception:
+        regime_inter_on = True
+    bull_btc_up = 1.0 if (regime_inter_on and is_bull_day and btc_vs_ema50 >= 0) else 0.0
+    bull_btc_dn = 1.0 if (regime_inter_on and is_bull_day and btc_vs_ema50 < 0) else 0.0
+
     return np.array([
         np.clip(slope / 0.5, -2, 2),
         np.clip(adx / 50.0, 0, 1),
@@ -113,6 +139,8 @@ def extract_context(
         1.0 if mode in ("impulse", "impulse_speed") else 0.0,
         1.0 if mode == "alignment" else 0.0,
         1.0,  # bias
+        bull_btc_up,   # RM-22: regime interaction (bull day + BTC above EMA50)
+        bull_btc_dn,   # RM-22: regime interaction (bull day + BTC below EMA50)
     ], dtype=np.float64)
 
 
@@ -209,10 +237,37 @@ class LinUCBBandit:
             bandit.alpha = data.get("alpha", alpha)
             bandit.total_updates = data.get("total_updates", 0)
             bandit.n_updates = data.get("n_updates", [0] * n_arms)
+            migrated = False
             for a, arm_data in enumerate(data.get("arms", [])):
                 if a < n_arms:
-                    bandit.A[a] = np.array(arm_data["A"], dtype=np.float64)
-                    bandit.b[a] = np.array(arm_data["b"], dtype=np.float64)
+                    A_old = np.array(arm_data["A"], dtype=np.float64)
+                    b_old = np.array(arm_data["b"], dtype=np.float64)
+                    d_old = b_old.shape[0]
+                    if d_old == n_features:
+                        bandit.A[a] = A_old
+                        bandit.b[a] = b_old
+                    elif d_old < n_features:
+                        # RM-22 Step B migration: new features were APPENDED at
+                        # the end. Preserve the learned d_old block verbatim and
+                        # leave new dims as identity-regularised / zero-reward
+                        # (theta_new = 0 => no influence until learned). This
+                        # keeps all prior updates instead of resetting the bandit.
+                        A_new = np.eye(n_features)
+                        b_new = np.zeros(n_features)
+                        A_new[:d_old, :d_old] = A_old
+                        b_new[:d_old] = b_old
+                        bandit.A[a] = A_new
+                        bandit.b[a] = b_new
+                        migrated = True
+                    else:
+                        # saved state is WIDER than current code expects —
+                        # truncate to the leading n_features (safe rollback path)
+                        bandit.A[a] = A_old[:n_features, :n_features].copy()
+                        bandit.b[a] = b_old[:n_features].copy()
+                        migrated = True
+            if migrated:
+                log.warning("Bandit dim-migrated to d=%d (preserved %d prior updates) <- %s",
+                            n_features, bandit.total_updates, path.name)
             log.info("Bandit loaded (%d arms, %d updates) <- %s",
                      n_arms, bandit.total_updates, path.name)
         except Exception as e:
@@ -231,7 +286,7 @@ class LinUCBBandit:
                 "name": name,
                 "n_updates": self.n_updates[a],
                 "theta_norm": round(float(np.linalg.norm(theta)), 4),
-                "bias_est": round(float(theta[-1]), 4),
+                "bias_est": round(float(theta[FEATURE_NAMES.index("bias")]), 4),
             })
         return stats
 
