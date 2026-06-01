@@ -231,6 +231,35 @@ stop_rl_headless.bat     - stop RL worker (PID from .runtime/rl_worker_bg.json)
 
 ## 7. Known issues & fixes
 
+### EX1 capture fix — wider impulse_speed trail (2026-06-01)
+
+Morning-report diagnosis: top-20 capture (NS sub-metric) stuck at ~0.15 —
+binding leak is `atr_trail` prematurely stopping `impulse_speed` winners.
+EX1 worst cases (DYDX -13.7%/+237%, LDO -9.1%/+445%, WIF -5.8%/+471%) all
+exit at a LOSS on a deep retrace, then the coin runs without us.
+`time_max_hold` exits captured ~20x more than `atr_trail` (EX1 +0.044 vs
+-0.002).
+
+Backtest (`_backtest_exit_policy_impulse.py`, 35d, 658 impulse_speed trades,
+105 winners / 553 losers) replays the forward price path under exit policies.
+Result is non-monotonic: tight 1.5% protects net but kills capture; mid
+3-5% is worst of both (winners cut early, losers still bleed); **wide 8% is
+the sweet spot** — winner mean pnl +0.94->+2.83%, capture +0.004->+0.015
+(x4), and NET per-trade across ALL impulse_speed entries IMPROVES
+-0.14->-0.06 (winner upside not paid by loser blow-ups). Pure HOLD_24h
+helped winners but losers bled (net -0.25) — a stop is still needed, just
+wide. PARTIAL_25/8 marginally best (net -0.05) but more complex; deferred.
+
+Deploy: `TRAIL_MIN_BUFFER_PCT_IMPULSE_SPEED 0.015 -> 0.08` (live 2026-06-01,
+bot restarted). Reversible = revert number. Honest caveat: capture still
+~0.015 absolute (potential is +200..+470%) — meaningful step, not a silver
+bullet. Watch EX1 atr_trail bucket over next 14d.
+
+Also fixed: `pipeline_notify.py::build_next_step_block` crashed the morning
+notify step (`TypeError: NoneType.__format__`) when an L3 counterfactual was
+`available=True` but its numbers were `None`. Now requires all of
+blocked/take/n before rich phrasing.
+
 ### RM-22 regime-conditional learned gating (2026-06-01)
 
 Premise (operator): markets are non-stationary, so re-tuning *fixed* gate
@@ -399,7 +428,7 @@ and trail-update sites in `monitor.py` (helpers `_trail_min_buffer_pct`,
 `_compute_trail_buffer` ~ L1705). Defaults:
 ```python
 TRAIL_MIN_BUFFER_PCT_ENABLED = True
-TRAIL_MIN_BUFFER_PCT_IMPULSE_SPEED = 0.015   # 1.5%
+TRAIL_MIN_BUFFER_PCT_IMPULSE_SPEED = 0.08    # 8% (was 1.5%) — EX1 capture fix 2026-06-01
 TRAIL_MIN_BUFFER_PCT_STRONG_TREND  = 0.015
 TRAIL_MIN_BUFFER_PCT_IMPULSE       = 0.012
 # trend / alignment / retest / breakout / default = 0.0

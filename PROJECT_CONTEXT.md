@@ -386,7 +386,7 @@ trail  = price - buffer
 
 ```python
 TRAIL_MIN_BUFFER_PCT_ENABLED = True
-TRAIL_MIN_BUFFER_PCT_IMPULSE_SPEED = 0.015  # 1.5 %
+TRAIL_MIN_BUFFER_PCT_IMPULSE_SPEED = 0.08   # 8 % (было 1.5 %) — EX1 capture fix 2026-06-01
 TRAIL_MIN_BUFFER_PCT_STRONG_TREND  = 0.015
 TRAIL_MIN_BUFFER_PCT_IMPULSE       = 0.012
 # trend / alignment / retest / breakout / default = 0.0

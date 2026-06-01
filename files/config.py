@@ -129,7 +129,8 @@ BANDIT_REGIME_INTERACTION_ENABLED: bool = False
 # top-gainer coverage 17.7%->20.6% (+2.9pp), admitted entries net-positive
 # (avg_r5 +0.274, win 46.9%, Sharpe 0.90), more selective than relax-all.
 # Rollback = False (exact current hard-veto behaviour).
-REGIME_SOFT_GATE_ENABLED: bool = False
+# DEPLOYED True 2026-06-01 (operator-approved on positive backtest).
+REGIME_SOFT_GATE_ENABLED: bool = True
 BANDIT_TRAIL_K_MIN: float = 2.0          # floor: bandit cannot set trail_k below this (prevents 1.05 stops)
 
 # 19.04.2026: opt-in to apply CMA-ES-optimized params from rl_params.json on
@@ -483,7 +484,11 @@ MACDWARN_BARS: int = 3     # баров подряд MACD hist падает → 
 # regardless of bandit/ATR-based choice. Buffer = max(trail_k*ATR, MIN_PCT*price).
 # Mode-aware: high-vol modes (impulse_speed, strong_trend) need wider min-buffer.
 TRAIL_MIN_BUFFER_PCT_ENABLED: bool = True
-TRAIL_MIN_BUFFER_PCT_IMPULSE_SPEED: float = 0.015  # 1.5% min buffer (high-vol regime)
+TRAIL_MIN_BUFFER_PCT_IMPULSE_SPEED: float = 0.08   # 8% (was 1.5%) — EX1 capture fix 2026-06-01:
+# impulse_speed winners (+200..+470% potential) were knocked out at a LOSS by tight ATR-trail on
+# a deep retrace, then ran without us. Backtest (_backtest_exit_policy_impulse.py, 35d, 658 trades):
+# winner mean pnl +0.94->+2.83%, capture +0.004->+0.015 (x4), net per-trade -0.14->-0.06 (winner
+# upside NOT paid by loser blow-ups). 8% beat tight(1.5%, low capture) and mid(3-5%, worst net).
 TRAIL_MIN_BUFFER_PCT_STRONG_TREND:  float = 0.015
 TRAIL_MIN_BUFFER_PCT_IMPULSE:       float = 0.012  # 1.2% min buffer
 TRAIL_MIN_BUFFER_PCT_TREND:         float = 0.0    # disabled — narrow stops work for trend
