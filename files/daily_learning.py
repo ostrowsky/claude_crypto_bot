@@ -42,6 +42,7 @@ from backfill_top_gainer_dataset import (
     rank_gainers,
     compute_snapshot_features,
     DATASET_FILE,
+    BINANCE_REST,
 )
 from strategy import fetch_klines
 
@@ -110,11 +111,84 @@ async def _send_telegram(text: str) -> None:
 
 # ── Step 1: Collect today's data ────────────────────────────────────────────
 
+async def _fetch_quote_volumes(session: aiohttp.ClientSession) -> Dict[str, float]:
+    """
+    Fetch 24h quote volume for all USDT pairs from the same spot endpoint used
+    for labels (keeps universe consistent with rank_gainers). Applies the same
+    SCAN_EXCLUDE filter. Returns {symbol: quoteVolume}. Best-effort: {} on error.
+    """
+    url = f"{BINANCE_REST}/api/v3/ticker/24hr"
+    try:
+        async with session.get(url, timeout=aiohttp.ClientTimeout(total=15)) as resp:
+            if resp.status != 200:
+                log.warning("quote-volume fetch returned %d", resp.status)
+                return {}
+            data = await resp.json()
+    except Exception as e:
+        log.warning("quote-volume fetch failed: %s", e)
+        return {}
+
+    out: Dict[str, float] = {}
+    for t in data:
+        sym = str(t.get("symbol", ""))
+        if not sym.endswith("USDT"):
+            continue
+        if any(ex in sym for ex in config.SCAN_EXCLUDE):
+            continue
+        if sym in set(getattr(config, "LEARNING_UNIVERSE_EXTRA_EXCLUDE", [])):
+            continue
+        try:
+            out[sym] = float(t.get("quoteVolume", 0.0))
+        except (ValueError, TypeError):
+            continue
+    return out
+
+
+async def build_learning_universe(
+    session: aiohttp.ClientSession,
+    watchlist: List[str],
+) -> List[str]:
+    """
+    Learning universe = live watchlist UNION top-N USDT pairs by 24h quote volume
+    (floored at LEARNING_UNIVERSE_MIN_QUOTE_VOL). DATA COLLECTION ONLY — this does
+    not affect which symbols monitor.py trades. Falls back to the watchlist if the
+    feature is disabled or volume data is unavailable.
+    """
+    if not bool(getattr(config, "LEARNING_UNIVERSE_ENABLED", False)):
+        return list(watchlist)
+
+    vols = await _fetch_quote_volumes(session)
+    if not vols:
+        log.warning("learning universe: no volume data, falling back to watchlist")
+        return list(watchlist)
+
+    top_n = int(getattr(config, "LEARNING_UNIVERSE_TOP_N", 300))
+    min_vol = float(getattr(config, "LEARNING_UNIVERSE_MIN_QUOTE_VOL", 1_000_000.0))
+    ranked = sorted(vols.items(), key=lambda kv: kv[1], reverse=True)
+    by_volume = [s for s, v in ranked if v >= min_vol][:top_n]
+
+    # Union: never drop a watchlist symbol (preserves live-relevant coverage),
+    # watchlist first so collection order is stable/auditable.
+    seen = set()
+    universe: List[str] = []
+    for s in list(watchlist) + by_volume:
+        if s not in seen:
+            seen.add(s)
+            universe.append(s)
+    log.info(
+        "learning universe: %d symbols (watchlist=%d + top%d-by-vol>=%.0fM=%d new)",
+        len(universe), len(watchlist), top_n, min_vol / 1e6,
+        len(universe) - len(watchlist),
+    )
+    return universe
+
+
 async def collect_today_snapshot(
     session: aiohttp.ClientSession,
 ) -> Dict:
     """
-    Collect features + 24h returns for ALL watchlist symbols.
+    Collect features + 24h returns for the LEARNING UNIVERSE (watchlist + top-N by
+    volume — data collection only; live trading watchlist is unchanged).
     Returns dict with tickers, top gainers, and count of records logged.
     """
     tickers = await fetch_24hr_tickers(session)
@@ -123,6 +197,7 @@ async def collect_today_snapshot(
 
     top5, top10, top20, top50 = rank_gainers(tickers)
     watchlist = config.load_watchlist()
+    universe = await build_learning_universe(session, watchlist)
 
     # BTC context
     btc_data = await fetch_klines(session, "BTCUSDT", "1h", limit=10)
@@ -136,8 +211,8 @@ async def collect_today_snapshot(
 
     count = 0
     batch_size = 10
-    for batch_start in range(0, len(watchlist), batch_size):
-        batch = watchlist[batch_start:batch_start + batch_size]
+    for batch_start in range(0, len(universe), batch_size):
+        batch = universe[batch_start:batch_start + batch_size]
         tasks = [
             compute_snapshot_features(session, sym, btc_ret_1h, btc_ret_4h)
             for sym in batch
@@ -166,18 +241,25 @@ async def collect_today_snapshot(
 
         await asyncio.sleep(0.5)
 
-    # Top gainers from watchlist
-    top20_in_watchlist = [s for s in top20 if s in watchlist]
-    top20_returns = {s: tickers.get(s, 0.0) for s in top20_in_watchlist}
+    # Coverage of the GLOBAL top-20 by the learning universe (honest recall base)
+    top20_in_universe = [s for s in top20 if s in set(universe)]
+    top20_in_watchlist = [s for s in top20 if s in set(watchlist)]
+    top20_returns = {s: tickers.get(s, 0.0) for s in top20_in_universe}
 
-    log.info("Collected %d records. Top20 in watchlist: %s", count, top20_in_watchlist)
+    log.info(
+        "Collected %d records (universe=%d). Global top20 covered: %d/%d universe, %d/%d watchlist",
+        count, len(universe), len(top20_in_universe), len(top20),
+        len(top20_in_watchlist), len(top20),
+    )
     return {
         "status": "ok",
         "n_records": count,
+        "n_universe": len(universe),
         "n_watchlist": len(watchlist),
         "top5": top5,
         "top10": top10,
         "top20": top20,
+        "top20_in_universe": top20_in_universe,
         "top20_in_watchlist": top20_in_watchlist,
         "top20_returns": top20_returns,
     }
@@ -329,13 +411,22 @@ def build_progress_report(
     # Collection
     cr = collect_result
     if cr.get("status") == "ok":
-        lines.append(f"Data: {cr['n_records']}/{cr['n_watchlist']} symbols collected")
-        top20_wl = cr.get("top20_in_watchlist", [])
+        n_uni = cr.get("n_universe", cr.get("n_watchlist", 0))
+        lines.append(f"Data: {cr['n_records']}/{n_uni} symbols collected (watchlist={cr.get('n_watchlist', 0)})")
+        top20 = cr.get("top20", [])
+        top20_uni = cr.get("top20_in_universe", [])
+        top20_wl = set(cr.get("top20_in_watchlist", []))
+        if top20:
+            lines.append(
+                f"Global top20 coverage: {len(top20_uni)}/{len(top20)} universe, "
+                f"{len(top20_wl)}/{len(top20)} watchlist"
+            )
         top20_ret = cr.get("top20_returns", {})
-        if top20_wl:
-            lines.append(f"Top20 in watchlist ({len(top20_wl)}):")
-            for s in sorted(top20_wl, key=lambda x: top20_ret.get(x, 0), reverse=True)[:10]:
-                lines.append(f"  {s:<14} {top20_ret.get(s, 0):+.1f}%")
+        if top20_uni:
+            lines.append(f"Top20 captured ({len(top20_uni)}):")
+            for s in sorted(top20_uni, key=lambda x: top20_ret.get(x, 0), reverse=True)[:10]:
+                tag = "" if s in top20_wl else "  (universe-only)"
+                lines.append(f"  {s:<14} {top20_ret.get(s, 0):+.1f}%{tag}")
     else:
         lines.append(f"Data collection: {cr.get('error', 'failed')}")
 
@@ -394,9 +485,13 @@ def save_progress(
     RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
     ba = train_result.get("bandit_accuracy", {})
     eb = train_result.get("entry_bandit", {})
+    _top20 = collect_result.get("top20", [])
     record = {
         "ts": datetime.now(timezone.utc).isoformat(),
         "n_collected": collect_result.get("n_records", 0),
+        "n_universe": collect_result.get("n_universe", 0),
+        "n_top20_global": len(_top20),
+        "n_top20_in_universe": len(collect_result.get("top20_in_universe", [])),
         "n_top20_in_watchlist": len(collect_result.get("top20_in_watchlist", [])),
         "bandit_recall_top20": ba.get("overall_recall_top20"),
         "bandit_ucb_separation": ba.get("ucb_separation"),

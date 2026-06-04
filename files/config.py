@@ -110,6 +110,27 @@ BOT_ENABLE_DATA_COLLECTOR: bool = False
 # ── RL: Contextual Bandit + Exit Policy ──────────────────────────────────────
 BANDIT_ENABLED: bool = True               # adaptive trail_k/max_hold via LinUCB
 BANDIT_ALPHA: float = 1.5                 # UCB exploration coefficient
+# RM-22 Step B: explicit regime-interaction features (bull_day x BTC trend) in
+# the LinUCB context. A linear bandit cannot otherwise represent that
+# conjunction, which is exactly where predictive gates over-block winners
+# (see _backtest_regime_gate.py). Safe by construction: new dims start at
+# theta=0 (zero-padded on migration) so there is no behaviour change until the
+# bandit learns. Rollback = set False (dim stays d=20, features become inert).
+# Backtest 2026-06-01 (_backtest_regime_interaction_critic.py): NEUTRAL out of
+# sample (delta AUC +0.0005, < +0.005 gate). The bull/btcDn cell that motivates
+# it is only ~1.7% of data and 3 samples in the held-out window — too rare to
+# add ranking signal on its own. Kept OFF per "deploy only on positive backtest"
+# rule. Revisit after RM-22 Step C (soft gate) populates that cell with data.
+BANDIT_REGIME_INTERACTION_ENABLED: bool = False
+# RM-22 Step C: soft entry_score gate. When True, a below-floor candidate is
+# NOT hard-vetoed at the entry_score stage; instead it falls through to the
+# downstream regime-aware entry bandit (should_enter), which makes the final
+# enter/skip call. Backtest 2026-06-01 (_backtest_soft_gate.py, 17d held out):
+# top-gainer coverage 17.7%->20.6% (+2.9pp), admitted entries net-positive
+# (avg_r5 +0.274, win 46.9%, Sharpe 0.90), more selective than relax-all.
+# Rollback = False (exact current hard-veto behaviour).
+# DEPLOYED True 2026-06-01 (operator-approved on positive backtest).
+REGIME_SOFT_GATE_ENABLED: bool = True
 BANDIT_TRAIL_K_MIN: float = 2.0          # floor: bandit cannot set trail_k below this (prevents 1.05 stops)
 
 # 19.04.2026: opt-in to apply CMA-ES-optimized params from rl_params.json on
@@ -207,6 +228,22 @@ SCAN_QUOTE:   str       = "USDT"
 SCAN_EXCLUDE: list[str] = [
     "UP", "DOWN", "BULL", "BEAR",
     "USDCUSDT", "BUSDUSDT", "TUSDUSDT", "DAIUSDT", "FDUSDUSDT",
+]
+
+# ── Learning universe (DATA COLLECTION ONLY) ──────────────────────────────────
+# daily_learning collects features for this universe so the model can learn from
+# top gainers that are NOT in the live trading watchlist. This does NOT change
+# live signal generation — monitor.py still trades only load_watchlist() symbols.
+# Labels (label_top20 etc.) are already GLOBAL Binance ranks, so collecting
+# features for the missed rockets turns them from invisible into training data.
+LEARNING_UNIVERSE_ENABLED:       bool  = True
+LEARNING_UNIVERSE_TOP_N:         int   = 300        # top-N USDT pairs by 24h quote volume to collect
+LEARNING_UNIVERSE_MIN_QUOTE_VOL: float = 1_000_000.0  # floor: skip illiquid micro-caps (USDT 24h quote vol)
+# Learning-only exclusions (NOT used by the live scan, so SCAN_EXCLUDE stays frozen).
+# Stable/fiat/metal-pegged pairs never become crypto top-gainers — drop them as noise.
+LEARNING_UNIVERSE_EXTRA_EXCLUDE: list[str] = [
+    "USD1USDT", "RLUSDUSDT", "EURUSDT", "EURIUSDT", "USDPUSDT", "USDEUSDT",
+    "XAUTUSDT", "XAUUSDT", "XAGUSDT", "PAXGUSDT", "GBPUSDT", "JPYUSDT",
 ]
 
 # ── Indicator parameters ──────────────────────────────────────────────────────
@@ -343,6 +380,16 @@ IMPULSE_SPEED_1H_EXT_ATR_MAX_BULL: float = 9.0   # bull day = wider runway
 # Set to 0 to disable.
 IMPULSE_SPEED_15M_ADX_MIN: float = 15.0   # was 20.0 (backtest 2026-04-20: -5pts, ADX15-20 positive)
 IMPULSE_SPEED_1H_ADX_MIN: float = 14.0  # scout:22.04.2026 was 15.84
+
+# 2026-05-31 high-momentum bypass — L3-c 2D sweep found this exception
+# saves +1.4% avg pocket (RSI>=70 + DR>=10) that the ADX floor currently
+# blocks. Default OFF; activate via approved decision -> runtime override.
+IMPULSE_SPEED_15M_HIGH_MOMENTUM_BYPASS_ENABLED: bool = False
+IMPULSE_SPEED_15M_HIGH_MOMENTUM_BYPASS_RSI_MIN: float = 70.0
+IMPULSE_SPEED_15M_HIGH_MOMENTUM_BYPASS_RANGE_MIN: float = 10.0
+IMPULSE_SPEED_1H_HIGH_MOMENTUM_BYPASS_ENABLED: bool = False
+IMPULSE_SPEED_1H_HIGH_MOMENTUM_BYPASS_RSI_MIN: float = 70.0
+IMPULSE_SPEED_1H_HIGH_MOMENTUM_BYPASS_RANGE_MIN: float = 10.0
 IMPULSE_SPEED_LATE_GUARD_ENABLED: bool = True
 # A/B kill-switches per-tf (added 2026-04-18 after Pareto sweep showed 15m guard
 # blocked +6.77% non-bull winners on 15m). Flip back to True for rollback.
@@ -453,7 +500,11 @@ MACDWARN_BARS: int = 3     # баров подряд MACD hist падает → 
 # regardless of bandit/ATR-based choice. Buffer = max(trail_k*ATR, MIN_PCT*price).
 # Mode-aware: high-vol modes (impulse_speed, strong_trend) need wider min-buffer.
 TRAIL_MIN_BUFFER_PCT_ENABLED: bool = True
-TRAIL_MIN_BUFFER_PCT_IMPULSE_SPEED: float = 0.015  # 1.5% min buffer (high-vol regime)
+TRAIL_MIN_BUFFER_PCT_IMPULSE_SPEED: float = 0.08   # 8% (was 1.5%) — EX1 capture fix 2026-06-01:
+# impulse_speed winners (+200..+470% potential) were knocked out at a LOSS by tight ATR-trail on
+# a deep retrace, then ran without us. Backtest (_backtest_exit_policy_impulse.py, 35d, 658 trades):
+# winner mean pnl +0.94->+2.83%, capture +0.004->+0.015 (x4), net per-trade -0.14->-0.06 (winner
+# upside NOT paid by loser blow-ups). 8% beat tight(1.5%, low capture) and mid(3-5%, worst net).
 TRAIL_MIN_BUFFER_PCT_STRONG_TREND:  float = 0.015
 TRAIL_MIN_BUFFER_PCT_IMPULSE:       float = 0.012  # 1.2% min buffer
 TRAIL_MIN_BUFFER_PCT_TREND:         float = 0.0    # disabled — narrow stops work for trend
@@ -825,7 +876,7 @@ PORTFOLIO_REPLACE_POSITION_FINAL_MAX: float = 0.00
 PORTFOLIO_REPLACE_POSITION_TOP_GAINER_MAX: float = 0.20
 WEAK_REENTRY_COOLDOWN_BARS: int = 24  # was 8 — увеличено чтобы пресечь flip-flop после WEAK
 ENTRY_SCORE_MIN_ENABLED: bool = True
-ENTRY_SCORE_MIN_15M: float = 40.0  # was 45.0 — Pareto sweep 2026-04-18: blocked/entry_score n=1374 had avg_r5=+0.123% vs take=-0.016%
+ENTRY_SCORE_MIN_15M: float = 40.0  # DEFAULT — active runtime override may bring this to 35.0 (see decisions.jsonl + .runtime/config_overrides_applied.json). Was 45.0 -> 40.0 in 2026-04-18 Pareto sweep.
 ENTRY_SCORE_MIN_1H: float = 56.0
 ENTRY_SCORE_BORDERLINE_BYPASS_ENABLED: bool = True
 ENTRY_SCORE_BORDERLINE_ALLOW_1H: bool = False
@@ -992,7 +1043,7 @@ OPEN_SIGNAL_CLUSTER_CAP_ENABLED: bool = True
 OPEN_SIGNAL_CLUSTER_CAP_15M_SHORT_BOUNCE_MODES: tuple = ("breakout", "retest")
 OPEN_SIGNAL_CLUSTER_CAP_15M_SHORT_BOUNCE_MAX: int = 2
 OPEN_SIGNAL_CLUSTER_CAP_15M_IMPULSE_MODES: tuple = ("impulse_speed",)
-OPEN_SIGNAL_CLUSTER_CAP_15M_IMPULSE_MAX: int = 9   # was 2 — 149 blocks in recent events (ORDI, FLUX blocked)  # scout:10.05.2026 was 9
+OPEN_SIGNAL_CLUSTER_CAP_15M_IMPULSE_MAX: int = 11   # was 2 — 149 blocks in recent events (ORDI, FLUX blocked)  # scout:17.05.2026 (preserved live scout tuning across deploy; main had 9@10.05)
 OPEN_SIGNAL_CLUSTER_CAP_1H_RETEST_MODES: tuple = ("retest",)
 OPEN_SIGNAL_CLUSTER_CAP_1H_RETEST_MAX: int = 1
 
@@ -1198,3 +1249,17 @@ HORIZON_ALLOCATION_POSITION: float = 0.10
 FAST_REVERSAL_GUARD_ENABLED: bool = False  # master switch — keep False until validated
 FAST_REVERSAL_PROBA_MAX: float = 0.55      # block if proba_fast_reversal > this
 FAST_REVERSAL_SHADOW: bool = True          # log proba but never block (telemetry)
+
+# ── RM-4: Auto-apply approved decisions via runtime override ────────────────
+# Everything above is the DEFAULT. Active approved decisions in
+# decisions.jsonl override the relevant constants in-memory at import time,
+# so `pipeline_approve.py` no longer needs the operator to hand-edit config.
+# Failure here NEVER blocks startup — falls back to defaults silently.
+# Audit trail: .runtime/config_overrides_applied.json
+AUTO_APPLY_OVERRIDES_ENABLED: bool = True
+if AUTO_APPLY_OVERRIDES_ENABLED:
+    try:
+        from _config_runtime_overrides import apply_overrides as _apply_overrides
+        _apply_overrides(globals())
+    except Exception:
+        pass
