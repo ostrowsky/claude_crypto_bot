@@ -231,6 +231,44 @@ stop_rl_headless.bat     - stop RL worker (PID from .runtime/rl_worker_bg.json)
 
 ## 7. Known issues & fixes
 
+### impulse_speed regime curtailment + trail rollback (2026-06-05)
+
+Live regression caught: the 8% trail widen (below) backtested +net on 35d but
+live (5d, n=89) made impulse_speed LOSE (avg/trade +0.02->-0.62%, sum -54.9%) —
+**rolled back** to 0.015 via a `rolled_back` decision (RM-4 runtime override
+removed; `_config_runtime_overrides.py` reads decisions.jsonl, so logging a
+decision auto-applies its `diff.to` as an in-memory override — rollback needs a
+superseding `rolled_back` record, not just a config.py edit).
+
+Root cause hunt (4 analyses, ALL negative — impulse_speed enters ~62% late):
+1. lateness (zigzag, hindsight) separates outcomes but is tautological
+   (late=near-peak=low remaining upside) — not real-time gateable.
+2. extension static gate (close_vs_ema50>3 etc.) over-blocks: big movers are
+   ALSO extended, recall 23-34% — fails the §7 over-block guard.
+3. extension feature in the entry bandit: AUC 0.48, admitted set unchanged.
+4. full multivariate logistic over 23 features: **train AUC 0.60, OOS 0.50** —
+   no generalizing entry-time signal (the non-stationarity signature).
+
+Conclusion: impulse_speed winners/losers are indistinguishable at entry with
+available features; profitability is regime-driven (profitable Mar-early May,
+negative mid-May-Jun). Lever is mode-level, not entry-level.
+
+DEPLOYED — regime curtailment with auto-revive (`impulse_speed_curtail.py`):
+pause the mode while its trailing-14d mean realized pnl < 0, auto-revive when
+positive. Backtest (`_backtest_impulse_speed_curtail.py`, robust across
+window/threshold grid): kept avg/trade +0.025 -> +0.162, ~-93 realized losses
+removed, cost ~27% of late low-capture big-mover catches on bad-regime days.
+`compute_and_write()` runs daily in `daily_learning.py` -> state file
+`.runtime/impulse_speed_curtail.json`; live entry path calls `is_curtailed()`
+in `_impulse_speed_entry_guard` (monitor.py), which FAILS OPEN. Currently
+curtailed=True (trailing pnl -0.377). Config:
+```python
+IMPULSE_SPEED_REGIME_CURTAIL_ENABLED = True   # rollback = False
+IMPULSE_SPEED_CURTAIL_WINDOW_DAYS = 14
+IMPULSE_SPEED_CURTAIL_PNL_THRESHOLD = 0.0
+IMPULSE_SPEED_CURTAIL_MIN_TRADES = 8
+```
+
 ### EX1 capture fix — wider impulse_speed trail (2026-06-01)
 
 Morning-report diagnosis: top-20 capture (NS sub-metric) stuck at ~0.15 —

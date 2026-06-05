@@ -381,6 +381,21 @@ IMPULSE_SPEED_1H_EXT_ATR_MAX_BULL: float = 9.0   # bull day = wider runway
 IMPULSE_SPEED_15M_ADX_MIN: float = 15.0   # was 20.0 (backtest 2026-04-20: -5pts, ADX15-20 positive)
 IMPULSE_SPEED_1H_ADX_MIN: float = 14.0  # scout:22.04.2026 was 15.84
 
+# ── impulse_speed regime curtailment with auto-revive (2026-06-05) ──────────
+# Four analyses (lateness, extension gate, extension-in-bandit, full
+# multivariate logistic — OOS AUC ~0.50) proved NO learnable entry-time signal
+# separates impulse_speed winners from losers; its profitability is regime-
+# driven. So gate at the MODE level: pause when its trailing-window mean
+# realized pnl < threshold, auto-revive when it turns positive. Backtest
+# (_backtest_impulse_speed_curtail.py, robust across grid): kept avg/trade
+# +0.025 -> +0.162, ~-93 losses removed, ~27% of late low-capture big movers
+# foregone on bad-regime days. State written daily by impulse_speed_curtail.py;
+# live entry path reads is_curtailed() (fails OPEN). Rollback = flag False.
+IMPULSE_SPEED_REGIME_CURTAIL_ENABLED: bool = True
+IMPULSE_SPEED_CURTAIL_WINDOW_DAYS: int = 14
+IMPULSE_SPEED_CURTAIL_PNL_THRESHOLD: float = 0.0
+IMPULSE_SPEED_CURTAIL_MIN_TRADES: int = 8
+
 # 2026-05-31 high-momentum bypass — L3-c 2D sweep found this exception
 # saves +1.4% avg pocket (RSI>=70 + DR>=10) that the ADX floor currently
 # blocks. Default OFF; activate via approved decision -> runtime override.

@@ -941,6 +941,17 @@ def _impulse_speed_entry_guard(
     if mode != "impulse_speed":
         return None
 
+    # Regime curtailment (2026-06-05): pause impulse_speed while its own recent
+    # realized pnl is negative (auto-revives when positive). Entry-time signal
+    # is unlearnable (OOS AUC ~0.50) so the only lever is mode-level regime
+    # gating. is_curtailed() fails OPEN, so a broken state never kills the mode.
+    try:
+        from impulse_speed_curtail import is_curtailed as _is_curtailed
+        if _is_curtailed():
+            return "impulse_speed regime-curtailed (trailing realized pnl < 0)"
+    except Exception:
+        pass
+
     # Hard ADX floor — reject "impulse" signals with no trend strength.
     # Added 2026-04-18 after observing CRVUSDT ADX=17.5 (-2.17%) and
     # OXTUSDT ADX=11.3 enter on volume spikes with no directional trend.
