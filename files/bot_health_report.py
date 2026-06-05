@@ -164,6 +164,29 @@ def collect_metrics_daily_latest() -> dict:
     return {"available": True, "ts": latest.get("ts"), "metrics": extract}
 
 
+def collect_mode_curtail() -> dict:
+    """Current impulse_speed regime-curtail state (auto-revive switch)."""
+    try:
+        import impulse_speed_curtail as ic
+        if not bool(getattr(__import__("config"),
+                            "IMPULSE_SPEED_REGIME_CURTAIL_ENABLED", False)):
+            return {"available": True, "enabled": False}
+        rec = {}
+        if ic.STATE_FILE.exists():
+            rec = json.loads(ic.STATE_FILE.read_text(encoding="utf-8"))
+        return {
+            "available": True,
+            "enabled": True,
+            "curtailed": bool(rec.get("curtailed", False)),
+            "trailing_mean_pnl": rec.get("trailing_mean_pnl"),
+            "window_days": rec.get("window_days"),
+            "n_trades": rec.get("n_trades"),
+            "computed_at": rec.get("computed_at"),
+        }
+    except Exception as e:
+        return {"available": False, "error": str(e)}
+
+
 def collect_scout_gates() -> dict:
     """Run analyze_blocked_gates.py and parse its table."""
     try:
@@ -444,6 +467,7 @@ def build_report(today: date) -> dict:
             "working_correctly": scout.get("working_correctly", []),
         } if scout.get("available") else {"available": False},
         "metrics_daily_latest": metrics_daily,
+        "mode_curtail": collect_mode_curtail(),
         "red_flags": red_flags,
         "do_not_touch": dnt,
         "data_sources": {
@@ -794,6 +818,18 @@ def render_telegram(r: dict) -> str:
     out.append("📋 <b>Прошлые решения</b> (помогли или нет):")
     out.extend(_past_decisions_resume())
     out.append("")
+
+    mc = r.get("mode_curtail") or {}
+    if mc.get("available") and mc.get("enabled"):
+        tp = mc.get("trailing_mean_pnl")
+        tp_s = f"{tp:+.2f}%/сделку" if isinstance(tp, (int, float)) else "n/a"
+        wd = mc.get("window_days") or 14
+        if mc.get("curtailed"):
+            out.append(f"⏸️ <b>impulse_speed на паузе</b> (режим плох: "
+                       f"{wd}-дн pnl {tp_s}) — авто-возврат при плюсе")
+        else:
+            out.append(f"▶️ impulse_speed активен ({wd}-дн pnl {tp_s})")
+        out.append("")
 
     if rf:
         crit = sum(1 for x in rf if x.get("severity") == "critical")
