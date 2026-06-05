@@ -230,6 +230,22 @@ SCAN_EXCLUDE: list[str] = [
     "USDCUSDT", "BUSDUSDT", "TUSDUSDT", "DAIUSDT", "FDUSDUSDT",
 ]
 
+# ── Learning universe (DATA COLLECTION ONLY) ──────────────────────────────────
+# daily_learning collects features for this universe so the model can learn from
+# top gainers that are NOT in the live trading watchlist. This does NOT change
+# live signal generation — monitor.py still trades only load_watchlist() symbols.
+# Labels (label_top20 etc.) are already GLOBAL Binance ranks, so collecting
+# features for the missed rockets turns them from invisible into training data.
+LEARNING_UNIVERSE_ENABLED:       bool  = True
+LEARNING_UNIVERSE_TOP_N:         int   = 300        # top-N USDT pairs by 24h quote volume to collect
+LEARNING_UNIVERSE_MIN_QUOTE_VOL: float = 1_000_000.0  # floor: skip illiquid micro-caps (USDT 24h quote vol)
+# Learning-only exclusions (NOT used by the live scan, so SCAN_EXCLUDE stays frozen).
+# Stable/fiat/metal-pegged pairs never become crypto top-gainers — drop them as noise.
+LEARNING_UNIVERSE_EXTRA_EXCLUDE: list[str] = [
+    "USD1USDT", "RLUSDUSDT", "EURUSDT", "EURIUSDT", "USDPUSDT", "USDEUSDT",
+    "XAUTUSDT", "XAUUSDT", "XAGUSDT", "PAXGUSDT", "GBPUSDT", "JPYUSDT",
+]
+
 # ── Indicator parameters ──────────────────────────────────────────────────────
 EMA_FAST       = 20
 EMA_SLOW       = 50
@@ -484,11 +500,12 @@ MACDWARN_BARS: int = 3     # баров подряд MACD hist падает → 
 # regardless of bandit/ATR-based choice. Buffer = max(trail_k*ATR, MIN_PCT*price).
 # Mode-aware: high-vol modes (impulse_speed, strong_trend) need wider min-buffer.
 TRAIL_MIN_BUFFER_PCT_ENABLED: bool = True
-TRAIL_MIN_BUFFER_PCT_IMPULSE_SPEED: float = 0.08   # 8% (was 1.5%) — EX1 capture fix 2026-06-01:
-# impulse_speed winners (+200..+470% potential) were knocked out at a LOSS by tight ATR-trail on
-# a deep retrace, then ran without us. Backtest (_backtest_exit_policy_impulse.py, 35d, 658 trades):
-# winner mean pnl +0.94->+2.83%, capture +0.004->+0.015 (x4), net per-trade -0.14->-0.06 (winner
-# upside NOT paid by loser blow-ups). 8% beat tight(1.5%, low capture) and mid(3-5%, worst net).
+TRAIL_MIN_BUFFER_PCT_IMPULSE_SPEED: float = 0.015  # 1.5% — ROLLED BACK 2026-06-05 from 0.08.
+# The 8% widen (EX1 capture fix 2026-06-01) backtested +net on 35d but live (5d, n=89) made
+# impulse_speed LOSE: avg/trade +0.02%->-0.62%, win 43->34%, sum -54.9%. Root cause: the wide-stop
+# thesis assumed big remaining upside, but impulse_speed enters at ~62% lateness (RF_losing_mode
+# critical flag) — late entries have little upside left while the wide stop pays full downside.
+# Next: attack lateness / gate the mode, not the exit width. See _backtest_exit_policy_impulse.py.
 TRAIL_MIN_BUFFER_PCT_STRONG_TREND:  float = 0.015
 TRAIL_MIN_BUFFER_PCT_IMPULSE:       float = 0.012  # 1.2% min buffer
 TRAIL_MIN_BUFFER_PCT_TREND:         float = 0.0    # disabled — narrow stops work for trend
