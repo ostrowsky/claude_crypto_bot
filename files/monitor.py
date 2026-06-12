@@ -3673,6 +3673,22 @@ async def _poll_coin(
             else:
                 preview_mode = "alignment"
 
+            # Fallback-to-trend: when impulse_speed is regime-curtailed, enter as
+            # 'trend' (tighter stop, normal exit) instead of hard-blocking — keeps
+            # coverage of fast movers in a hot regime. Backtest: AS_TREND net
+            # -0.221 vs AS_IMPULSE -0.290, same big-mover coverage (13/13), vs
+            # BLOCK 0/13. The downstream impulse_speed curtail guard then no-ops
+            # (mode != impulse_speed) so the candidate flows through trend gates.
+            if (preview_mode == "impulse_speed"
+                    and getattr(config, "IMPULSE_SPEED_CURTAIL_FALLBACK_TO_TREND", False)):
+                try:
+                    from impulse_speed_curtail import is_curtailed as _isc
+                    if _isc():
+                        preview_mode = "trend"
+                        log.info("IMPULSE_SPEED->TREND fallback %s [%s] (regime-curtailed)", sym, tf)
+                except Exception:
+                    pass
+
             preview_price = float(c[i])
             preview_ema20 = float(feat["ema_fast"][i])
             preview_slope = float(feat["slope"][i])

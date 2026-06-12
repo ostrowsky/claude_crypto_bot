@@ -391,13 +391,15 @@ IMPULSE_SPEED_1H_ADX_MIN: float = 14.0  # scout:22.04.2026 was 15.84
 # +0.025 -> +0.162, ~-93 losses removed, ~27% of late low-capture big movers
 # foregone on bad-regime days. State written daily by impulse_speed_curtail.py;
 # live entry path reads is_curtailed() (fails OPEN). Rollback = flag False.
-IMPULSE_SPEED_REGIME_CURTAIL_ENABLED: bool = False  # DISABLED 2026-06-12 (live regression):
-# curtailment was the #1 block (266-813/day) and starved the bot during a broad altseason
-# (top-20/day 4-8 -> 25-32). Two flaws: (1) get_entry_mode silently upgrades fast trends
-# (3-bar move >=1.5%) to impulse_speed, so curtail hard-blocks would-be-trend entries; (2)
-# auto-revive self-freezes (blocking the mode starves its own trailing-pnl signal, stuck at
-# the old bad-regime -0.38%). Next: fallback-to-trend (reclassify instead of hard-block) +
-# regime-aware revive. Rollback of THIS disable = flag True.
+IMPULSE_SPEED_REGIME_CURTAIL_ENABLED: bool = True   # re-enabled 2026-06-12 in FALLBACK mode.
+# History: hard-block curtailment (2026-06-05) was a live regression — it became the #1 block
+# (266-813/day) and starved entries to 1-10/day during a broad altseason, because get_entry_mode
+# silently upgrades fast trends (3-bar >=1.5%) to impulse_speed and curtail hard-blocked them.
+# Fix: FALLBACK_TO_TREND — when curtailed, reclassify impulse_speed -> trend (tighter stop, enter)
+# instead of blocking. Backtest (_backtest_fallback_to_trend.py, 25d, n=324): AS_TREND net -0.221
+# vs AS_IMPULSE -0.290 with the SAME big-mover coverage (13/13), vs BLOCK 0/13. Coverage-safe.
+# Rollback = either flag False (off) or FALLBACK_TO_TREND False (revert to hard-block).
+IMPULSE_SPEED_CURTAIL_FALLBACK_TO_TREND: bool = True
 IMPULSE_SPEED_CURTAIL_WINDOW_DAYS: int = 14
 IMPULSE_SPEED_CURTAIL_PNL_THRESHOLD: float = 0.0
 IMPULSE_SPEED_CURTAIL_MIN_TRADES: int = 8

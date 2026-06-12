@@ -262,21 +262,28 @@ removed, cost ~27% of late low-capture big-mover catches on bad-regime days.
 `.runtime/impulse_speed_curtail.json`; live entry path calls `is_curtailed()`
 in `_impulse_speed_entry_guard` (monitor.py), which FAILS OPEN.
 
-**DISABLED 2026-06-12 (live regression — `rolled_back` decision + flag False).**
-Curtailment became the #1 block (266-813/day) and starved the bot during a
-broad altseason (distinct top-20/day 4-8 -> 25-32; entries crashed to 1-10/day).
-Two design flaws surfaced: (1) `get_entry_mode` silently upgrades a fast trend
-(3-bar move >=1.5%) to impulse_speed, so curtail HARD-BLOCKS would-be-trend
-entries; (2) auto-revive self-freezes — blocking the mode starves its own
-trailing-pnl input, so it stuck at the old bad-regime -0.38% and could not see
-the regime turn. Next iteration: fallback-to-trend (reclassify, don't hard-
-block) + regime-aware/shadow revive. Config:
+**Hard-block was a live regression (2026-06-12), now FALLBACK-TO-TREND.**
+Hard-block curtailment became the #1 block (266-813/day) and starved entries to
+1-10/day during a broad altseason (distinct top-20/day 4-8 -> 25-32), because
+`get_entry_mode` silently upgrades a fast trend (3-bar >=1.5%) to impulse_speed
+and curtail hard-blocked those would-be-trend entries. Fix DEPLOYED same day:
+when curtailed, **reclassify impulse_speed -> trend** (tighter stop, ENTER)
+instead of blocking — `monitor.py` at the preview_mode block (~L3675) calls
+`is_curtailed()` and downgrades to "trend"; the downstream curtail guard then
+no-ops. Backtest (`_backtest_fallback_to_trend.py`, 25d, n=324): AS_TREND net
+-0.221 beats AS_IMPULSE -0.290 with SAME big-mover coverage (13/13), vs BLOCK
+0/13 — coverage-safe for altseason. Decisions: hard-block disabled via `rbcur1`
+(rolled_back), re-enabled in fallback mode via `fbt001` (approved). Config:
 ```python
-IMPULSE_SPEED_REGIME_CURTAIL_ENABLED = False  # was True; disabled 2026-06-12
+IMPULSE_SPEED_REGIME_CURTAIL_ENABLED = True       # rollback = False (off)
+IMPULSE_SPEED_CURTAIL_FALLBACK_TO_TREND = True     # False = revert to hard-block
 IMPULSE_SPEED_CURTAIL_WINDOW_DAYS = 14
 IMPULSE_SPEED_CURTAIL_PNL_THRESHOLD = 0.0
 IMPULSE_SPEED_CURTAIL_MIN_TRADES = 8
 ```
+Known residual: auto-revive still self-freezes (fallback routes candidates to
+trend, so no new impulse_speed realized pnl feeds the trailing window) — benign
+now since fallback keeps coverage; a regime/shadow revive is the next refinement.
 
 ### EX1 capture fix — wider impulse_speed trail (2026-06-01)
 
