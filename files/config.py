@@ -391,7 +391,13 @@ IMPULSE_SPEED_1H_ADX_MIN: float = 14.0  # scout:22.04.2026 was 15.84
 # +0.025 -> +0.162, ~-93 losses removed, ~27% of late low-capture big movers
 # foregone on bad-regime days. State written daily by impulse_speed_curtail.py;
 # live entry path reads is_curtailed() (fails OPEN). Rollback = flag False.
-IMPULSE_SPEED_REGIME_CURTAIL_ENABLED: bool = True
+IMPULSE_SPEED_REGIME_CURTAIL_ENABLED: bool = False  # DISABLED 2026-06-12 (live regression):
+# curtailment was the #1 block (266-813/day) and starved the bot during a broad altseason
+# (top-20/day 4-8 -> 25-32). Two flaws: (1) get_entry_mode silently upgrades fast trends
+# (3-bar move >=1.5%) to impulse_speed, so curtail hard-blocks would-be-trend entries; (2)
+# auto-revive self-freezes (blocking the mode starves its own trailing-pnl signal, stuck at
+# the old bad-regime -0.38%). Next: fallback-to-trend (reclassify instead of hard-block) +
+# regime-aware revive. Rollback of THIS disable = flag True.
 IMPULSE_SPEED_CURTAIL_WINDOW_DAYS: int = 14
 IMPULSE_SPEED_CURTAIL_PNL_THRESHOLD: float = 0.0
 IMPULSE_SPEED_CURTAIL_MIN_TRADES: int = 8
@@ -1050,7 +1056,7 @@ CLONE_SIGNAL_GUARD_ENABLED: bool = True
 CLONE_SIGNAL_GUARD_TF: tuple = ("15m",)
 CLONE_SIGNAL_GUARD_MODES: tuple = ("impulse_speed", "breakout", "retest", "alignment", "trend")
 CLONE_SIGNAL_GUARD_WINDOW_BARS: int = 8
-CLONE_SIGNAL_GUARD_MAX_SIMILAR: int = 14  # was 4 — 116 blocks in recent events: FLUX/ORDI blocked by clone guard  # scout:22.04.2026 was 13
+CLONE_SIGNAL_GUARD_MAX_SIMILAR: int = 15  # was 4 — 116 blocks in recent events: FLUX/ORDI blocked by clone guard  # scout:07.06.2026 was 15
 CLONE_SIGNAL_GUARD_MAX_SAME_GROUP: int = 1
 CLONE_SIGNAL_GUARD_OVERRIDE_SCORE: float = 90.0
 CLONE_SIGNAL_GUARD_OVERRIDE_RANKER_FINAL: float = 0.50

@@ -260,10 +260,19 @@ window/threshold grid): kept avg/trade +0.025 -> +0.162, ~-93 realized losses
 removed, cost ~27% of late low-capture big-mover catches on bad-regime days.
 `compute_and_write()` runs daily in `daily_learning.py` -> state file
 `.runtime/impulse_speed_curtail.json`; live entry path calls `is_curtailed()`
-in `_impulse_speed_entry_guard` (monitor.py), which FAILS OPEN. Currently
-curtailed=True (trailing pnl -0.377). Config:
+in `_impulse_speed_entry_guard` (monitor.py), which FAILS OPEN.
+
+**DISABLED 2026-06-12 (live regression — `rolled_back` decision + flag False).**
+Curtailment became the #1 block (266-813/day) and starved the bot during a
+broad altseason (distinct top-20/day 4-8 -> 25-32; entries crashed to 1-10/day).
+Two design flaws surfaced: (1) `get_entry_mode` silently upgrades a fast trend
+(3-bar move >=1.5%) to impulse_speed, so curtail HARD-BLOCKS would-be-trend
+entries; (2) auto-revive self-freezes — blocking the mode starves its own
+trailing-pnl input, so it stuck at the old bad-regime -0.38% and could not see
+the regime turn. Next iteration: fallback-to-trend (reclassify, don't hard-
+block) + regime-aware/shadow revive. Config:
 ```python
-IMPULSE_SPEED_REGIME_CURTAIL_ENABLED = True   # rollback = False
+IMPULSE_SPEED_REGIME_CURTAIL_ENABLED = False  # was True; disabled 2026-06-12
 IMPULSE_SPEED_CURTAIL_WINDOW_DAYS = 14
 IMPULSE_SPEED_CURTAIL_PNL_THRESHOLD = 0.0
 IMPULSE_SPEED_CURTAIL_MIN_TRADES = 8
