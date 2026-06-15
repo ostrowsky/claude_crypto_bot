@@ -21,8 +21,21 @@ ROOT = Path(__file__).resolve().parent.parent
 NOW = datetime.now(timezone.utc)
 
 
-def load_winners(dataset_path: Path, label_field: str, cut_dt: datetime):
-    """Returns (winners_set, eod_ret_dict)."""
+def load_watchlist() -> set:
+    """The tradeable universe. The canonical North Star (CLAUDE.md s1) is
+    '#(top-20 in watchlist)' — top_gainer_dataset now spans a broader learning
+    universe (volume-ranked, ~3-4x the watchlist), so an unfiltered denominator
+    counts coins the bot CANNOT trade and understates real coverage ~3-4x."""
+    try:
+        return set(json.load(io.open(ROOT/"files"/"watchlist.json", encoding="utf-8")))
+    except Exception:
+        return set()
+
+
+def load_winners(dataset_path: Path, label_field: str, cut_dt: datetime,
+                 watchlist: set | None = None):
+    """Returns (winners_set, eod_ret_dict). If `watchlist` is given, only
+    winners whose symbol is tradeable are counted (canonical NS definition)."""
     winners = set()
     eod_ret = {}
     with io.open(dataset_path, encoding="utf-8") as f:
@@ -34,6 +47,8 @@ def load_winners(dataset_path: Path, label_field: str, cut_dt: datetime):
             dt = datetime.fromtimestamp(ts_ms/1000, tz=timezone.utc)
             if dt < cut_dt: continue
             sym = e.get("symbol"); d = dt.strftime("%Y-%m-%d")
+            if watchlist is not None and sym not in watchlist:
+                continue
             if e.get(label_field) == 1:
                 winners.add((d, sym))
             eod_ret[(d, sym)] = e.get("eod_return_pct")
@@ -121,10 +136,12 @@ def main():
     cut_dt = NOW - timedelta(days=args.days)
 
     first_entry, pnl_pairs = load_entries(cut_dt)
+    watchlist = load_watchlist()  # canonical NS: tradeable universe only
 
-    # Top-20 (existing)
+    # Top-20 (existing) — filtered to watchlist per the canonical definition
     top20, eod_ret = load_winners(ROOT/"files"/"top_gainer_dataset.jsonl",
-                                  label_field="label_top20", cut_dt=cut_dt)
+                                  label_field="label_top20", cut_dt=cut_dt,
+                                  watchlist=watchlist)
     res_top20 = compute_north_star(top20, eod_ret, first_entry, pnl_pairs, "top20")
 
     # Sustained (P1.1 — try v2 dataset, fall back if absent)
@@ -133,7 +150,7 @@ def main():
     if v2_path.exists():
         sustained, eod_ret_s = load_winners(v2_path,
                                             label_field="label_sustained_uptrend",
-                                            cut_dt=cut_dt)
+                                            cut_dt=cut_dt, watchlist=watchlist)
         res_sustained = compute_north_star(sustained, eod_ret_s, first_entry,
                                            pnl_pairs, "sustained")
 

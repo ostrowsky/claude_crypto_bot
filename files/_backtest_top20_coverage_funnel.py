@@ -21,7 +21,16 @@ NOW = datetime.now(timezone.utc)
 DAYS = 14
 CUT = NOW - timedelta(days=DAYS)
 
-# 1) Top-20 symbols per UTC-date from top_gainer_dataset
+# Canonical NS denominator is '#(top-20 in watchlist)' (CLAUDE.md s1).
+# top_gainer_dataset spans a broader learning universe (~3-4x watchlist), so
+# without this filter the funnel counts coins the bot CANNOT trade and reports
+# a ~3-4x worse coverage than reality.
+try:
+    WATCHLIST = set(json.load(io.open(ROOT / "files" / "watchlist.json", encoding="utf-8")))
+except Exception:
+    WATCHLIST = set()
+
+# 1) Top-20 symbols per UTC-date from top_gainer_dataset (watchlist-filtered)
 # (file has multiple snapshots per day per symbol; take the latest snapshot per date)
 top20_by_day = defaultdict(set)  # date_str -> set(symbol)
 all_resolved_by_day = defaultdict(int)  # date -> total resolved rows
@@ -34,6 +43,7 @@ with io.open(ROOT / "files" / "top_gainer_dataset.jsonl", encoding="utf-8") as f
         try: dt = datetime.fromtimestamp(ts_ms/1000, tz=timezone.utc)
         except: continue
         if dt < CUT: continue
+        if WATCHLIST and e.get("symbol") not in WATCHLIST: continue
         d = dt.strftime("%Y-%m-%d")
         all_resolved_by_day[d] += 1
         if e.get("label_top20") == 1:
