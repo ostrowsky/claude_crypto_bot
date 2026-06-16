@@ -811,11 +811,6 @@ def render_telegram(r: dict) -> str:
             every = max(2, round(100 / sm))
             out.append(f"<b>Главный тормоз:</b> каждую ~{every}-ю ракету "
                        f"из нашего списка бот вообще не видит.")
-        npnl = md.get("NET_realized_pnl") or {}
-        g = npnl.get("avg_pnl_gross_pct"); nt = npnl.get("avg_pnl_net_pct")
-        if g is not None and nt is not None:
-            out.append(f"<b>P&L/сделку:</b> {g:+.2f}% до комиссий, "
-                       f"<b>{nt:+.2f}%</b> после (комиссия ~{npnl.get('fee_roundtrip_pct',0.1):.2f}%).")
     else:
         out.append("<b>Главное:</b> результат за сегодня ещё считается.")
     out.append("")
