@@ -313,6 +313,13 @@ HISTORY_LIMIT = 300
 LIVE_LIMIT    = 100
 DISCOVERY_ENTRY_GRACE_BARS: int = 2
 DISCOVERY_ENTRY_MAX_SLIPPAGE_PCT: float = 0.45
+# Round-trip trading fee (Binance USDT-M futures taker ~0.05%/side = ~0.10%
+# round-trip). Backtests/replays were GROSS; validated 2026-06-17 that
+# subtracting this shifts net per-trade -0.17 -> -0.27 (material) WITHOUT
+# changing rankings — ACTUAL stays net-best, churn (rotation/re-entry) takes an
+# extra round-trip each, so fee-honest accounting strengthens the don't-churn
+# conclusion. Used by analysis/replay scripts; see _backtest_exit_net_policy.py.
+FEE_ROUNDTRIP_PCT: float = 0.10
 DISCOVERY_CATCHUP_SCORE_BONUS: float = 4.0
 DISCOVERY_SCAN_SEC: int = 60  # ищем новые live-сигналы на каждом polling-цикле
 

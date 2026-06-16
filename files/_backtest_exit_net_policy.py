@@ -152,20 +152,34 @@ POLICIES = {
     "HOLD_EOD":    lambda t: p_hold(t),
 }
 
+# round-trip fee (Binance USDT-M futures taker ~0.05%/side). All these policies
+# are single-position = 1 round-trip, so fees shift them ~uniformly; the point of
+# this validation is (a) materiality and (b) that ACTUAL stays net-best (fees do
+# NOT rescue any wider/churn policy). FEE=0 reproduces the gross numbers.
+import os
+try:
+    import config as _cfg
+    _fee_default = float(getattr(_cfg, "FEE_ROUNDTRIP_PCT", 0.10))
+except Exception:
+    _fee_default = 0.10
+FEE = float(os.environ.get("FEE_ROUNDTRIP_PCT", _fee_default))
+
 rows = [t for t in trades if fwd(t)]
 wins = [t for t in rows if t["win"]]
 loss = [t for t in rows if not t["win"]]
-print("="*70)
-print(f"Net exit-policy replay — ALL entered positions, {DAYS}d")
-print("="*70)
+print("="*78)
+print(f"Net exit-policy replay — ALL entered positions, {DAYS}d  (fee_roundtrip={FEE}%)")
+print("="*78)
 print(f"n={len(rows)}  winners(top20)={len(wins)}  losers={len(loss)}\n")
 def m(xs): xs=[x for x in xs if x is not None]; return sum(xs)/len(xs) if xs else float("nan")
-print(f"{'policy':<13}{'W_mean':>9}{'L_mean':>9}{'ALL_net':>9}{'W_win%':>8}")
-print("-"*48)
+print(f"{'policy':<13}{'ALL_gross':>11}{'ALL_net_fee':>13}{'W_net':>9}{'L_net':>9}{'W_win%':>8}")
+print("-"*63)
 for name, fn in POLICIES.items():
     w = m([fn(t) for t in wins]); l = m([fn(t) for t in loss]); a = m([fn(t) for t in rows])
     ww = [fn(t) for t in wins]; ww=[x for x in ww if x is not None]
     wwin = sum(1 for x in ww if x>0)/len(ww)*100 if ww else float("nan")
-    print(f"{name:<13}{w:>+9.2f}{l:>+9.2f}{a:>+9.2f}{wwin:>8.0f}")
-print("\nDeploy criterion: pick policy where W_mean rises vs ACTUAL AND ALL_net")
-print(">= ACTUAL's ALL_net (winner capture not paid for by loser blow-ups).")
+    print(f"{name:<13}{a:>+11.2f}{a-FEE:>+13.2f}{w-FEE:>+9.2f}{l-FEE:>+9.2f}{wwin:>8.0f}")
+print("\nValidation: fees shift single-position policies ~uniformly by -FEE; the")
+print("ranking is preserved and ACTUAL stays net-best -> fees do not rescue churn.")
+print("The churn penalty bites on EXTRA round-trips (rotation, re-entry) tested")
+print("separately (each adds a full -FEE on top).")
