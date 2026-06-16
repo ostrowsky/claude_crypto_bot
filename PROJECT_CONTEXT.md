@@ -386,7 +386,7 @@ trail  = price - buffer
 
 ```python
 TRAIL_MIN_BUFFER_PCT_ENABLED = True
-TRAIL_MIN_BUFFER_PCT_IMPULSE_SPEED = 0.015  # 1.5 %
+TRAIL_MIN_BUFFER_PCT_IMPULSE_SPEED = 0.08   # 8 % (было 1.5 %) — EX1 capture fix 2026-06-01
 TRAIL_MIN_BUFFER_PCT_STRONG_TREND  = 0.015
 TRAIL_MIN_BUFFER_PCT_IMPULSE       = 0.012
 # trend / alignment / retest / breakout / default = 0.0
@@ -396,6 +396,34 @@ TRAIL_MIN_BUFFER_PCT_IMPULSE       = 0.012
 Хелперы в `monitor.py` ~ L1705: `_trail_min_buffer_pct`,
 `_compute_trail_buffer`. Полная спецификация:
 `docs/specs/features/trail-min-buffer-spec.md`.
+
+### RM-22 regime-conditional learned gating (2026-06-01)
+
+Тезис оператора: рынок нестационарен, поэтому бесконечно подбирать
+*фиксированные* пороги фильтров бессмысленно — бот должен УЧИТЬСЯ
+гейтить в зависимости от режима рынка. Три шага, каждый — через бэктест:
+
+- **Step A** (`_backtest_regime_gate.py`): forward-доход заблокированных
+  кандидатов МЕНЯЕТ ЗНАК по режимным ячейкам (`bull/flat day × btc up/dn`).
+  `entry_score`: bull_day/btc_dn **+0.473** (Sharpe 2.88), flat_day/btc_up
+  −0.075. Премиса подтверждена.
+- **Step B** (`contextual_bandit.py`): фичи `regime_bull_btc_up`,
+  `regime_bull_btc_dn` (N_FEATURES 18→20) за флагом
+  `BANDIT_REGIME_INTERACTION_ENABLED`. Бэктест НЕЙТРАЛЬНЫЙ (ΔAUC +0.0005)
+  → **держим OFF**. `LinUCBBandit.load()` теперь dim-мигрирует сохранённые
+  A/b (identity/zero pad), чтобы 2.6M прошлых апдейтов пережили рост
+  размерности.
+- **Step C** (DEPLOYED `= True`): при `REGIME_SOFT_GATE_ENABLED` кандидат
+  ниже порога `entry_score` не hard-блокируется, а логируется как
+  `entry_score_soft_pass` и проваливается на downstream entry-бандит
+  (`should_enter` ~L5078), который сам решает enter/skip. Бэктест
+  (`_backtest_soft_gate.py`): top-gainer coverage **17.7%→20.6% (+2.9pp)**,
+  32 доп. входа avg_r5 **+0.274** / win 46.9% / Sharpe 0.90 (RELAX-all
+  даёт −0.031 — soft gate селективнее). POSITIVE → деплой одобрен.
+  Откат = флаг False. Врезка в `monitor.py` ~L4191.
+
+Спецификация: `docs/specs/features/auto-improvement-loop-spec.md`
+(Sprint 0, RM-22).
 
 ### Spec-first workflow (2026-04-26)
 
@@ -448,6 +476,8 @@ RL_TRAIN_TELEGRAM_REPORTS_ENABLED = True
 TOP_GAINER_CRITIC_TELEGRAM_REPORTS_ENABLED = True
 TREND_15M_QUALITY_GUARD_ENABLED = True
 ML_CANDIDATE_RANKER_HARD_VETO_ENABLED = True
+REGIME_SOFT_GATE_ENABLED = True               # RM-22 Step C (deployed 2026-06-01)
+BANDIT_REGIME_INTERACTION_ENABLED = False     # RM-22 Step B (neutral, OFF)
 ```
 
 ---

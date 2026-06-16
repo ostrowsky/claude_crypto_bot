@@ -566,6 +566,8 @@ def _log_critic_candidate(
     continuation_profile: bool = False,
     signal_flags: Optional[Dict[str, bool]] = None,
     near_miss: bool = False,
+    atr_pct: Optional[float] = None,
+    trail_k: Optional[float] = None,
 ) -> str:
     if not getattr(config, "CRITIC_DATASET_ENABLED", False):
         return ""
@@ -597,9 +599,11 @@ def _log_critic_candidate(
             near_miss=near_miss,
             btc_vs_ema50=float(getattr(config, "_btc_vs_ema50", 0.0)),
             # RM-3: stamp entry context so the fast-reversal label is
-            # computable later (was the 0/17437 data gap).
-            atr_pct=_entry_atr_pct(feat, data, i),
-            trail_k=_default_trail_k(signal_type),
+            # computable later. Prefer explicit values from the entry call
+            # site (real trail_k chosen by the trail bandit); else derive
+            # (blocked-candidate sites don't pass them).
+            atr_pct=atr_pct if atr_pct is not None else _entry_atr_pct(feat, data, i),
+            trail_k=trail_k if trail_k is not None else _default_trail_k(signal_type),
         )
     except Exception as exc:
         log.warning("critic_dataset.log_candidate failed for %s [%s]: %s", sym, tf, exc)
@@ -937,17 +941,54 @@ def _impulse_speed_entry_guard(
     if mode != "impulse_speed":
         return None
 
+    # Regime curtailment (2026-06-05): pause impulse_speed while its own recent
+    # realized pnl is negative (auto-revives when positive). Entry-time signal
+    # is unlearnable (OOS AUC ~0.50) so the only lever is mode-level regime
+    # gating. is_curtailed() fails OPEN, so a broken state never kills the mode.
+    try:
+        from impulse_speed_curtail import is_curtailed as _is_curtailed
+        if _is_curtailed():
+            return "impulse_speed regime-curtailed (trailing realized pnl < 0)"
+    except Exception:
+        pass
+
     # Hard ADX floor — reject "impulse" signals with no trend strength.
     # Added 2026-04-18 after observing CRVUSDT ADX=17.5 (-2.17%) and
     # OXTUSDT ADX=11.3 enter on volume spikes with no directional trend.
+    #
+    # 2026-05-31 high-momentum bypass (L3-c sweep, n=1058 impulse_guard
+    # blocks): 2D breakdown by RSI x daily_range identified a precise
+    # pocket where this ADX floor over-blocks — high RSI + wide daily
+    # range proves momentum even when ADX is lagging. Recovery pocket:
+    # RSI>=70 + DR>=10 averaged +1.4%; the symmetric RSI<70 + DR>=10
+    # case stayed at -0.40% (correctly blocked). Default OFF; activate
+    # via approved decision -> runtime override (RM-4).
     if tf == "15m":
         adx_floor = float(getattr(config, "IMPULSE_SPEED_15M_ADX_MIN", 20.0))
         if adx < adx_floor:
-            return f"weak 15m impulse: ADX {adx:.1f} < {adx_floor:.0f}"
+            if getattr(config, "IMPULSE_SPEED_15M_HIGH_MOMENTUM_BYPASS_ENABLED", False):
+                bp_rsi = float(getattr(config, "IMPULSE_SPEED_15M_HIGH_MOMENTUM_BYPASS_RSI_MIN", 70.0))
+                bp_dr  = float(getattr(config, "IMPULSE_SPEED_15M_HIGH_MOMENTUM_BYPASS_RANGE_MIN", 10.0))
+                if rsi >= bp_rsi and daily_range >= bp_dr:
+                    log.info("IMPULSE_GUARD bypass 15m %s: ADX %.1f<%.0f but RSI %.1f>=%g AND DR %.2f%%>=%g (high-momentum)",
+                             "" , adx, adx_floor, rsi, bp_rsi, daily_range, bp_dr)
+                else:
+                    return f"weak 15m impulse: ADX {adx:.1f} < {adx_floor:.0f}"
+            else:
+                return f"weak 15m impulse: ADX {adx:.1f} < {adx_floor:.0f}"
     if tf == "1h":
         adx_floor_1h = float(getattr(config, "IMPULSE_SPEED_1H_ADX_MIN", 18.0))
         if adx < adx_floor_1h:
-            return f"weak 1h impulse: ADX {adx:.1f} < {adx_floor_1h:.0f}"
+            if getattr(config, "IMPULSE_SPEED_1H_HIGH_MOMENTUM_BYPASS_ENABLED", False):
+                bp_rsi_1h = float(getattr(config, "IMPULSE_SPEED_1H_HIGH_MOMENTUM_BYPASS_RSI_MIN", 70.0))
+                bp_dr_1h  = float(getattr(config, "IMPULSE_SPEED_1H_HIGH_MOMENTUM_BYPASS_RANGE_MIN", 10.0))
+                if rsi >= bp_rsi_1h and daily_range >= bp_dr_1h:
+                    log.info("IMPULSE_GUARD bypass 1h: ADX %.1f<%.0f but RSI %.1f>=%g AND DR %.2f%%>=%g (high-momentum)",
+                             adx, adx_floor_1h, rsi, bp_rsi_1h, daily_range, bp_dr_1h)
+                else:
+                    return f"weak 1h impulse: ADX {adx:.1f} < {adx_floor_1h:.0f}"
+            else:
+                return f"weak 1h impulse: ADX {adx:.1f} < {adx_floor_1h:.0f}"
 
     if tf == "1h":
         # Compute stateless extension metric: price distance from 1h EMA20 in ATR.
@@ -3632,6 +3673,22 @@ async def _poll_coin(
             else:
                 preview_mode = "alignment"
 
+            # Fallback-to-trend: when impulse_speed is regime-curtailed, enter as
+            # 'trend' (tighter stop, normal exit) instead of hard-blocking — keeps
+            # coverage of fast movers in a hot regime. Backtest: AS_TREND net
+            # -0.221 vs AS_IMPULSE -0.290, same big-mover coverage (13/13), vs
+            # BLOCK 0/13. The downstream impulse_speed curtail guard then no-ops
+            # (mode != impulse_speed) so the candidate flows through trend gates.
+            if (preview_mode == "impulse_speed"
+                    and getattr(config, "IMPULSE_SPEED_CURTAIL_FALLBACK_TO_TREND", False)):
+                try:
+                    from impulse_speed_curtail import is_curtailed as _isc
+                    if _isc():
+                        preview_mode = "trend"
+                        log.info("IMPULSE_SPEED->TREND fallback %s [%s] (regime-curtailed)", sym, tf)
+                except Exception:
+                    pass
+
             preview_price = float(c[i])
             preview_ema20 = float(feat["ema_fast"][i])
             preview_slope = float(feat["slope"][i])
@@ -3740,6 +3797,12 @@ async def _poll_coin(
                 botlog.log_blocked(sym, tf, float(c[i]), reason, signal_type="late_continuation")
                 return
             is_bull_day_now = bool(getattr(config, "_bull_day_active", False))
+            # ml_proba is only computed later (~L3939) but the early block
+            # paths (e.g. impulse_guard) reference it via _build_block_context
+            # -> initialise here so a pre-compute block can't raise
+            # UnboundLocalError and drop the whole poll (dropped impulse_speed
+            # candidates 2026-05-26).
+            ml_proba = None
             impulse_speed_reason = _impulse_speed_entry_guard(
                 tf=tf,
                 mode=preview_mode,
@@ -4151,6 +4214,34 @@ async def _poll_coin(
                             tf,
                             candidate_score,
                             min_score,
+                        )
+                    elif getattr(config, "REGIME_SOFT_GATE_ENABLED", False):
+                        # RM-22 Step C: SOFT GATE. Instead of hard-vetoing a
+                        # below-floor candidate, defer the enter/skip decision
+                        # to the downstream entry bandit (should_enter, ~L5078),
+                        # which is regime-aware and already in the pipeline.
+                        # Backtest 2026-06-01 (_backtest_soft_gate.py, 17d held
+                        # out): +2.9pp top-gainer coverage, admitted entries
+                        # net-positive (avg_r5 +0.274, win 46.9%), more
+                        # selective than relax-all. Rollback = flag False.
+                        log.info(
+                            "ENTRY SCORE SOFT-PASS %s [%s]: %.2f < %.2f -> bandit decides",
+                            sym, tf, candidate_score, min_score,
+                        )
+                        _log_critic_candidate(
+                            sym=sym, tf=tf, bar_ts=int(data["t"][i]),
+                            signal_type=preview_mode, feat=feat, data=data, i=i,
+                            action="soft_pass", reason_code="entry_score_soft_pass",
+                            reason=f"soft-pass {candidate_score:.2f} < {min_score:.2f}",
+                            stage="quality_floor", candidate_score=candidate_score,
+                            base_score=base_score, score_floor=score_floor,
+                            forecast_return_pct=float(getattr(report, "forecast_return_pct", 0.0)),
+                            today_change_pct=float(getattr(report, "today_change_pct", 0.0)),
+                            ml_proba=ml_proba, mtf_soft_penalty=mtf_soft_penalty,
+                            fresh_priority=_is_fresh_priority_candidate(preview_mode, catchup_snapshot),
+                            catchup=catchup_snapshot is not None,
+                            continuation_profile=continuation_profile,
+                            signal_flags=signal_flags,
                         )
                     else:
                         reason = f"entry score {candidate_score:.2f} < floor {min_score:.2f}"

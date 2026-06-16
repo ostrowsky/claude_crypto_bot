@@ -54,9 +54,111 @@ RULE_CONFIG_MAP: dict[str, list[str]] = {
         "IMPULSE_SPEED_ROTATION_GUARD_1H_RSI_MIN",
         "IMPULSE_SPEED_ROTATION_GUARD_1H_RANGE_MIN",
     ],
-    "entry_score_floor_relax": ["ENTRY_SCORE_FLOOR_GLOBAL"],
+    "entry_score_floor_relax": ["ENTRY_SCORE_MIN_15M", "ENTRY_SCORE_MIN_1H"],
+    "impulse_guard_high_momentum_bypass": [
+        "IMPULSE_SPEED_15M_HIGH_MOMENTUM_BYPASS_ENABLED",
+        "IMPULSE_SPEED_1H_HIGH_MOMENTUM_BYPASS_ENABLED",
+    ],
     "disable_mode_impulse_speed": ["MODE_IMPULSE_SPEED_ENABLED"],
 }
+
+# Known gate reason_codes as logged in critic_dataset.jsonl (decision.reason_code).
+# Used to recompute a gate's blocked-bucket edge on RECENT vs REFERENCE windows so
+# the L6 advisor isn't fooled by a stale long-window average (markets are
+# non-stationary — an edge measured over 60d can already be decaying). Longest
+# tokens first so e.g. 'late_impulse_rotation' wins over 'impulse'.
+_GATE_REASON_CODES = [
+    "late_impulse_rotation", "ranker_hard_veto", "clone_signal_guard",
+    "correlation_guard", "open_cluster_cap", "fast_reversal_risk",
+    "ml_proba_zone", "trend_1h_chop", "trend_quality", "impulse_guard",
+    "entry_score", "breakout", "alignment", "mtf",
+]
+_RECENT_DAYS = 30
+_REFERENCE_DAYS = 60
+_CRITIC_DATASET = PL.FILES_DIR / "critic_dataset.jsonl"
+
+
+def _gate_recency_split(hyp: dict) -> dict | None:
+    """Recompute the gate's blocked-bucket forward return (ret_5) on a RECENT
+    (<=30d) vs REFERENCE (30..60d) window from critic_dataset.jsonl.
+
+    Defensive: returns None on any problem — must never block an approval flow.
+    The point is to expose edge DECAY to the advisor: if the recent window shows
+    a much weaker (or flipped) edge than the reference window, a fixed-threshold
+    relaxation calibrated on the long window is over-optimistic."""
+    try:
+        if not _CRITIC_DATASET.exists():
+            return None
+        hay = f"{hyp.get('rule','')} {hyp.get('config_key','')}".lower()
+        reason = next((rc for rc in _GATE_REASON_CODES if rc in hay), None)
+        if not reason:
+            return None
+        now = datetime.now(timezone.utc)
+
+        def _f(v):
+            try:
+                return float(v)
+            except (TypeError, ValueError):
+                return None
+
+        recent: list[float] = []
+        reference: list[float] = []
+        with io.open(_CRITIC_DATASET, encoding="utf-8", errors="replace") as f:
+            for ln in f:
+                if reason not in ln:
+                    continue
+                try:
+                    e = json.loads(ln)
+                except json.JSONDecodeError:
+                    continue
+                if str((e.get("decision", {}) or {}).get("reason_code", "")) != reason:
+                    continue
+                r5 = _f((e.get("labels", {}) or {}).get("ret_5"))
+                if r5 is None:
+                    continue
+                try:
+                    age = (now - datetime.fromisoformat(
+                        str(e.get("ts_signal", "")).replace("Z", "+00:00"))).days
+                except (ValueError, TypeError):
+                    continue
+                if age < 0:
+                    continue
+                if age <= _RECENT_DAYS:
+                    recent.append(r5)
+                elif age <= _REFERENCE_DAYS:
+                    reference.append(r5)
+
+        def _agg(xs):
+            if not xs:
+                return None
+            n = len(xs)
+            return {"n": n, "avg_r5_pct": round(sum(xs) / n, 4),
+                    "win_pct": round(sum(1 for x in xs if x > 0) / n * 100, 1)}
+
+        rec, ref = _agg(recent), _agg(reference)
+        if rec is None and ref is None:
+            return None
+        decay = None
+        if rec and ref and ref["avg_r5_pct"] != 0:
+            ratio = rec["avg_r5_pct"] / ref["avg_r5_pct"]
+            # edge decayed if recent is <50% of reference, or flipped sign
+            decay = bool(ratio < 0.5 or (ref["avg_r5_pct"] > 0 and rec["avg_r5_pct"] <= 0))
+        return {
+            "reason_code": reason,
+            "metric": "blocked-bucket forward ret_5 (%)",
+            "recent_window_days": _RECENT_DAYS,
+            "reference_window_days": f"{_RECENT_DAYS}..{_REFERENCE_DAYS}",
+            "recent": rec,
+            "reference": ref,
+            "edge_decayed": decay,
+            "note": ("Recent edge is materially weaker/flipped vs reference — a "
+                     "fixed-threshold change calibrated on the long window is "
+                     "likely over-optimistic; prefer needs_review."
+                     if decay else
+                     "Recent edge roughly tracks reference."),
+        }
+    except Exception:
+        return None
 
 
 def _config_constants() -> dict[str, str]:
@@ -85,16 +187,24 @@ def resolve_config_keys(hyp: dict) -> dict:
     rule = hyp.get("rule", "")
     declared = hyp.get("config_key")
 
-    # 1) explicit registry mapping for the rule (most reliable)
+    # 1) explicit registry mapping for the rule. If the hypothesis ALSO
+    #    declares a config_key that is in the mapped set, narrow to it
+    #    (rule families can cover several tf variants; the hypothesis
+    #    targets one).
     if rule in RULE_CONFIG_MAP:
-        keys = RULE_CONFIG_MAP[rule]
+        mapped = RULE_CONFIG_MAP[rule]
+        if declared and declared in mapped:
+            keys = [declared]
+        else:
+            keys = mapped
         missing = [k for k in keys if k not in consts]
         return {
             "ok": not missing,
             "keys": keys,
             "missing": missing,
-            "reason": ("all mapped constants exist" if not missing
-                       else f"registry constants missing from config.py: {missing}"),
+            "reason": ("declared config_key matches mapped — narrowed" if declared in mapped
+                       else ("all mapped constants exist" if not missing
+                             else f"registry constants missing from config.py: {missing}")),
         }
     # 2) the declared config_key is itself a real constant
     if declared and declared in consts:
@@ -138,10 +248,20 @@ needs_review — with a one-paragraph justification covering:
      should watch for after applying the change.
   3. Whether the rollback procedure is clear and reversible.
   4. Whether the change targets a persistent (not flaky) red flag.
+  5. Whether the gate's edge is STILL THERE on recent data. Markets are
+     non-stationary: an edge measured over a long reference window can already
+     be decaying. The `gate_recency_split` field recomputes the gate's
+     blocked-bucket forward return on a recent (<=30d) vs reference (30..60d)
+     window. If `edge_decayed` is true (recent edge much weaker than reference,
+     or flipped sign), the validation_report's headline average is STALE —
+     treat it as over-optimistic, cap confidence at "medium" at most, and
+     prefer "needs_review" over "approve". Weight recent evidence over the
+     long-window average. If recent `n` is small, say the edge is unproven now.
 
 Be honest. If the hypothesis looks weak (small days_red, no shadow yet, expected
-range overlapping with noise), say so. If the change is reasonable but the
-operator should monitor a specific metric for the first 24h, say which one.
+range overlapping with noise, or a decayed recent edge), say so. If the change is
+reasonable but the operator should monitor a specific metric for the first 24h,
+say which one.
 
 You are advice, not authority — the human and the safety_checks are the gate.
 """
@@ -179,6 +299,7 @@ def claude_advise(hyp: dict, issues: list[str]) -> dict | None:
         "validation_report": (hyp.get("validation_report") or {}).get("result"),
         "shadow_report":     hyp.get("shadow_report"),
         "safety_checks":     issues,
+        "gate_recency_split": _gate_recency_split(hyp),
     }
     res = CC.call_claude_json(
         _CLAUDE_ADVISOR_SYSTEM,
@@ -472,7 +593,57 @@ def cmd_approve(hyp_path: Path, non_interactive: bool, force: bool, reason: str 
     hyp["decision_id"] = decision_id
     PL.write_json(hyp_path, hyp)
     print(f"\nApproved: decision_id={decision_id}")
-    emit_apply_instructions(hyp)
+
+    # RM-4: auto-apply via runtime override + auto-restart.
+    # Concrete diff (literal numeric/bool) -> the override layer in config.py
+    # picks it up at next import; trigger a bot restart so the running
+    # process actually sees the new value. Directive diffs ("+10% looser")
+    # cannot be auto-applied; fall back to printing manual instructions.
+    d = hyp.get("diff", {}) or {}
+    to_val = d.get("to")
+    auto_ok = isinstance(to_val, (int, float, bool)) and not isinstance(to_val, str)
+    if auto_ok and not _maybe_auto_restart(hyp, to_val):
+        emit_apply_instructions(hyp)
+    elif not auto_ok:
+        emit_apply_instructions(hyp)
+
+
+def _maybe_auto_restart(hyp: dict, to_val) -> bool:
+    """Auto-apply path: trigger restart_bot.bat so the override takes effect.
+    Returns True if auto-apply was attempted (success or printed instructions).
+    Stays opt-out-safe via PIPELINE_AUTO_APPLY env var."""
+    import os, subprocess, sys
+    if os.environ.get("PIPELINE_AUTO_APPLY", "1") == "0":
+        print("[auto-apply] disabled via PIPELINE_AUTO_APPLY=0 — manual steps follow")
+        return False
+    rk = resolve_config_keys(hyp)
+    keys = rk.get("keys") or []
+    print("\n" + "=" * 70)
+    print("AUTO-APPLY (RM-4 runtime override + restart)")
+    print("=" * 70)
+    print(f"  override: {', '.join(keys)} -> {to_val}")
+    print(f"  source  : .runtime/pipeline/decisions/decisions.jsonl")
+    print(f"  audit   : .runtime/config_overrides_applied.json")
+    bat = PL.REPO_ROOT / "restart_bot.bat"
+    if not bat.exists():
+        print(f"[auto-apply] restart_bot.bat missing at {bat} — manual restart needed")
+        return False
+    print(f"  restart : spawning {bat.name} (detached)")
+    try:
+        # Detach so this approve command returns immediately
+        flags = 0x00000008  # DETACHED_PROCESS on Windows
+        subprocess.Popen(
+            ["cmd", "/c", "start", "", "/min", str(bat), "--run"],
+            cwd=str(PL.REPO_ROOT),
+            creationflags=flags if sys.platform == "win32" else 0,
+            close_fds=True,
+        )
+        print("[auto-apply] restart launched — bot will load the new override")
+    except OSError as e:
+        print(f"[auto-apply] restart spawn failed: {e} — run restart_bot.bat manually")
+        return False
+    print("=" * 70)
+    return True
 
 
 def cmd_reject(hyp_path: Path, reason: str) -> None:

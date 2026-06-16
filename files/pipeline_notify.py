@@ -926,10 +926,13 @@ def build_next_step_block(top_n: int = 5) -> str | None:
     # "over-block" — just "the bot wrongly skipped trades that averaged
     # +X%, its own average about zero".
     cf = (_l3_result(h) or {}).get("counterfactual") or {}
-    if cf.get("available"):
-        b = cf.get("blocked_avg_r5")
-        t = cf.get("take_baseline_avg_r5")
-        n = cf.get("n")
+    b = cf.get("blocked_avg_r5")
+    t = cf.get("take_baseline_avg_r5")
+    n = cf.get("n")
+    # `available` can be True while individual numbers are still None
+    # (partial L3 result) — formatting None with {:+.1f} would crash the
+    # whole notify step, so require all three before using the rich phrasing.
+    if cf.get("available") and None not in (b, t, n):
         conf = ("высокая" if emoji == "✅"
                 else "средняя" if emoji == "⚠️" else "низкая")
         plain = (f"бот зря отсеивал сделки: они в среднем давали "
