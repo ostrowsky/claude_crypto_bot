@@ -57,7 +57,26 @@ function Stop-StaleWorker {
     Remove-Item $heartbeatFile -Force -ErrorAction SilentlyContinue
 }
 
+function Stop-AllRLWorkers {
+    # Idempotency guard: kill ANY existing RL worker/wrapper for THIS repo by
+    # command line, not just the PIDs recorded in the pid-file. A prior start
+    # that threw on the heartbeat timeout (worker loads catboost > deadline)
+    # leaves an UNTRACKED wrapper that keeps respawning workers -> duplicates
+    # accumulate -> RAM exhaustion -> event-loop paging freeze. Match is scoped
+    # to "$root" so the separate gpt_crypto_bot is never touched (CLAUDE.md s1).
+    $rootEsc = $root.Replace('\', '\\')
+    $patterns = @("$rootEsc.*rl_headless_worker", "$rootEsc.*headless_loop")
+    foreach ($pat in $patterns) {
+        try {
+            Get-CimInstance Win32_Process -Filter "Name='python.exe' OR Name='powershell.exe'" |
+                Where-Object { $_.CommandLine -match $pat } |
+                ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+        } catch { }
+    }
+}
+
 Stop-StaleWorker
+Stop-AllRLWorkers
 Start-Sleep -Seconds 1
 
 Remove-Item $stdout -Force -ErrorAction SilentlyContinue
@@ -78,7 +97,7 @@ if (-not $wrapperProc -or -not $wrapperProc.Id) {
 }
 
 $wrapperPid = $wrapperProc.Id
-$deadline = (Get-Date).AddSeconds(12)
+$deadline = (Get-Date).AddSeconds(25)   # was 12 — worker loads catboost models, can exceed 12s
 $readyState = $null
 while ((Get-Date) -lt $deadline) {
     Start-Sleep -Milliseconds 500
@@ -98,6 +117,20 @@ while ((Get-Date) -lt $deadline) {
 }
 
 if (-not $readyState) {
+    # Heartbeat not seen within the deadline. If the wrapper is still ALIVE it
+    # is almost certainly mid model-load and will write the heartbeat shortly —
+    # record its pid so the NEXT start can stop it (prevents the untracked-
+    # orphan -> duplicate-worker leak) and warn instead of throwing, so a
+    # combined launcher does not abort before starting the bot.
+    if (Get-Process -Id $wrapperPid -ErrorAction SilentlyContinue) {
+        [ordered]@{ wrapper_pid = $wrapperPid; python_pid = $null;
+                    state = "starting"; started_at = (Get-Date).ToString("o");
+                    updated_at = (Get-Date).ToString("o");
+                    stdout = $stdout; stderr = $stderr } |
+            ConvertTo-Json -Depth 5 | Set-Content -Path $pidFile -Encoding UTF8
+        Write-Warning "RL wrapper $wrapperPid alive but heartbeat not ready in 25s (likely model load); recorded pid, continuing."
+        return
+    }
     throw "Detached RL wrapper did not initialize heartbeat: pid=$wrapperPid"
 }
 
