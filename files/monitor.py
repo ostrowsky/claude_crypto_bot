@@ -3228,6 +3228,12 @@ class MonitorState:
     cooldowns:     Dict[str, int]  = field(default_factory=dict)
     # Флаг «cooldown уже залогирован» — отдельный dict чтобы не мешать типам
     cd_logged:     Dict[str, bool] = field(default_factory=dict)
+    # Alert-during-cooldown (2026-06-17): exit price per symbol when cooldown was
+    # set + dedup flag, so we can re-ALERT (info only, no re-entry) if the coin
+    # keeps running >= trigger% above our exit while still in cooldown. Validated
+    # on 60d: +5% trigger -> ~3.8 alerts/day, 45% land on real top-20.
+    cooldown_exit_px:   Dict[str, float] = field(default_factory=dict)
+    cooldown_realerted: Dict[str, bool]  = field(default_factory=dict)
     # Деdup для portfolio BLOCK логов: {symbol: последний_ts_ms когда логировали}.
     # Портфельный лимит проверяется каждые 60с → без dedup = 100+ строк на монету.
     # Логируем не чаще 1 раза в BLOCK_LOG_INTERVAL_BARS баров (по умолчанию 4 = 1ч на 15m).
@@ -3520,10 +3526,13 @@ async def _poll_coin(
             bar_ms = 15 * 60 * 1000 if tf == "15m" else 60 * 60 * 1000
             bars_left = max(0, (cooldown_until_ms - current_ts_ms) // bar_ms)
             bars_total = int(getattr(config, "COOLDOWN_BARS", 8))
-            # Логируем только начало cooldown (когда bars_left максимальное)
+            # Логируем только начало cooldown (когда bars_left максимальное) +
+            # захватываем референс-цену (~ цена выхода, первое наблюдение).
             if not state.cd_logged.get(sym):
                 botlog.log_cooldown(sym=sym, tf=tf, bars_remaining=int(bars_left), first=True)
                 state.cd_logged[sym] = True
+                state.cooldown_exit_px[sym] = float(c[i])      # ref ~ exit price
+                state.cooldown_realerted[sym] = False
                 # ФИКС: логируем в critic_dataset чтобы Trend Scout видел cooldown-блоки.
                 # Без этого в critic нет записей о монетах в cooldown → скаут не диагностирует.
                 _log_critic_candidate(
@@ -3536,6 +3545,27 @@ async def _poll_coin(
                     reason=f"cooldown: {bars_left}/{bars_total} bars remaining",
                     stage="cooldown",
                 )
+            # Alert-during-cooldown (info only, NO re-entry): re-surface if the
+            # coin we exited keeps running >= trigger% above our exit while still
+            # in cooldown — informs the channel of a continuing top-mover the
+            # trade-cooldown would otherwise mute. Validated 60d (+5% -> ~3.8
+            # alerts/day, 45% real top-20). Fails closed on any error.
+            elif (getattr(config, "ALERT_DURING_COOLDOWN_ENABLED", False)
+                    and not state.cooldown_realerted.get(sym)):
+                try:
+                    ex_px = float(state.cooldown_exit_px.get(sym, 0.0) or 0.0)
+                    trig = float(getattr(config, "ALERT_DURING_COOLDOWN_TRIGGER_PCT", 5.0))
+                    cur_px = float(c[i])
+                    if ex_px > 0 and cur_px >= ex_px * (1.0 + trig / 100.0):
+                        cont = (cur_px / ex_px - 1.0) * 100.0
+                        state.cooldown_realerted[sym] = True
+                        await send(
+                            f"🔔 <b>{sym}</b> продолжает движение: "
+                            f"+{cont:.1f}% после нашего выхода (мы в cooldown, "
+                            f"позицию не открываем — это инфо-алерт)."
+                        )
+                except Exception as _e:
+                    log.debug("cooldown re-alert skipped for %s: %s", sym, _e)
             return  # ещё в cooldown, пропускаем
         else:
             # Сбрасываем флаг «cooldown залогирован» когда cooldown истёк

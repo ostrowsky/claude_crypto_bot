@@ -584,6 +584,14 @@ ADX_SMA_BYPASS: float = 35.0  # ADX ≥ этого → плато сильног
 
 # ── П3: Cooldown (уже использовался через getattr) ───────────────────────────
 COOLDOWN_BARS: int = 19  # баров тишины после выхода (Scout APPROVE: n=35, ret5=+0.79%, win=60%; было 24)
+# Alert-during-cooldown (2026-06-17): info-only re-alert when a coin we exited
+# keeps running >= TRIGGER% above exit while still in (trade) cooldown. Decouples
+# the ALERT from the TRADE block — no re-entry, just informs the channel of a
+# continuing top-mover. Validated on 60d: +5% -> ~3.8 alerts/day, 45% land on
+# real watchlist top-20 (vs 14% base), surfacing 44% of continuing top-20 moves
+# the trade-cooldown would otherwise mute. Rollback = ENABLED False.
+ALERT_DURING_COOLDOWN_ENABLED: bool = True
+ALERT_DURING_COOLDOWN_TRIGGER_PCT: float = 5.0
 
 # ── RETEST: откат к EMA20 в существующем тренде ──────────────────────────────
 RETEST_LOOKBACK:    int   = 12    # баров назад — проверяем что тренд был
