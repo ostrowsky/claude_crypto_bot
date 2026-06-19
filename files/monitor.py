@@ -941,17 +941,54 @@ def _impulse_speed_entry_guard(
     if mode != "impulse_speed":
         return None
 
+    # Regime curtailment (2026-06-05): pause impulse_speed while its own recent
+    # realized pnl is negative (auto-revives when positive). Entry-time signal
+    # is unlearnable (OOS AUC ~0.50) so the only lever is mode-level regime
+    # gating. is_curtailed() fails OPEN, so a broken state never kills the mode.
+    try:
+        from impulse_speed_curtail import is_curtailed as _is_curtailed
+        if _is_curtailed():
+            return "impulse_speed regime-curtailed (trailing realized pnl < 0)"
+    except Exception:
+        pass
+
     # Hard ADX floor — reject "impulse" signals with no trend strength.
     # Added 2026-04-18 after observing CRVUSDT ADX=17.5 (-2.17%) and
     # OXTUSDT ADX=11.3 enter on volume spikes with no directional trend.
+    #
+    # 2026-05-31 high-momentum bypass (L3-c sweep, n=1058 impulse_guard
+    # blocks): 2D breakdown by RSI x daily_range identified a precise
+    # pocket where this ADX floor over-blocks — high RSI + wide daily
+    # range proves momentum even when ADX is lagging. Recovery pocket:
+    # RSI>=70 + DR>=10 averaged +1.4%; the symmetric RSI<70 + DR>=10
+    # case stayed at -0.40% (correctly blocked). Default OFF; activate
+    # via approved decision -> runtime override (RM-4).
     if tf == "15m":
         adx_floor = float(getattr(config, "IMPULSE_SPEED_15M_ADX_MIN", 20.0))
         if adx < adx_floor:
-            return f"weak 15m impulse: ADX {adx:.1f} < {adx_floor:.0f}"
+            if getattr(config, "IMPULSE_SPEED_15M_HIGH_MOMENTUM_BYPASS_ENABLED", False):
+                bp_rsi = float(getattr(config, "IMPULSE_SPEED_15M_HIGH_MOMENTUM_BYPASS_RSI_MIN", 70.0))
+                bp_dr  = float(getattr(config, "IMPULSE_SPEED_15M_HIGH_MOMENTUM_BYPASS_RANGE_MIN", 10.0))
+                if rsi >= bp_rsi and daily_range >= bp_dr:
+                    log.info("IMPULSE_GUARD bypass 15m %s: ADX %.1f<%.0f but RSI %.1f>=%g AND DR %.2f%%>=%g (high-momentum)",
+                             "" , adx, adx_floor, rsi, bp_rsi, daily_range, bp_dr)
+                else:
+                    return f"weak 15m impulse: ADX {adx:.1f} < {adx_floor:.0f}"
+            else:
+                return f"weak 15m impulse: ADX {adx:.1f} < {adx_floor:.0f}"
     if tf == "1h":
         adx_floor_1h = float(getattr(config, "IMPULSE_SPEED_1H_ADX_MIN", 18.0))
         if adx < adx_floor_1h:
-            return f"weak 1h impulse: ADX {adx:.1f} < {adx_floor_1h:.0f}"
+            if getattr(config, "IMPULSE_SPEED_1H_HIGH_MOMENTUM_BYPASS_ENABLED", False):
+                bp_rsi_1h = float(getattr(config, "IMPULSE_SPEED_1H_HIGH_MOMENTUM_BYPASS_RSI_MIN", 70.0))
+                bp_dr_1h  = float(getattr(config, "IMPULSE_SPEED_1H_HIGH_MOMENTUM_BYPASS_RANGE_MIN", 10.0))
+                if rsi >= bp_rsi_1h and daily_range >= bp_dr_1h:
+                    log.info("IMPULSE_GUARD bypass 1h: ADX %.1f<%.0f but RSI %.1f>=%g AND DR %.2f%%>=%g (high-momentum)",
+                             adx, adx_floor_1h, rsi, bp_rsi_1h, daily_range, bp_dr_1h)
+                else:
+                    return f"weak 1h impulse: ADX {adx:.1f} < {adx_floor_1h:.0f}"
+            else:
+                return f"weak 1h impulse: ADX {adx:.1f} < {adx_floor_1h:.0f}"
 
     if tf == "1h":
         # Compute stateless extension metric: price distance from 1h EMA20 in ATR.
@@ -3191,6 +3228,12 @@ class MonitorState:
     cooldowns:     Dict[str, int]  = field(default_factory=dict)
     # Флаг «cooldown уже залогирован» — отдельный dict чтобы не мешать типам
     cd_logged:     Dict[str, bool] = field(default_factory=dict)
+    # Alert-during-cooldown (2026-06-17): exit price per symbol when cooldown was
+    # set + dedup flag, so we can re-ALERT (info only, no re-entry) if the coin
+    # keeps running >= trigger% above our exit while still in cooldown. Validated
+    # on 60d: +5% trigger -> ~3.8 alerts/day, 45% land on real top-20.
+    cooldown_exit_px:   Dict[str, float] = field(default_factory=dict)
+    cooldown_realerted: Dict[str, bool]  = field(default_factory=dict)
     # Деdup для portfolio BLOCK логов: {symbol: последний_ts_ms когда логировали}.
     # Портфельный лимит проверяется каждые 60с → без dedup = 100+ строк на монету.
     # Логируем не чаще 1 раза в BLOCK_LOG_INTERVAL_BARS баров (по умолчанию 4 = 1ч на 15m).
@@ -3483,10 +3526,13 @@ async def _poll_coin(
             bar_ms = 15 * 60 * 1000 if tf == "15m" else 60 * 60 * 1000
             bars_left = max(0, (cooldown_until_ms - current_ts_ms) // bar_ms)
             bars_total = int(getattr(config, "COOLDOWN_BARS", 8))
-            # Логируем только начало cooldown (когда bars_left максимальное)
+            # Логируем только начало cooldown (когда bars_left максимальное) +
+            # захватываем референс-цену (~ цена выхода, первое наблюдение).
             if not state.cd_logged.get(sym):
                 botlog.log_cooldown(sym=sym, tf=tf, bars_remaining=int(bars_left), first=True)
                 state.cd_logged[sym] = True
+                state.cooldown_exit_px[sym] = float(c[i])      # ref ~ exit price
+                state.cooldown_realerted[sym] = False
                 # ФИКС: логируем в critic_dataset чтобы Trend Scout видел cooldown-блоки.
                 # Без этого в critic нет записей о монетах в cooldown → скаут не диагностирует.
                 _log_critic_candidate(
@@ -3499,6 +3545,27 @@ async def _poll_coin(
                     reason=f"cooldown: {bars_left}/{bars_total} bars remaining",
                     stage="cooldown",
                 )
+            # Alert-during-cooldown (info only, NO re-entry): re-surface if the
+            # coin we exited keeps running >= trigger% above our exit while still
+            # in cooldown — informs the channel of a continuing top-mover the
+            # trade-cooldown would otherwise mute. Validated 60d (+5% -> ~3.8
+            # alerts/day, 45% real top-20). Fails closed on any error.
+            elif (getattr(config, "ALERT_DURING_COOLDOWN_ENABLED", False)
+                    and not state.cooldown_realerted.get(sym)):
+                try:
+                    ex_px = float(state.cooldown_exit_px.get(sym, 0.0) or 0.0)
+                    trig = float(getattr(config, "ALERT_DURING_COOLDOWN_TRIGGER_PCT", 5.0))
+                    cur_px = float(c[i])
+                    if ex_px > 0 and cur_px >= ex_px * (1.0 + trig / 100.0):
+                        cont = (cur_px / ex_px - 1.0) * 100.0
+                        state.cooldown_realerted[sym] = True
+                        await send(
+                            f"🔔 <b>{sym}</b> продолжает движение: "
+                            f"+{cont:.1f}% после нашего выхода (мы в cooldown, "
+                            f"позицию не открываем — это инфо-алерт)."
+                        )
+                except Exception as _e:
+                    log.debug("cooldown re-alert skipped for %s: %s", sym, _e)
             return  # ещё в cooldown, пропускаем
         else:
             # Сбрасываем флаг «cooldown залогирован» когда cooldown истёк
@@ -3635,6 +3702,22 @@ async def _poll_coin(
                 preview_mode = "impulse"
             else:
                 preview_mode = "alignment"
+
+            # Fallback-to-trend: when impulse_speed is regime-curtailed, enter as
+            # 'trend' (tighter stop, normal exit) instead of hard-blocking — keeps
+            # coverage of fast movers in a hot regime. Backtest: AS_TREND net
+            # -0.221 vs AS_IMPULSE -0.290, same big-mover coverage (13/13), vs
+            # BLOCK 0/13. The downstream impulse_speed curtail guard then no-ops
+            # (mode != impulse_speed) so the candidate flows through trend gates.
+            if (preview_mode == "impulse_speed"
+                    and getattr(config, "IMPULSE_SPEED_CURTAIL_FALLBACK_TO_TREND", False)):
+                try:
+                    from impulse_speed_curtail import is_curtailed as _isc
+                    if _isc():
+                        preview_mode = "trend"
+                        log.info("IMPULSE_SPEED->TREND fallback %s [%s] (regime-curtailed)", sym, tf)
+                except Exception:
+                    pass
 
             preview_price = float(c[i])
             preview_ema20 = float(feat["ema_fast"][i])
@@ -4161,6 +4244,34 @@ async def _poll_coin(
                             tf,
                             candidate_score,
                             min_score,
+                        )
+                    elif getattr(config, "REGIME_SOFT_GATE_ENABLED", False):
+                        # RM-22 Step C: SOFT GATE. Instead of hard-vetoing a
+                        # below-floor candidate, defer the enter/skip decision
+                        # to the downstream entry bandit (should_enter, ~L5078),
+                        # which is regime-aware and already in the pipeline.
+                        # Backtest 2026-06-01 (_backtest_soft_gate.py, 17d held
+                        # out): +2.9pp top-gainer coverage, admitted entries
+                        # net-positive (avg_r5 +0.274, win 46.9%), more
+                        # selective than relax-all. Rollback = flag False.
+                        log.info(
+                            "ENTRY SCORE SOFT-PASS %s [%s]: %.2f < %.2f -> bandit decides",
+                            sym, tf, candidate_score, min_score,
+                        )
+                        _log_critic_candidate(
+                            sym=sym, tf=tf, bar_ts=int(data["t"][i]),
+                            signal_type=preview_mode, feat=feat, data=data, i=i,
+                            action="soft_pass", reason_code="entry_score_soft_pass",
+                            reason=f"soft-pass {candidate_score:.2f} < {min_score:.2f}",
+                            stage="quality_floor", candidate_score=candidate_score,
+                            base_score=base_score, score_floor=score_floor,
+                            forecast_return_pct=float(getattr(report, "forecast_return_pct", 0.0)),
+                            today_change_pct=float(getattr(report, "today_change_pct", 0.0)),
+                            ml_proba=ml_proba, mtf_soft_penalty=mtf_soft_penalty,
+                            fresh_priority=_is_fresh_priority_candidate(preview_mode, catchup_snapshot),
+                            catchup=catchup_snapshot is not None,
+                            continuation_profile=continuation_profile,
+                            signal_flags=signal_flags,
                         )
                     else:
                         reason = f"entry score {candidate_score:.2f} < floor {min_score:.2f}"

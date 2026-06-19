@@ -231,6 +231,120 @@ stop_rl_headless.bat     - stop RL worker (PID from .runtime/rl_worker_bg.json)
 
 ## 7. Known issues & fixes
 
+### impulse_speed regime curtailment + trail rollback (2026-06-05)
+
+Live regression caught: the 8% trail widen (below) backtested +net on 35d but
+live (5d, n=89) made impulse_speed LOSE (avg/trade +0.02->-0.62%, sum -54.9%) —
+**rolled back** to 0.015 via a `rolled_back` decision (RM-4 runtime override
+removed; `_config_runtime_overrides.py` reads decisions.jsonl, so logging a
+decision auto-applies its `diff.to` as an in-memory override — rollback needs a
+superseding `rolled_back` record, not just a config.py edit).
+
+Root cause hunt (4 analyses, ALL negative — impulse_speed enters ~62% late):
+1. lateness (zigzag, hindsight) separates outcomes but is tautological
+   (late=near-peak=low remaining upside) — not real-time gateable.
+2. extension static gate (close_vs_ema50>3 etc.) over-blocks: big movers are
+   ALSO extended, recall 23-34% — fails the §7 over-block guard.
+3. extension feature in the entry bandit: AUC 0.48, admitted set unchanged.
+4. full multivariate logistic over 23 features: **train AUC 0.60, OOS 0.50** —
+   no generalizing entry-time signal (the non-stationarity signature).
+
+Conclusion: impulse_speed winners/losers are indistinguishable at entry with
+available features; profitability is regime-driven (profitable Mar-early May,
+negative mid-May-Jun). Lever is mode-level, not entry-level.
+
+DEPLOYED — regime curtailment with auto-revive (`impulse_speed_curtail.py`):
+pause the mode while its trailing-14d mean realized pnl < 0, auto-revive when
+positive. Backtest (`_backtest_impulse_speed_curtail.py`, robust across
+window/threshold grid): kept avg/trade +0.025 -> +0.162, ~-93 realized losses
+removed, cost ~27% of late low-capture big-mover catches on bad-regime days.
+`compute_and_write()` runs daily in `daily_learning.py` -> state file
+`.runtime/impulse_speed_curtail.json`; live entry path calls `is_curtailed()`
+in `_impulse_speed_entry_guard` (monitor.py), which FAILS OPEN.
+
+**Hard-block was a live regression (2026-06-12), now FALLBACK-TO-TREND.**
+Hard-block curtailment became the #1 block (266-813/day) and starved entries to
+1-10/day during a broad altseason (distinct top-20/day 4-8 -> 25-32), because
+`get_entry_mode` silently upgrades a fast trend (3-bar >=1.5%) to impulse_speed
+and curtail hard-blocked those would-be-trend entries. Fix DEPLOYED same day:
+when curtailed, **reclassify impulse_speed -> trend** (tighter stop, ENTER)
+instead of blocking — `monitor.py` at the preview_mode block (~L3675) calls
+`is_curtailed()` and downgrades to "trend"; the downstream curtail guard then
+no-ops. Backtest (`_backtest_fallback_to_trend.py`, 25d, n=324): AS_TREND net
+-0.221 beats AS_IMPULSE -0.290 with SAME big-mover coverage (13/13), vs BLOCK
+0/13 — coverage-safe for altseason. Decisions: hard-block disabled via `rbcur1`
+(rolled_back), re-enabled in fallback mode via `fbt001` (approved). Config:
+```python
+IMPULSE_SPEED_REGIME_CURTAIL_ENABLED = True       # rollback = False (off)
+IMPULSE_SPEED_CURTAIL_FALLBACK_TO_TREND = True     # False = revert to hard-block
+IMPULSE_SPEED_CURTAIL_WINDOW_DAYS = 14
+IMPULSE_SPEED_CURTAIL_PNL_THRESHOLD = 0.0
+IMPULSE_SPEED_CURTAIL_MIN_TRADES = 8
+```
+Known residual: auto-revive still self-freezes (fallback routes candidates to
+trend, so no new impulse_speed realized pnl feeds the trailing window) — benign
+now since fallback keeps coverage; a regime/shadow revive is the next refinement.
+
+### EX1 capture fix — wider impulse_speed trail (2026-06-01)
+
+Morning-report diagnosis: top-20 capture (NS sub-metric) stuck at ~0.15 —
+binding leak is `atr_trail` prematurely stopping `impulse_speed` winners.
+EX1 worst cases (DYDX -13.7%/+237%, LDO -9.1%/+445%, WIF -5.8%/+471%) all
+exit at a LOSS on a deep retrace, then the coin runs without us.
+`time_max_hold` exits captured ~20x more than `atr_trail` (EX1 +0.044 vs
+-0.002).
+
+Backtest (`_backtest_exit_policy_impulse.py`, 35d, 658 impulse_speed trades,
+105 winners / 553 losers) replays the forward price path under exit policies.
+Result is non-monotonic: tight 1.5% protects net but kills capture; mid
+3-5% is worst of both (winners cut early, losers still bleed); **wide 8% is
+the sweet spot** — winner mean pnl +0.94->+2.83%, capture +0.004->+0.015
+(x4), and NET per-trade across ALL impulse_speed entries IMPROVES
+-0.14->-0.06 (winner upside not paid by loser blow-ups). Pure HOLD_24h
+helped winners but losers bled (net -0.25) — a stop is still needed, just
+wide. PARTIAL_25/8 marginally best (net -0.05) but more complex; deferred.
+
+Deploy: `TRAIL_MIN_BUFFER_PCT_IMPULSE_SPEED 0.015 -> 0.08` (live 2026-06-01,
+bot restarted). Reversible = revert number. Honest caveat: capture still
+~0.015 absolute (potential is +200..+470%) — meaningful step, not a silver
+bullet. Watch EX1 atr_trail bucket over next 14d.
+
+Also fixed: `pipeline_notify.py::build_next_step_block` crashed the morning
+notify step (`TypeError: NoneType.__format__`) when an L3 counterfactual was
+`available=True` but its numbers were `None`. Now requires all of
+blocked/take/n before rich phrasing.
+
+### RM-22 regime-conditional learned gating (2026-06-01)
+
+Premise (operator): markets are non-stationary, so re-tuning *fixed* gate
+thresholds is a losing game — the bot should LEARN to gate by market regime.
+Three steps, each backtest-gated before deploy:
+
+- **Step A (premise validation, `_backtest_regime_gate.py`)**: blocked-gate
+  forward returns FLIP sign across regime cells (`bull/flat day × btc up/dn`).
+  `entry_score` blocked pool: bull_day/btc_dn **+0.473** (Sharpe 2.88),
+  bull_day/btc_up +0.093, flat_day/btc_dn +0.033, flat_day/btc_up -0.075
+  (gate correct only here). Spread 0.548pp → premise confirmed.
+- **Step B (regime interaction features, `contextual_bandit.py`)**: added
+  `regime_bull_btc_up`, `regime_bull_btc_dn` (N_FEATURES 18→20) behind
+  `BANDIT_REGIME_INTERACTION_ENABLED`. Backtest NEUTRAL (delta AUC +0.0005,
+  critic_dataset) — the bull/btc_dn cell is too rare yet. **Held OFF**
+  (`= False`). Bandit `load()` now dim-migrates saved A/b (identity/zero pad)
+  so the 2.6M prior updates survive the dimension bump. Revisit once Step C
+  populates the cell.
+- **Step C (soft gate, DEPLOYED `= True` 2026-06-01)**: when
+  `REGIME_SOFT_GATE_ENABLED`, an `entry_score`-below-floor candidate is no
+  longer hard-blocked — it logs `entry_score_soft_pass` and falls through to
+  the downstream regime-aware entry bandit (`should_enter` ~L5078), which
+  decides enter/skip. Backtest (`_backtest_soft_gate.py`, temporal split):
+  top-gainer coverage **17.7%→20.6% (+2.9pp)**, 32 admitted entries avg_r5
+  **+0.274** / win 46.9% / Sharpe 0.90 — selective (RELAX-all additions were
+  -0.031). POSITIVE → operator-approved deploy. Rollback = flag False.
+  Wired in `monitor.py` entry_score floor block (~L4191) as an `elif` before
+  the hard-block `else`.
+
+Spec: `docs/specs/features/auto-improvement-loop-spec.md` (Sprint 0, RM-22).
+
 ### Critical bugs (fixed)
 
 | Date | Problem | Fix |
@@ -368,7 +482,7 @@ and trail-update sites in `monitor.py` (helpers `_trail_min_buffer_pct`,
 `_compute_trail_buffer` ~ L1705). Defaults:
 ```python
 TRAIL_MIN_BUFFER_PCT_ENABLED = True
-TRAIL_MIN_BUFFER_PCT_IMPULSE_SPEED = 0.015   # 1.5%
+TRAIL_MIN_BUFFER_PCT_IMPULSE_SPEED = 0.08    # 8% (was 1.5%) — EX1 capture fix 2026-06-01
 TRAIL_MIN_BUFFER_PCT_STRONG_TREND  = 0.015
 TRAIL_MIN_BUFFER_PCT_IMPULSE       = 0.012
 # trend / alignment / retest / breakout / default = 0.0
@@ -430,6 +544,8 @@ TOP_GAINER_CRITIC_TELEGRAM_REPORTS_ENABLED = True
 TREND_15M_QUALITY_GUARD_ENABLED = True
 ML_CANDIDATE_RANKER_HARD_VETO_ENABLED = True
 ROTATION_ENABLED = True
+REGIME_SOFT_GATE_ENABLED = True               # RM-22 Step C (deployed 2026-06-01)
+BANDIT_REGIME_INTERACTION_ENABLED = False     # RM-22 Step B (neutral, held OFF)
 ```
 
 ---

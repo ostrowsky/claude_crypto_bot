@@ -287,6 +287,22 @@ def resolve_and_train(top_gainer_syms: List[str]) -> Dict:
         results["resolved_pending"] = 0
         results["resolve_error"] = str(e)
 
+    # Refresh impulse_speed regime-curtail state (auto-revive): pause the mode
+    # while its trailing realized pnl is negative, re-enable when positive.
+    try:
+        from impulse_speed_curtail import compute_and_write as _ic_compute
+        _ic_rec = _ic_compute()
+        results["impulse_speed_curtail"] = {
+            "curtailed": _ic_rec.get("curtailed"),
+            "trailing_mean_pnl": _ic_rec.get("trailing_mean_pnl"),
+            "n_trades": _ic_rec.get("n_trades"),
+        }
+        log.info("impulse_speed curtail: curtailed=%s trailing_pnl=%s n=%s",
+                 _ic_rec.get("curtailed"), _ic_rec.get("trailing_mean_pnl"),
+                 _ic_rec.get("n_trades"))
+    except Exception as e:
+        log.error("impulse_speed curtail refresh failed: %s", e)
+
     # Run full offline training (includes universal entry bandit)
     try:
         train_results = run_offline_training()

@@ -22,6 +22,7 @@ SCRIPTS = [
     "_backtest_capture_ratio.py",           # E2
     "_compute_early_capture.py",            # north-star
     "_backtest_ex1_realized_potential.py",  # EX1 (exit-side, 2026-05-02)
+    "_backtest_net_realized_pnl.py",        # NET realized pnl, gross vs fee (2026-06-17)
 ]
 
 row = {"ts": datetime.now(timezone.utc).isoformat()}

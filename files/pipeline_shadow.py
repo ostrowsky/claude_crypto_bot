@@ -308,11 +308,91 @@ def sim_widen_watchlist_match_tolerance(hyp: dict, window_days: int) -> list[dic
     return out
 
 
+# Gate reason_codes as logged in critic_dataset (decision.reason_code). Longest
+# tokens first so e.g. 'late_impulse_rotation' wins over 'impulse', 'trend_1h_chop'
+# over 'trend_chop'. Used to map a relax/refine-gate hypothesis to the gate it
+# loosens.
+_GATE_REASON_CODES = [
+    "late_impulse_rotation", "ranker_hard_veto", "clone_signal_guard",
+    "correlation_guard", "open_cluster_cap", "fast_reversal_risk",
+    "mode_range_quality", "ml_proba_zone", "trend_1h_chop", "trend_quality",
+    "trend_chop", "impulse_guard", "entry_score", "ml_zone", "mtf",
+]
+
+
+def sim_relax_gate(hyp: dict, window_days: int) -> list[dict]:
+    """Generic counterfactual for hypotheses that LOOSEN a hard gate
+    (relax_gate_*, refine_gate_*, relax_entry_score_*, entry_score_gate_soft_*).
+
+    Maps the rule/config_key to the gate's reason_code, then synthesises shadow
+    events from candidates that gate blocked in the window:
+        prod   = skip (blocked -> 0 pnl)
+        shadow = take (shadow_pnl = labels.ret_5)
+
+    Upper-bound proxy (assumes every blocked-by-gate event becomes a take), same
+    caveat as sim_widen_watchlist_match_tolerance — verdict=accept is necessary,
+    not sufficient; pair with post-apply monitoring."""
+    rule = (hyp.get("rule") or "").lower()
+    cfgk = (hyp.get("config_key") or "").lower()
+    hay = f"{rule} {cfgk}"
+    reason = next((rc for rc in _GATE_REASON_CODES if rc in hay), None)
+    if reason is None and "entry_score" in hay:
+        reason = "entry_score"
+    if reason is None or not CRITIC_DATASET.exists():
+        return []
+    cutoff = datetime.now(timezone.utc) - timedelta(days=window_days)
+    out: list[dict] = []
+    for ev in PL.iter_jsonl(CRITIC_DATASET):
+        dec = ev.get("decision") or {}
+        if dec.get("action") != "blocked":
+            continue
+        rc = (dec.get("reason_code") or "").lower()
+        if reason not in rc:
+            continue
+        ts = _ts_of_critic_event(ev)
+        if ts is None or ts < cutoff:
+            continue
+        labels = ev.get("labels") or {}
+        ret_5 = labels.get("ret_5")
+        if ret_5 is None:
+            continue
+        try:
+            ret_5 = float(ret_5)
+        except (TypeError, ValueError):
+            continue
+        out.append({
+            "ts":              _to_iso(ev.get("bar_ts") or ev.get("ts_signal")),
+            "event":           "shadow",
+            "feature_flag":    f"RELAX_GATE::{reason}",
+            "hypothesis_id":   hyp.get("hypothesis_id"),
+            "symbol":          ev.get("sym"),
+            "_source":         "critic_dataset_counterfactual",
+            "_caveat":         f"upper-bound: assumes every {reason}-blocked event becomes a take",
+            "prod_decision":   "skip",
+            "shadow_decision": "take",
+            "ctx": {
+                "reason_blocked": rc,
+                "prod_pnl_pct":   0.0,
+                "shadow_pnl_pct": ret_5,
+                "ret_5":          ret_5,
+                "candidate_score": dec.get("candidate_score"),
+                "score_floor":     dec.get("score_floor"),
+            },
+        })
+    return out
+
+
 # Rule-prefix -> simulator. New simulators are added here as the pipeline
 # expands. Match is "rule.startswith(prefix)" — first match wins.
 SIM_HANDLERS = {
     "disable_mode_":                  sim_disable_mode,
     "widen_watchlist_match_tolerance": sim_widen_watchlist_match_tolerance,
+    # gate-loosening family (2026-06-17 — closes the "no SIM_HANDLER" gap that
+    # left refine_gate_impulse_guard / entry_score relaxers stuck pending)
+    "relax_gate_":                    sim_relax_gate,
+    "refine_gate_":                   sim_relax_gate,
+    "relax_entry_score":              sim_relax_gate,
+    "entry_score_gate_soft":          sim_relax_gate,
 }
 
 

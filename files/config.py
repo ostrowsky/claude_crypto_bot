@@ -313,6 +313,13 @@ HISTORY_LIMIT = 300
 LIVE_LIMIT    = 100
 DISCOVERY_ENTRY_GRACE_BARS: int = 2
 DISCOVERY_ENTRY_MAX_SLIPPAGE_PCT: float = 0.45
+# Round-trip trading fee (Binance USDT-M futures taker ~0.05%/side = ~0.10%
+# round-trip). Backtests/replays were GROSS; validated 2026-06-17 that
+# subtracting this shifts net per-trade -0.17 -> -0.27 (material) WITHOUT
+# changing rankings — ACTUAL stays net-best, churn (rotation/re-entry) takes an
+# extra round-trip each, so fee-honest accounting strengthens the don't-churn
+# conclusion. Used by analysis/replay scripts; see _backtest_exit_net_policy.py.
+FEE_ROUNDTRIP_PCT: float = 0.10
 DISCOVERY_CATCHUP_SCORE_BONUS: float = 4.0
 DISCOVERY_SCAN_SEC: int = 60  # ищем новые live-сигналы на каждом polling-цикле
 
@@ -380,6 +387,29 @@ IMPULSE_SPEED_1H_EXT_ATR_MAX_BULL: float = 9.0   # bull day = wider runway
 # Set to 0 to disable.
 IMPULSE_SPEED_15M_ADX_MIN: float = 15.0   # was 20.0 (backtest 2026-04-20: -5pts, ADX15-20 positive)
 IMPULSE_SPEED_1H_ADX_MIN: float = 14.0  # scout:22.04.2026 was 15.84
+
+# ── impulse_speed regime curtailment with auto-revive (2026-06-05) ──────────
+# Four analyses (lateness, extension gate, extension-in-bandit, full
+# multivariate logistic — OOS AUC ~0.50) proved NO learnable entry-time signal
+# separates impulse_speed winners from losers; its profitability is regime-
+# driven. So gate at the MODE level: pause when its trailing-window mean
+# realized pnl < threshold, auto-revive when it turns positive. Backtest
+# (_backtest_impulse_speed_curtail.py, robust across grid): kept avg/trade
+# +0.025 -> +0.162, ~-93 losses removed, ~27% of late low-capture big movers
+# foregone on bad-regime days. State written daily by impulse_speed_curtail.py;
+# live entry path reads is_curtailed() (fails OPEN). Rollback = flag False.
+IMPULSE_SPEED_REGIME_CURTAIL_ENABLED: bool = True   # re-enabled 2026-06-12 in FALLBACK mode.
+# History: hard-block curtailment (2026-06-05) was a live regression — it became the #1 block
+# (266-813/day) and starved entries to 1-10/day during a broad altseason, because get_entry_mode
+# silently upgrades fast trends (3-bar >=1.5%) to impulse_speed and curtail hard-blocked them.
+# Fix: FALLBACK_TO_TREND — when curtailed, reclassify impulse_speed -> trend (tighter stop, enter)
+# instead of blocking. Backtest (_backtest_fallback_to_trend.py, 25d, n=324): AS_TREND net -0.221
+# vs AS_IMPULSE -0.290 with the SAME big-mover coverage (13/13), vs BLOCK 0/13. Coverage-safe.
+# Rollback = either flag False (off) or FALLBACK_TO_TREND False (revert to hard-block).
+IMPULSE_SPEED_CURTAIL_FALLBACK_TO_TREND: bool = True
+IMPULSE_SPEED_CURTAIL_WINDOW_DAYS: int = 14
+IMPULSE_SPEED_CURTAIL_PNL_THRESHOLD: float = 0.0
+IMPULSE_SPEED_CURTAIL_MIN_TRADES: int = 8
 
 # 2026-05-31 high-momentum bypass — L3-c 2D sweep found this exception
 # saves +1.4% avg pocket (RSI>=70 + DR>=10) that the ADX floor currently
@@ -500,11 +530,12 @@ MACDWARN_BARS: int = 3     # баров подряд MACD hist падает → 
 # regardless of bandit/ATR-based choice. Buffer = max(trail_k*ATR, MIN_PCT*price).
 # Mode-aware: high-vol modes (impulse_speed, strong_trend) need wider min-buffer.
 TRAIL_MIN_BUFFER_PCT_ENABLED: bool = True
-TRAIL_MIN_BUFFER_PCT_IMPULSE_SPEED: float = 0.08   # 8% (was 1.5%) — EX1 capture fix 2026-06-01:
-# impulse_speed winners (+200..+470% potential) were knocked out at a LOSS by tight ATR-trail on
-# a deep retrace, then ran without us. Backtest (_backtest_exit_policy_impulse.py, 35d, 658 trades):
-# winner mean pnl +0.94->+2.83%, capture +0.004->+0.015 (x4), net per-trade -0.14->-0.06 (winner
-# upside NOT paid by loser blow-ups). 8% beat tight(1.5%, low capture) and mid(3-5%, worst net).
+TRAIL_MIN_BUFFER_PCT_IMPULSE_SPEED: float = 0.015  # 1.5% — ROLLED BACK 2026-06-05 from 0.08.
+# The 8% widen (EX1 capture fix 2026-06-01) backtested +net on 35d but live (5d, n=89) made
+# impulse_speed LOSE: avg/trade +0.02%->-0.62%, win 43->34%, sum -54.9%. Root cause: the wide-stop
+# thesis assumed big remaining upside, but impulse_speed enters at ~62% lateness (RF_losing_mode
+# critical flag) — late entries have little upside left while the wide stop pays full downside.
+# Next: attack lateness / gate the mode, not the exit width. See _backtest_exit_policy_impulse.py.
 TRAIL_MIN_BUFFER_PCT_STRONG_TREND:  float = 0.015
 TRAIL_MIN_BUFFER_PCT_IMPULSE:       float = 0.012  # 1.2% min buffer
 TRAIL_MIN_BUFFER_PCT_TREND:         float = 0.0    # disabled — narrow stops work for trend
@@ -553,6 +584,14 @@ ADX_SMA_BYPASS: float = 35.0  # ADX ≥ этого → плато сильног
 
 # ── П3: Cooldown (уже использовался через getattr) ───────────────────────────
 COOLDOWN_BARS: int = 19  # баров тишины после выхода (Scout APPROVE: n=35, ret5=+0.79%, win=60%; было 24)
+# Alert-during-cooldown (2026-06-17): info-only re-alert when a coin we exited
+# keeps running >= TRIGGER% above exit while still in (trade) cooldown. Decouples
+# the ALERT from the TRADE block — no re-entry, just informs the channel of a
+# continuing top-mover. Validated on 60d: +5% -> ~3.8 alerts/day, 45% land on
+# real watchlist top-20 (vs 14% base), surfacing 44% of continuing top-20 moves
+# the trade-cooldown would otherwise mute. Rollback = ENABLED False.
+ALERT_DURING_COOLDOWN_ENABLED: bool = True
+ALERT_DURING_COOLDOWN_TRIGGER_PCT: float = 5.0
 
 # ── RETEST: откат к EMA20 в существующем тренде ──────────────────────────────
 RETEST_LOOKBACK:    int   = 12    # баров назад — проверяем что тренд был
@@ -1034,7 +1073,7 @@ CLONE_SIGNAL_GUARD_ENABLED: bool = True
 CLONE_SIGNAL_GUARD_TF: tuple = ("15m",)
 CLONE_SIGNAL_GUARD_MODES: tuple = ("impulse_speed", "breakout", "retest", "alignment", "trend")
 CLONE_SIGNAL_GUARD_WINDOW_BARS: int = 8
-CLONE_SIGNAL_GUARD_MAX_SIMILAR: int = 14  # was 4 — 116 blocks in recent events: FLUX/ORDI blocked by clone guard  # scout:22.04.2026 was 13
+CLONE_SIGNAL_GUARD_MAX_SIMILAR: int = 15  # was 4 — 116 blocks in recent events: FLUX/ORDI blocked by clone guard  # scout:07.06.2026 was 15
 CLONE_SIGNAL_GUARD_MAX_SAME_GROUP: int = 1
 CLONE_SIGNAL_GUARD_OVERRIDE_SCORE: float = 90.0
 CLONE_SIGNAL_GUARD_OVERRIDE_RANKER_FINAL: float = 0.50

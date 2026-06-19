@@ -89,7 +89,8 @@ def main():
     score_grid = [0, 60, 70, 80, 90, 100, 110]
 
     print("\n[GRID] avg_r5 (n) -- by (ml_proba_min x score_min):")
-    print(f"{'score\\mlp':>10s} " + " ".join(f"{('none' if m is None else f'{m:.2f}'):>10s}" for m in mlp_grid))
+    _hdr = "score\\mlp"
+    print(f"{_hdr:>10s} " + " ".join(f"{('none' if m is None else f'{m:.2f}'):>10s}" for m in mlp_grid))
     grid_avg = {}
     grid_n = {}
     for sc in score_grid:
@@ -110,7 +111,8 @@ def main():
         print(" ".join(row_parts))
 
     print("\n[GRID] win_rate_5 (%) -- by (ml_proba_min x score_min):")
-    print(f"{'score\\mlp':>10s} " + " ".join(f"{('none' if m is None else f'{m:.2f}'):>10s}" for m in mlp_grid))
+    _hdr = "score\\mlp"
+    print(f"{_hdr:>10s} " + " ".join(f"{('none' if m is None else f'{m:.2f}'):>10s}" for m in mlp_grid))
     for sc in score_grid:
         row_parts = [f"{sc:>10d}"]
         for mlp in mlp_grid:
@@ -125,7 +127,8 @@ def main():
         print(" ".join(row_parts))
 
     print("\n[GRID] Sharpe-proxy -- by (ml_proba_min x score_min):")
-    print(f"{'score\\mlp':>10s} " + " ".join(f"{('none' if m is None else f'{m:.2f}'):>10s}" for m in mlp_grid))
+    _hdr = "score\\mlp"
+    print(f"{_hdr:>10s} " + " ".join(f"{('none' if m is None else f'{m:.2f}'):>10s}" for m in mlp_grid))
     best = {"sharpe": -1e9}
     for sc in score_grid:
         row_parts = [f"{sc:>10d}"]

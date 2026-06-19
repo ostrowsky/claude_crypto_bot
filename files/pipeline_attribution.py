@@ -71,6 +71,27 @@ MULTI_OBJ_MIN_TRADES           = 10     # need a minimum of post-window trades t
 DEFAULT_DAYS_AFTER = 14
 MIN_POST_SAMPLES   = 4
 BOOTSTRAP_N        = 1000
+
+# Outage / data-blackout windows. Any decision whose post-apply window
+# overlaps one of these is reported as `needs_data` (not regression/miss)
+# because the trading bot was effectively offline — measuring on dead
+# days falsely blames a decision for missing tops it could never enter.
+# Discovered while debugging the 6-day "0 entries" outage caused by the
+# atr_pct/ml_proba bugs of 2026-05-19 deploy.
+OUTAGE_WINDOWS: list[tuple[str, str]] = [
+    ("2026-05-20", "2026-05-25"),  # atr_pct+ml_proba P0s, 0 entries 6 days
+]
+
+
+def _overlaps_outage(start: datetime, end: datetime) -> tuple[str, str] | None:
+    """Return the first OUTAGE_WINDOWS entry that overlaps [start,end]."""
+    for s_str, e_str in OUTAGE_WINDOWS:
+        s = datetime.fromisoformat(s_str).replace(tzinfo=timezone.utc)
+        e = (datetime.fromisoformat(e_str).replace(tzinfo=timezone.utc)
+             + timedelta(days=1))  # end-inclusive
+        if start < e and end > s:
+            return (s_str, e_str)
+    return None
 SENSITIVE_METRICS  = [
     "watchlist_top_early_capture_pct",
     "watchlist_top_bought_pct",
@@ -320,6 +341,15 @@ def attribute(
     if age < days_after:
         return {"verdict": "needs_data",
                 "reason": f"only {age}d after apply, need {days_after}"}
+
+    # Data-blackout guard: if the post-apply window overlaps a known
+    # outage (bot was offline), the comparison would falsely blame this
+    # decision for the dead-day collapse. Honest verdict: needs_data.
+    outage = _overlaps_outage(ts, ts + timedelta(days=days_after))
+    if outage:
+        return {"decision_id": decision_id, "verdict": "needs_data",
+                "reason": (f"post-window overlaps outage {outage[0]}..{outage[1]} "
+                           f"(bot offline) — re-pin baseline + re-evaluate after recovery")}
 
     # Post windows
     post_rows = PB.collect_window(ts, ts + timedelta(days=days_after))
