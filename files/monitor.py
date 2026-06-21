@@ -5343,6 +5343,12 @@ async def _poll_coin(
                     signal_mode=getattr(pos, "signal_mode", None) or sig_mode,
                     candidate_score=candidate_score,
                     score_floor=score_floor,
+                    # Decoupling shadow feature (2026-05-07) — looked up from the
+                    # per-cycle precompute; None if not yet computed. No decision
+                    # impact. Report: docs/reports/2026-05-07-decoupling-validation.md
+                    decoupling_score=(getattr(config, "_decoupling_scores", {}) or {}).get(sym, {}).get("decoupling_score"),
+                    decoupling_flag=(getattr(config, "_decoupling_scores", {}) or {}).get(sym, {}).get("flag"),
+                    decoupling_corr=(getattr(config, "_decoupling_scores", {}) or {}).get(sym, {}).get("trailing_corr"),
                 )
             except Exception as _log_err:
                 log.warning("botlog.log_entry failed for %s: %s", sym, _log_err)
@@ -6143,6 +6149,26 @@ async def monitoring_loop(state: MonitorState, send: SendFn) -> None:
                                 _prune_pos.trail_stop = _prune_price * 1.001  # +0.1% — гарантированный триггер
                     except Exception as _cg_err:
                         log.warning("corr_guard periodic update failed: %s", _cg_err)
+
+                # ── Decoupling signal (SHADOW, 2026-05-07) ──────────────────
+                # Compute per-coin high-vol+decoupled score over the watched
+                # set; stash on config._decoupling_scores for entry logging.
+                # Shadow-only: no decision impact. Fail-open.
+                # Report: docs/reports/2026-05-07-decoupling-validation.md
+                if bool(getattr(config, "DECOUPLING_SHADOW_ENABLED", False)):
+                    _dec_interval = max(1, int(getattr(config, "DECOUPLING_REFRESH_MIN", 15)) * 60 // config.POLL_SEC)
+                    if _heartbeat_counter % _dec_interval == 0:
+                        try:
+                            import decoupling_signal
+                            _dec_syms = [r.symbol for r in state.hot_coins]
+                            if len(_dec_syms) >= 5:
+                                _dec_scores = await decoupling_signal.compute_scores(session, _dec_syms)
+                                setattr(config, "_decoupling_scores", _dec_scores)
+                                _dec_flagged = sum(1 for v in _dec_scores.values() if v.get("flag"))
+                                log.info("decoupling shadow: %d coins, %d flagged (high-vol+decoupled)",
+                                         len(_dec_scores), _dec_flagged)
+                        except Exception as _dec_err:
+                            log.warning("decoupling shadow update failed: %s", _dec_err)
 
                 # Heartbeat каждые ~10 минут (600с / POLL_SEC итераций)
                 _heartbeat_counter += 1

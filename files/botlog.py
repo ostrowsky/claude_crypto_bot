@@ -101,7 +101,12 @@ def log_entry(sym: str, tf: str, mode: str, price: float,
               ranker_final_score: Optional[float] = None,
               signal_mode: Optional[str] = None,
               candidate_score: Optional[float] = None,
-              score_floor: Optional[float] = None) -> None:
+              score_floor: Optional[float] = None,
+              # Decoupling shadow feature (2026-05-07) — for bandit shadow-replay.
+              # Report: docs/reports/2026-05-07-decoupling-validation.md
+              decoupling_score: Optional[float] = None,
+              decoupling_flag: Optional[bool] = None,
+              decoupling_corr: Optional[float] = None) -> None:
     """Открытие позиции."""
     rec: Dict[str, Any] = {
         "event":        "entry",
@@ -136,6 +141,12 @@ def log_entry(sym: str, tf: str, mode: str, price: float,
         rec["candidate_score"] = round(float(candidate_score), 2)
     if score_floor is not None:
         rec["score_floor"] = round(float(score_floor), 2)
+    if decoupling_score is not None:
+        rec["decoupling_score"] = round(float(decoupling_score), 4)
+    if decoupling_flag is not None:
+        rec["decoupling_flag"] = bool(decoupling_flag)
+    if decoupling_corr is not None:
+        rec["decoupling_corr"] = round(float(decoupling_corr), 4)
     _write(rec)
 
 

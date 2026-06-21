@@ -231,6 +231,35 @@ stop_rl_headless.bat     - stop RL worker (PID from .runtime/rl_worker_bg.json)
 
 ## 7. Known issues & fixes
 
+### Decoupling signal — SHADOW (2026-05-07)
+Validated (365d/1h, train/holdout, no lookahead): a watchlist coin that is
+BOTH high-vol AND decoupled from the market (low trailing corr to the
+equal-weight basket) is ~2× more likely to make a forward idiosyncratic
+big move (top-gainer rocket). Vol-controlled lift +3.14pp (holdout
+high-vol tercile); strict-rocket flag LIFT ×1.87 holdout, recall 22%,
+precision ~10% (PRIORITY signal, ~8 misses/hit — NOT a detector). Cluster
+lead-lag hypotheses were all NULL/marginal (one market); decoupling is the
+only signal with a holdout-stable NS-relevant edge.
+Helper `decoupling_signal.py` (pure `scores_from_rets` + self-test);
+computed every `DECOUPLING_REFRESH_MIN` in `monitor.py` loop →
+`config._decoupling_scores`; logged on entry events
+(`decoupling_score/flag/corr` in `bot_events.jsonl`). SHADOW only — no
+decision impact until shadow-replay confirms NS lift.
+```python
+DECOUPLING_SHADOW_ENABLED = True       # rollback = False
+DECOUPLING_WINDOW_BARS = 168           # ~7d on 1h
+DECOUPLING_VOL_PCTILE_MIN = 0.66
+DECOUPLING_CORR_MAX = 0.60
+DECOUPLING_GATE_ENABLED = False        # reserved; needs shadow-replay first
+```
+Specs/reports: `docs/specs/features/decoupling-signal-spec.md`,
+`docs/reports/2026-05-07-decoupling-validation.md`,
+`docs/reports/2026-05-07-cluster-lead-lag.md`,
+`docs/reports/2026-05-07-universe-clusters.md`. Backtests:
+`_backtest_decoupling.py`, `_backtest_decoupling_recall.py`,
+`_backtest_cluster_lead_lag.py`, `_backtest_sector_lead_lag.py`,
+`_backtest_btc_lead_15m.py`.
+
 ### impulse_speed regime curtailment + trail rollback (2026-06-05)
 
 Live regression caught: the 8% trail widen (below) backtested +net on 35d but
@@ -546,6 +575,8 @@ ML_CANDIDATE_RANKER_HARD_VETO_ENABLED = True
 ROTATION_ENABLED = True
 REGIME_SOFT_GATE_ENABLED = True               # RM-22 Step C (deployed 2026-06-01)
 BANDIT_REGIME_INTERACTION_ENABLED = False     # RM-22 Step B (neutral, held OFF)
+DECOUPLING_SHADOW_ENABLED = True              # decoupling shadow logging (2026-05-07)
+DECOUPLING_GATE_ENABLED = False               # reserved; needs shadow-replay first
 ```
 
 ---
