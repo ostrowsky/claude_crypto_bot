@@ -397,6 +397,35 @@ TRAIL_MIN_BUFFER_PCT_IMPULSE       = 0.012
 `_compute_trail_buffer`. Полная спецификация:
 `docs/specs/features/trail-min-buffer-spec.md`.
 
+### Decoupling signal — SHADOW (2026-05-07)
+
+Провалидировано (365d/1h, train/holdout, без подглядывания вперёд):
+монета из watchlist, которая ОДНОВРЕМЕННО высоковолатильна И оторвана от
+рынка (низкая trailing-корреляция к равновзвешенной корзине), в ~2 раза
+чаще даёт идиосинкразический рывок в top-gainers. Vol-controlled lift
++3.14pp (holdout, high-vol терциль); флаг строгих ракет LIFT ×1.87
+holdout, recall 22%, precision ~10% (PRIORITY-сигнал, ~8 промахов на
+попадание — НЕ детектор). Все гипотезы cluster lead-lag оказались
+NULL/маргинальными (рынок единый) — decoupling единственный с устойчивым
+на holdout NS-релевантным эффектом.
+
+Хелпер `decoupling_signal.py` (чистый `scores_from_rets` + self-test);
+считается раз в `DECOUPLING_REFRESH_MIN` мин в цикле `monitor.py` →
+`config._decoupling_scores`; пишется в entry-события
+(`decoupling_score/flag/corr` в `bot_events.jsonl`). SHADOW — на решения
+не влияет, пока shadow-replay бандита не подтвердит прирост NS.
+```python
+DECOUPLING_SHADOW_ENABLED = True       # откат = False
+DECOUPLING_WINDOW_BARS = 168           # ~7d на 1h
+DECOUPLING_VOL_PCTILE_MIN = 0.66
+DECOUPLING_CORR_MAX = 0.60
+DECOUPLING_GATE_ENABLED = False        # зарезервировано; нужен shadow-replay
+```
+Спека/отчёты: `docs/specs/features/decoupling-signal-spec.md`,
+`docs/reports/2026-05-07-decoupling-validation.md`,
+`docs/reports/2026-05-07-cluster-lead-lag.md`,
+`docs/reports/2026-05-07-universe-clusters.md`.
+
 ### RM-22 regime-conditional learned gating (2026-06-01)
 
 Тезис оператора: рынок нестационарен, поэтому бесконечно подбирать
