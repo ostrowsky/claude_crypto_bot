@@ -4800,7 +4800,27 @@ async def _poll_coin(
                     is_bull_day=_is_bull,
                     is_bear_day=_is_bear,
                 )
-                if not _cg_result.allowed:
+                if (not _cg_result.allowed) and bool(getattr(config, "CORR_GUARD_SHADOW", True)):
+                    # SHADOW (2026-06-26): the entry-guard was structurally dead
+                    # (matrix excluded the candidate -> 0 blocks ever). Now the
+                    # matrix includes candidates, so it would fire. Roll out in
+                    # shadow first — log the would-block, do NOT enforce — so we
+                    # measure coverage impact before capping 27% of entries.
+                    _log_critic_candidate(
+                        sym=sym, tf=tf, bar_ts=int(data["t"][i]),
+                        signal_type=preview_mode, feat=feat, data=data, i=i,
+                        action="shadow", reason_code="correlation_guard_shadow",
+                        reason=_cg_result.reason, stage="portfolio_shadow",
+                        candidate_score=candidate_score, base_score=base_score,
+                        score_floor=score_floor,
+                        forecast_return_pct=float(getattr(report, "forecast_return_pct", 0.0)),
+                        today_change_pct=float(getattr(report, "today_change_pct", 0.0)),
+                        ml_proba=ml_proba, mtf_soft_penalty=mtf_soft_penalty,
+                        fresh_priority=fresh_priority, catchup=catchup_snapshot is not None,
+                        continuation_profile=continuation_profile, signal_flags=signal_flags,
+                    )
+                    log.info("CORR GUARD SHADOW would-block %s [%s]: %s", sym, tf, _cg_result.reason)
+                elif not _cg_result.allowed:
                     _log_critic_candidate(
                         sym=sym,
                         tf=tf,
@@ -6123,7 +6143,12 @@ async def monitoring_loop(state: MonitorState, send: SendFn) -> None:
                 if bool(getattr(config, "CORR_GUARD_ENABLED", False)) and _heartbeat_counter % _corr_guard_interval == 0:
                     try:
                         _cg_cache = corr_guard.get_or_create_cache(state.__dict__)
-                        _open_syms = list(state.positions.keys())
+                        # Build over open positions UNION candidate (hot) syms.
+                        # The entry-guard needs rho(candidate, open); with only
+                        # open positions in the matrix, check_entry's lookups were
+                        # always None -> guard structurally dead (0 blocks ever).
+                        _open_syms = list(set(state.positions.keys())
+                                          | {r.symbol for r in state.hot_coins})
                         if len(_open_syms) >= 2:
                             _cg_cache = await corr_guard.build_matrix_async(session, _open_syms, _cg_cache)
                             _is_bull_cg, _is_bear_cg = corr_guard.get_bull_bear_flags(state.__dict__)
@@ -6141,6 +6166,11 @@ async def monitoring_loop(state: MonitorState, send: SendFn) -> None:
                                 _prune_price = state.__dict__.get("last_prices", {}).get(_pc.symbol)
                                 if _prune_price is None:
                                     log.warning("corr_guard prune: no last_price for %s, skip", _pc.symbol)
+                                    continue
+                                if bool(getattr(config, "CORR_GUARD_SHADOW", True)):
+                                    # SHADOW: the matrix fix also revived this prune
+                                    # path; measure would-prunes before enforcing.
+                                    log.info("CORR GUARD PRUNE SHADOW would-prune %s: %s", _pc.symbol, _pc.reason)
                                     continue
                                 log.info("CORR GUARD PRUNE %s: %s", _pc.symbol, _pc.reason)
                                 # Форсируем выход: устанавливаем trail_stop выше текущей цены.

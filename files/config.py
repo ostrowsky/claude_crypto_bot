@@ -1094,6 +1094,14 @@ OPEN_SIGNAL_CLUSTER_CAP_1H_RETEST_MAX: int = 1
 # Решение: ограничить количество сильно коррелированных монет в портфеле.
 # Реализация: correlation_guard.py
 CORR_GUARD_ENABLED: bool = True                  # включить/выключить guard
+# SHADOW rollout (2026-06-26): the entry-guard was structurally dead (matrix
+# excluded the candidate -> 0 blocks ever). Matrix now includes candidate/hot
+# syms so it would fire. Validation showed 27% of entries grew a correlated
+# cluster it should cap — but enforcing blocks 27% of entries, which may cut
+# coverage. SHADOW=True logs the would-block (reason_code correlation_guard_shadow,
+# action=shadow) WITHOUT enforcing, so we measure coverage impact before flipping
+# to enforce. Set False only after shadow data confirms net-positive.
+CORR_GUARD_SHADOW: bool = True
 CORR_GUARD_TF: str = "1h"                        # таймфрейм для расчёта корреляций
 CORR_GUARD_WINDOW_BARS: int = 48                 # окно в барах (~2 суток на 1h)
 CORR_GUARD_THRESHOLD: float = 0.65              # порог кластеризации (базовый)
