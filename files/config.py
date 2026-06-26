@@ -592,6 +592,16 @@ COOLDOWN_BARS: int = 19  # баров тишины после выхода (Scou
 # the trade-cooldown would otherwise mute. Rollback = ENABLED False.
 ALERT_DURING_COOLDOWN_ENABLED: bool = True
 ALERT_DURING_COOLDOWN_TRIGGER_PCT: float = 5.0
+# Learning labels (2026-06-26) — instrument false entries / false early exits so
+# the loop can learn from them (§0, §4a). Realized-outcome based (the old RM-3
+# ATR fast-reversal label never fired: None on all takes).
+# (B) fast-reversal = a take that exits within ~1h at a loss (a false entry):
+FAST_REVERSAL_MAX_BARS_15M: int = 4    # ~1h on 15m
+FAST_REVERSAL_MAX_BARS_1H: int = 1     # ~1h on 1h
+FAST_REVERSAL_PNL_MAX: float = -0.3    # loss threshold %
+# (A) premature-exit = exited, then the coin ran >= this % within the cooldown
+# window (the re-alert condition) — a false early exit (trail too tight):
+PREMATURE_EXIT_PCT: float = 5.0
 
 # ── RETEST: откат к EMA20 в существующем тренде ──────────────────────────────
 RETEST_LOOKBACK:    int   = 12    # баров назад — проверяем что тренд был

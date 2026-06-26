@@ -485,6 +485,20 @@ def fill_trade_outcome(record_id: str, exit_pnl: float, exit_reason: str, bars_h
         rec["labels"]["trade_exit_pnl"] = new_exit_pnl
         rec["labels"]["trade_exit_reason"] = new_exit_reason
         rec["labels"]["trade_bars_held"] = new_bars_held
+        # fast-reversal label (signal B, 2026-06-26): exit <= ~1h after entry at
+        # a loss = a false entry the bot should learn to avoid. Realized-outcome
+        # based — the prior ATR-threshold version (RM-3) never fired (None on all
+        # takes, entry_context atr/trail missing 82%). 1h = 4 bars(15m)/1 bar(1h).
+        try:
+            import config as _cfg
+            _tf = str(rec.get("tf", "15m"))
+            _maxb = (int(getattr(_cfg, "FAST_REVERSAL_MAX_BARS_15M", 4)) if _tf == "15m"
+                     else int(getattr(_cfg, "FAST_REVERSAL_MAX_BARS_1H", 1)))
+            _pmax = float(getattr(_cfg, "FAST_REVERSAL_PNL_MAX", -0.3))
+            rec["labels"]["label_fast_reversal"] = (
+                1 if (new_bars_held <= _maxb and new_exit_pnl < _pmax) else 0)
+        except Exception:
+            pass
         return True
 
     _rewrite_records(_mutate)
