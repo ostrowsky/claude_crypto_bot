@@ -77,6 +77,7 @@ FEATURE_NAMES = [
     "tf_1h", "mode_trend", "mode_retest", "mode_breakout",
     "mode_impulse", "mode_alignment", "bias",
     "regime_bull_btc_up", "regime_bull_btc_dn",
+    "fast_reversal_proba",
 ]
 N_FEATURES = len(FEATURE_NAMES)
 # Index of the first regime-interaction feature (everything from here on is
@@ -97,6 +98,7 @@ def extract_context(
     is_bull_day: bool = False,
     market_regime: str = "neutral",
     btc_vs_ema50: float = 0.0,
+    fast_reversal_proba: float = 0.0,
 ) -> np.ndarray:
     """Extract normalized context vector from entry state dict."""
     slope = state.get("slope_pct", 0.0)
@@ -120,6 +122,17 @@ def extract_context(
     bull_btc_up = 1.0 if (regime_inter_on and is_bull_day and btc_vs_ema50 >= 0) else 0.0
     bull_btc_dn = 1.0 if (regime_inter_on and is_bull_day and btc_vs_ema50 < 0) else 0.0
 
+    # Step 5.2: fast-reversal proba (CatBoost, holdout AUC 0.636). Gated by
+    # FAST_REVERSAL_LEARNING_ENABLED so rollback keeps the dimension (d=21) but
+    # makes the feature inert (0.0) — theta starts ~0 on migration => no
+    # behaviour change until the bandit accumulates evidence (shadow-safe).
+    try:
+        import config as _cfg2
+        fr_on = bool(getattr(_cfg2, "FAST_REVERSAL_LEARNING_ENABLED", False))
+    except Exception:
+        fr_on = False
+    fr_proba = float(np.clip(fast_reversal_proba, 0.0, 1.0)) if fr_on else 0.0
+
     return np.array([
         np.clip(slope / 0.5, -2, 2),
         np.clip(adx / 50.0, 0, 1),
@@ -141,6 +154,7 @@ def extract_context(
         1.0,  # bias
         bull_btc_up,   # RM-22: regime interaction (bull day + BTC above EMA50)
         bull_btc_dn,   # RM-22: regime interaction (bull day + BTC below EMA50)
+        fr_proba,      # Step 5.2: P(fast reversal) — inert (0) unless flag on
     ], dtype=np.float64)
 
 
@@ -333,6 +347,7 @@ def should_enter(
     is_bull_day: bool = False,
     market_regime: str = "neutral",
     btc_vs_ema50: float = 0.0,
+    fast_reversal_proba: float = 0.0,
     alpha: float = 2.0,
 ) -> Tuple[bool, dict]:
     """
@@ -357,6 +372,7 @@ def should_enter(
         is_bull_day=is_bull_day,
         market_regime=market_regime,
         btc_vs_ema50=btc_vs_ema50,
+        fast_reversal_proba=fast_reversal_proba,
     )
     arm, info = bandit.select_arm(x)
 
@@ -384,6 +400,8 @@ def feedback_entry_decision(
     is_bull_day: bool = False,
     market_regime: str = "neutral",
     btc_vs_ema50: float = 0.0,
+    fast_reversal: Optional[bool] = None,
+    fast_reversal_proba: float = 0.0,
 ) -> None:
     """
     Feed top-gainer reward to the enter/skip bandit.
@@ -393,6 +411,12 @@ def feedback_entry_decision(
       ENTER + not top    -> -0.05 (small cost for wasted entry)
       SKIP  + top gainer -> -1.0  (missed opportunity — costly!)
       SKIP  + not top    ->  0.0  (neutral)
+
+    Step 5.2 (§4a): when FAST_REVERSAL_LEARNING_ENABLED and the realized outcome
+    `fast_reversal` is known, ADD an asymmetric term so the bandit learns to
+    avoid contexts that fast-reverse (false entries) — ENTER into a fast-flip is
+    penalised, SKIP of one is rewarded. Additive to (not replacing) the top-gainer
+    signal, clamped, so a rare fast-flip that still made top-20 keeps its +1.0.
     """
     bandit = get_entry_bandit()
 
@@ -402,6 +426,7 @@ def feedback_entry_decision(
             is_bull_day=is_bull_day,
             market_regime=market_regime,
             btc_vs_ema50=btc_vs_ema50,
+            fast_reversal_proba=fast_reversal_proba,
         )
     if context is None:
         return
@@ -410,6 +435,17 @@ def feedback_entry_decision(
         reward = 1.0 if is_top_gainer else -0.05
     else:  # SKIP
         reward = -1.0 if is_top_gainer else 0.0
+
+    try:
+        import config as _cfg
+        fr_on = bool(getattr(_cfg, "FAST_REVERSAL_LEARNING_ENABLED", False))
+        pen = float(getattr(_cfg, "FAST_REVERSAL_ENTER_PENALTY", -0.6))
+        bon = float(getattr(_cfg, "FAST_REVERSAL_SKIP_BONUS", 0.30))
+    except Exception:
+        fr_on, pen, bon = False, -0.6, 0.30
+    if fr_on and fast_reversal is True:
+        reward += pen if arm == 1 else bon
+        reward = float(max(-1.5, min(1.5, reward)))
 
     bandit.update(context, arm, reward)
     if bandit.total_updates % 10 == 0:

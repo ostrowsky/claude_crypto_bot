@@ -169,6 +169,52 @@ def _ml_trend_nonbull_score(sym: str, tf: str, feat: dict, data: np.ndarray, i: 
     return _ml_general_score(sym, tf, "trend", feat, data, i, is_bull_day=False)
 
 
+_FR_FEATS = [
+    "close_vs_ema20", "close_vs_ema50", "close_vs_ema200", "ema20_vs_ema50",
+    "ema50_vs_ema200", "slope", "rsi", "adx", "vol_x", "macd_hist_norm",
+    "atr_pct", "daily_range", "body_pct", "upper_wick_pct", "lower_wick_pct",
+    "btc_vs_ema50", "btc_momentum_4h", "market_vol_24h",
+]
+_FR_MODEL = None
+_FR_MODEL_TRIED = False
+
+
+def _fast_reversal_proba(sym, tf, sig_mode, feat, data, i, btc_vs_ema50, is_bull_day) -> float:
+    """Live P(fast reversal) for the entry bandit context. Returns 0.0 (inert)
+    unless FAST_REVERSAL_LEARNING_ENABLED — no model load / no compute when off.
+    Reuses ml_signal_model.build_runtime_record so the 18 features match exactly
+    what the model + offline training use. Fails OPEN to 0.0."""
+    if not getattr(config, "FAST_REVERSAL_LEARNING_ENABLED", False):
+        return 0.0
+    global _FR_MODEL, _FR_MODEL_TRIED
+    if not _FR_MODEL_TRIED:
+        _FR_MODEL_TRIED = True
+        try:
+            from catboost import CatBoostClassifier
+            from pathlib import Path as _P
+            p = _P(getattr(config, "FAST_REVERSAL_MODEL_FILE", "fast_reversal_catboost.cbm"))
+            if p.exists():
+                _m = CatBoostClassifier(); _m.load_model(str(p)); _FR_MODEL = _m
+            else:
+                log.warning("fast_reversal model missing (%s) — live feature stays 0", p.name)
+        except Exception as e:
+            log.warning("fast_reversal model load failed: %s", e)
+    if _FR_MODEL is None:
+        return 0.0
+    try:
+        from ml_signal_model import build_runtime_record
+        rec = build_runtime_record(
+            sym=sym, tf=tf, signal_type=sig_mode, is_bull_day=bool(is_bull_day),
+            bar_ts=int(data["t"][i]), feat=feat, data=data, i=i,
+            btc_vs_ema50=float(btc_vs_ema50),
+        )
+        f = rec.get("f", {}) or {}
+        row = [float(f.get(k, 0.0) or 0.0) for k in _FR_FEATS] + [str(tf), str(sig_mode)]
+        return float(_FR_MODEL.predict_proba([row])[0][1])
+    except Exception:
+        return 0.0
+
+
 def _load_ranker_payload() -> Optional[dict]:
     global _RANKER_MODEL_CACHE
     if _RANKER_MODEL_CACHE is not None:
@@ -5184,6 +5230,8 @@ async def _poll_coin(
             if getattr(config, "BANDIT_ENABLED", True):
                 try:
                     from contextual_bandit import should_enter as _bandit_should_enter
+                    _fr_proba = _fast_reversal_proba(
+                        sym, tf, sig_mode, feat, data, i, _btc_ema50, is_bull_day_now)
                     _enter_ok, _enter_info = _bandit_should_enter(
                         _entry_state,
                         sym=sym,
@@ -5192,6 +5240,7 @@ async def _poll_coin(
                         is_bull_day=is_bull_day_now,
                         market_regime=_mkt_regime,
                         btc_vs_ema50=_btc_ema50,
+                        fast_reversal_proba=_fr_proba,
                     )
                     if not _enter_ok:
                         log.info("BANDIT SKIP %s [%s]: ucbs=%s",

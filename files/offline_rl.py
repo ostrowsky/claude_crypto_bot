@@ -187,6 +187,45 @@ def _tg_features_to_context(features: dict) -> Tuple[dict, float]:
 
 # ── 1. Entry bandit batch training (UNIVERSAL — all watchlist symbols) ───────
 
+# ── Step 5.2: fast-reversal proba feature/reward helpers ────────────────────
+_FR_FEATS = [
+    "close_vs_ema20", "close_vs_ema50", "close_vs_ema200", "ema20_vs_ema50",
+    "ema50_vs_ema200", "slope", "rsi", "adx", "vol_x", "macd_hist_norm",
+    "atr_pct", "daily_range", "body_pct", "upper_wick_pct", "lower_wick_pct",
+    "btc_vs_ema50", "btc_momentum_4h", "market_vol_24h",
+]
+
+
+def _load_fast_reversal_model():
+    """Return (model, enabled). Fails OPEN: any error -> (None, False) so the
+    bandit trains exactly as before (feature inert, reward term dormant)."""
+    try:
+        import config as _cfg
+        if not bool(getattr(_cfg, "FAST_REVERSAL_LEARNING_ENABLED", False)):
+            return None, False
+        from catboost import CatBoostClassifier
+        path = Path(getattr(_cfg, "FAST_REVERSAL_MODEL_FILE", "fast_reversal_catboost.cbm"))
+        if not path.exists():
+            log.warning("fast_reversal model missing (%s) — feature stays 0", path.name)
+            return None, True
+        m = CatBoostClassifier()
+        m.load_model(str(path))
+        return m, True
+    except Exception as e:
+        log.warning("fast_reversal model load failed: %s", e)
+        return None, False
+
+
+def _fr_predict(model, f: dict, tf: str, mode: str) -> float:
+    if model is None:
+        return 0.0
+    try:
+        row = [float(f.get(k, 0.0) or 0.0) for k in _FR_FEATS] + [str(tf), str(mode)]
+        return float(model.predict_proba([row])[0][1])
+    except Exception:
+        return 0.0
+
+
 def train_entry_bandit(
     *,
     min_samples: int = 30,
@@ -219,6 +258,14 @@ def train_entry_bandit(
     )
 
     bandit = get_entry_bandit()
+    _fr_model, _fr_on = _load_fast_reversal_model()
+    try:
+        import config as _cfg_fr
+        _FR_PEN = float(getattr(_cfg_fr, "FAST_REVERSAL_ENTER_PENALTY", -0.6))
+        _FR_BON = float(getattr(_cfg_fr, "FAST_REVERSAL_SKIP_BONUS", 0.30))
+    except Exception:
+        _FR_PEN, _FR_BON = -0.6, 0.30
+    n_fr_pos = 0
 
     # ── Source 1: Universal samples from top_gainer_dataset ─────────────────
     tg_records = _load_top_gainer_dataset()
@@ -326,11 +373,13 @@ def train_entry_bandit(
         is_bull = rec.get("is_bull_day", False)
         btc_ema50 = f.get("btc_vs_ema50", 0.0)
 
+        fr_proba = _fr_predict(_fr_model, f, tf, mode) if _fr_on else 0.0
         x = extract_context(
             state, mode=mode, tf=tf,
             is_bull_day=is_bull,
             market_regime="bull" if is_bull else "neutral",
             btc_vs_ema50=btc_ema50,
+            fast_reversal_proba=fr_proba,
         )
 
         action = decision.get("action", "take")
@@ -342,11 +391,21 @@ def train_entry_bandit(
         else:
             reward = -1.0 if is_top else 0.0
 
+        # Step 5.2 (§4a): asymmetric fast-reversal term — penalise ENTER into a
+        # realised fast-flip, reward SKIP of one. Only on labelled critic records.
+        if _fr_on and (rec.get("labels", {}) or {}).get("label_fast_reversal") == 1:
+            reward += _FR_PEN if arm == 1 else _FR_BON
+            reward = float(max(-1.5, min(1.5, reward)))
+            n_fr_pos += 1
+
         signal_samples.append((x, arm, reward))
         if is_top:
             n_signal_top += 1
 
     log.info("Signal samples: %d (%d top gainers)", len(signal_samples), n_signal_top)
+    if _fr_on:
+        log.info("Fast-reversal (§4a): model=%s, %d fast-flip-labelled samples got reward term",
+                 "loaded" if _fr_model is not None else "MISSING", n_fr_pos)
 
     # ── Combine and train ──────────────────────────────────────────────────
     all_samples = universal_samples + signal_samples

@@ -602,6 +602,15 @@ FAST_REVERSAL_PNL_MAX: float = -0.3    # loss threshold %
 # (A) premature-exit = exited, then the coin ran >= this % within the cooldown
 # window (the re-alert condition) — a false early exit (trail too tight):
 PREMATURE_EXIT_PCT: float = 5.0
+# Step 5.2 — wire proba_fast_reversal (CatBoost holdout AUC 0.636) into the entry
+# bandit as a context feature + asymmetric reward (§4a). OFF by default: the
+# feature is inert (0.0) and the reward term dormant until flipped True, so the
+# bandit dimension migrates (d=20->21, zero-pad) with NO behaviour change. NOT a
+# hard guard — that needs a 60d recall@top20 backtest first (§4a/§7).
+FAST_REVERSAL_LEARNING_ENABLED: bool = False   # rollback = False
+FAST_REVERSAL_ENTER_PENALTY: float = -0.6      # ENTER into a fast-flip (§4a)
+FAST_REVERSAL_SKIP_BONUS: float = 0.30         # SKIP of a fast-flip (§4a)
+FAST_REVERSAL_MODEL_FILE: str = "fast_reversal_catboost.cbm"
 
 # ── RETEST: откат к EMA20 в существующем тренде ──────────────────────────────
 RETEST_LOOKBACK:    int   = 12    # баров назад — проверяем что тренд был
