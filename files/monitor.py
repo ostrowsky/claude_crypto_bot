@@ -215,6 +215,25 @@ def _fast_reversal_proba(sym, tf, sig_mode, feat, data, i, btc_vs_ema50, is_bull
         return 0.0
 
 
+def _log_decoupling_promote_shadow(pairs) -> None:
+    """H1 SHADOW: append flagged-but-not-hot watchlist coins (would-promote-to-
+    scan) so a later replay can measure the silent-miss coverage lift. No real
+    promotion. Fail-open."""
+    try:
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc).isoformat()
+        with open("decoupling_promote_shadow.jsonl", "a", encoding="utf-8") as fh:
+            for sym, v in pairs:
+                fh.write(json.dumps({
+                    "ts": now, "sym": sym,
+                    "decoupling_score": v.get("decoupling_score"),
+                    "trailing_corr": v.get("trailing_corr"),
+                    "vol_pctile": v.get("vol_pctile"),
+                }) + "\n")
+    except Exception:
+        pass
+
+
 def _load_ranker_payload() -> Optional[dict]:
     global _RANKER_MODEL_CACHE
     if _RANKER_MODEL_CACHE is not None:
@@ -6239,13 +6258,25 @@ async def monitoring_loop(state: MonitorState, send: SendFn) -> None:
                     if _heartbeat_counter % _dec_interval == 0:
                         try:
                             import decoupling_signal
-                            _dec_syms = [r.symbol for r in state.hot_coins]
+                            _promote_shadow = bool(getattr(config, "DECOUPLING_PROMOTE_SHADOW_ENABLED", False))
+                            _hot_syms = {r.symbol for r in state.hot_coins}
+                            # H1: to find coins to PROMOTE we must score the whole
+                            # watchlist (not just hot_coins). The full-universe
+                            # basket also matches the §7 validation.
+                            _dec_syms = list(config.load_watchlist()) if _promote_shadow else list(_hot_syms)
                             if len(_dec_syms) >= 5:
                                 _dec_scores = await decoupling_signal.compute_scores(session, _dec_syms)
                                 setattr(config, "_decoupling_scores", _dec_scores)
                                 _dec_flagged = sum(1 for v in _dec_scores.values() if v.get("flag"))
                                 log.info("decoupling shadow: %d coins, %d flagged (high-vol+decoupled)",
                                          len(_dec_scores), _dec_flagged)
+                                if _promote_shadow:
+                                    _wp = [(s, v) for s, v in _dec_scores.items()
+                                           if v.get("flag") and s not in _hot_syms]
+                                    if _wp:
+                                        _log_decoupling_promote_shadow(_wp)
+                                        log.info("decoupling PROMOTE shadow: %d watchlist coins would be promoted to scan",
+                                                 len(_wp))
                         except Exception as _dec_err:
                             log.warning("decoupling shadow update failed: %s", _dec_err)
 

@@ -1147,6 +1147,13 @@ DECOUPLING_CORR_MAX: float = 0.60                 # flag ceiling: trailing corr 
 DECOUPLING_REFRESH_MIN: int = 15                  # recompute cadence (minutes)
 # NOT YET IMPLEMENTED — gate stays off until shadow-replay confirms NS lift:
 DECOUPLING_GATE_ENABLED: bool = False             # reserved; do not enable without shadow validation
+# H1 earliness (2026-06-29): scan-promote decoupled watchlist coins to attack the
+# silent-miss bucket (top-20 the bot never sees, ~23%). Backtest: silent-miss
+# top-20 flag 6x baseline + are MORE decoupled than entered winners. SHADOW first:
+# compute decoupling over the FULL watchlist and log flagged-but-not-hot coins as
+# would-promote; no real promotion until shadow confirms a coverage lift.
+DECOUPLING_PROMOTE_SHADOW_ENABLED: bool = True    # rollback = False
+DECOUPLING_PROMOTE_ENABLED: bool = False          # reserved; needs shadow-replay first
 
 # ── ML-Gated Portfolio Rotation ──────────────────────────────────────────────
 # Когда портфель полон и существующая score-based ротация не нашла замену,
