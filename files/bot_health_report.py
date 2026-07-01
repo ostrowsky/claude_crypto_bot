@@ -713,19 +713,32 @@ def _past_decisions_resume() -> list[str]:
                 str(d.get("ts", "")).replace("Z", "+00:00"))).days
         except (ValueError, TypeError):
             age = None
-        state[hid] = {"stage": st, "rule": d.get("rule"), "age": age}
+        state[hid] = {"stage": st, "rule": d.get("rule"), "age": age,
+                      "decision_id": d.get("decision_id")}
 
-    meta = {}
+    # Per-decision attribution: the pipeline already computes a verdict PER
+    # decision_id (attribution results[]). Use each decision's OWN verdict — not
+    # one global hit_rate for all — so "helped/harmed" is honest per decision.
+    results_by_id: dict[str, dict] = {}
     adir = PL.PIPELINE / "attribution"
     if adir.exists():
         files = sorted(adir.glob("attribution-*.json"))
         if files:
             try:
-                meta = (json.loads(files[-1].read_text(encoding="utf-8"))
-                        .get("pipeline_meta") or {})
+                _att = json.loads(files[-1].read_text(encoding="utf-8"))
+                for r in (_att.get("results") or []):
+                    did = r.get("decision_id")
+                    if did:
+                        results_by_id[did] = r
             except (OSError, json.JSONDecodeError):
-                meta = {}
-    hr = meta.get("hit_rate")
+                pass
+
+    _metric_plain = {
+        "watchlist_top_early_capture_pct": "ранний захват top-20",
+        "avg_r5_entries": "качество входов",
+        "entries_per_day": "число входов",
+        "realised_pnl_pct": "P&L",
+    }
 
     lines: list[str] = []
     for hid, s in state.items():
@@ -739,20 +752,25 @@ def _past_decisions_resume() -> list[str]:
         if st == "rolled_back":
             lines.append(f"  • {name} — ↩️ откатили")
             continue
-        # Shadow decisions log a would-action only (no decision impact), so the
-        # helped/harmed hit_rate can't apply to them — label as data-collection.
+        # Shadow decisions log a would-action only (no decision impact), so no
+        # helped/harmed verdict applies — label as data-collection.
         if "shadow" in str(s["rule"] or "").lower() or "shadow" in hid.lower():
             lines.append(f"  • {name} — 🔍 shadow (сбор данных, без влияния на решения)")
             continue
         if age is not None and age < 14:
             lines.append(f"  • {name} — применили {age} дн назад · "
                          f"⏳ рано судить (ещё ~{14 - age} дн)")
-        elif hr is None:
+            continue
+        res = results_by_id.get(s.get("decision_id") or "")
+        verdict = (res or {}).get("verdict")
+        if not res or verdict in (None, "no_baseline", "insufficient_data"):
             lines.append(f"  • {name} — применили · ⏳ ещё считаем")
-        elif hr >= 0.6:
+        elif verdict in ("hit", "improvement", "win", "accept"):
             lines.append(f"  • {name} — ✅ помогло")
-        elif hr < 0.4:
-            lines.append(f"  • {name} — ❌ не помогло / навредило")
+        elif verdict in ("regression", "miss", "worse"):
+            misses = res.get("expected_misses") or []
+            det = f" (просело: {_metric_plain.get(misses[0], misses[0])})" if misses else ""
+            lines.append(f"  • {name} — ❌ не помогло / навредило{det}")
         else:
             lines.append(f"  • {name} — ⚠️ эффект смешанный")
 
