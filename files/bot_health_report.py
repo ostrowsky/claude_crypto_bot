@@ -739,6 +739,11 @@ def _past_decisions_resume() -> list[str]:
         if st == "rolled_back":
             lines.append(f"  • {name} — ↩️ откатили")
             continue
+        # Shadow decisions log a would-action only (no decision impact), so the
+        # helped/harmed hit_rate can't apply to them — label as data-collection.
+        if "shadow" in str(s["rule"] or "").lower() or "shadow" in hid.lower():
+            lines.append(f"  • {name} — 🔍 shadow (сбор данных, без влияния на решения)")
+            continue
         if age is not None and age < 14:
             lines.append(f"  • {name} — применили {age} дн назад · "
                          f"⏳ рано судить (ещё ~{14 - age} дн)")

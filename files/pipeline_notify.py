@@ -42,6 +42,12 @@ DEDUP_FILE      = PL.RUNTIME / "tg_send_dedup.json"
 TELEGRAM_API    = "https://api.telegram.org"
 TG_MAX_CHARS    = 4000      # Telegram limit is 4096; keep a margin
 DEFAULT_TIMEOUT = 20
+# Retry the real Telegram send on transient failures (timeout / status 0) so a
+# single API hiccup doesn't drop the daily report (2026-07-01: one 11.6s timeout
+# = "no chats reached" and no report). Only the real network path retries;
+# injected http_post (tests) is called once, preserving test behaviour.
+SEND_MAX_ATTEMPTS = 3
+SEND_RETRY_BACKOFF = 2   # seconds, multiplied by attempt number
 
 # Per-mode reports written by _weekly_signal_eval_with_tg.py / runsignalevaluator.
 # Used to build the "Incidents" block. Keep schema-only here (no telegram
@@ -1159,14 +1165,21 @@ def notify(
         return result
 
     any_ok = False
+    import time as _time
+    _retry = http_post is _real_http_post   # retry only the real network path
     for cid in chat_ids:
         r = send_to_chat(token, cid, msg, http_post=http_post)
+        attempts = 1
+        while _retry and not r["ok"] and attempts < SEND_MAX_ATTEMPTS:
+            _time.sleep(SEND_RETRY_BACKOFF * attempts)   # 2s, then 4s
+            r = send_to_chat(token, cid, msg, http_post=http_post)
+            attempts += 1
         if r["ok"]:
             any_ok = True
             result["sent"].append(cid)
         else:
             result["errors"].append({"chat_id": cid, "status": r["status"],
-                                     "body": r["body"][:300]})
+                                     "body": r["body"][:300], "attempts": attempts})
 
     if any_ok:
         mark_dedup(target_date, now_iso=now_iso)
