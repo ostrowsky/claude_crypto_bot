@@ -985,7 +985,7 @@ TREND_1H_CHOP_ADX_MIN: float = 25.0
 TREND_1H_CHOP_SLOPE_MIN: float = 0.7  # was 1.2 (slow-build trends now allowed)
 TREND_1H_CHOP_VOL_MIN: float = 1.3   # vol_x multiplier
 # Bull-day relaxation (opt-in; not validated on bull-day subsample)
-TREND_1H_CHOP_USE_BULL_DAY_RELAX: bool = False
+TREND_1H_CHOP_USE_BULL_DAY_RELAX: bool = True   # 2026-07-06: bull-day relax (ADX 22/slope 1.0/vol 1.2). Backtest: bull ADX22-25 +0.097% & 3 recovered top-20; non-bull stays -0.822% (blocked). rollback=False
 TREND_1H_CHOP_ADX_MIN_BULL_DAY: float = 22.0
 TREND_1H_CHOP_SLOPE_MIN_BULL_DAY: float = 1.0
 TREND_1H_CHOP_VOL_MIN_BULL_DAY: float = 1.2
