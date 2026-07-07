@@ -1120,7 +1120,7 @@ CORR_GUARD_ENABLED: bool = True                  # включить/выключ
 # coverage. SHADOW=True logs the would-block (reason_code correlation_guard_shadow,
 # action=shadow) WITHOUT enforcing, so we measure coverage impact before flipping
 # to enforce. Set False only after shadow data confirms net-positive.
-CORR_GUARD_SHADOW: bool = True
+CORR_GUARD_SHADOW: bool = False  # 2026-07-07 ENFORCE: 11d shadow = 43 would-blocks, 0 top-20 lost. rollback=True
 CORR_GUARD_TF: str = "1h"                        # таймфрейм для расчёта корреляций
 CORR_GUARD_WINDOW_BARS: int = 48                 # окно в барах (~2 суток на 1h)
 CORR_GUARD_THRESHOLD: float = 0.65              # порог кластеризации (базовый)
@@ -1153,7 +1153,8 @@ DECOUPLING_GATE_ENABLED: bool = False             # reserved; do not enable with
 # compute decoupling over the FULL watchlist and log flagged-but-not-hot coins as
 # would-promote; no real promotion until shadow confirms a coverage lift.
 DECOUPLING_PROMOTE_SHADOW_ENABLED: bool = True    # rollback = False
-DECOUPLING_PROMOTE_ENABLED: bool = False          # reserved; needs shadow-replay first
+DECOUPLING_PROMOTE_ENABLED: bool = True           # 2026-07-07 ENFORCE: 9d shadow = 57% silent-miss top-20 flagged (4/7), 53% of all top-20. rollback=False
+DECOUPLING_PROMOTE_MAX_PER_REFRESH: int = 5       # cap new promotes per refresh (scan-load)
 
 # ── ML-Gated Portfolio Rotation ──────────────────────────────────────────────
 # Когда портфель полон и существующая score-based ротация не нашла замену,

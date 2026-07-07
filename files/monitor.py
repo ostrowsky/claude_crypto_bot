@@ -215,6 +215,33 @@ def _fast_reversal_proba(sym, tf, sig_mode, feat, data, i, btc_vs_ema50, is_bull
         return 0.0
 
 
+_COOLDOWN_REFS_FILE = Path(__file__).resolve().parent.parent / ".runtime" / "cooldown_refs.json"
+
+
+def _save_cooldown_refs(state) -> None:
+    """Persist cooldown exit refs so bot restarts don't wipe alert-during-
+    cooldown tracking (was in-memory only -> every restart lost the refs)."""
+    try:
+        _COOLDOWN_REFS_FILE.write_text(json.dumps({
+            "exit_px": state.cooldown_exit_px,
+            "realerted": state.cooldown_realerted,
+        }), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def _load_cooldown_refs(state) -> None:
+    try:
+        if _COOLDOWN_REFS_FILE.exists():
+            d = json.loads(_COOLDOWN_REFS_FILE.read_text(encoding="utf-8"))
+            for k, v in (d.get("exit_px") or {}).items():
+                state.cooldown_exit_px.setdefault(k, float(v))
+            for k, v in (d.get("realerted") or {}).items():
+                state.cooldown_realerted.setdefault(k, bool(v))
+    except Exception:
+        pass
+
+
 def _log_decoupling_promote_shadow(pairs) -> None:
     """H1 SHADOW: append flagged-but-not-hot watchlist coins (would-promote-to-
     scan) so a later replay can measure the silent-miss coverage lift. No real
@@ -3598,6 +3625,7 @@ async def _poll_coin(
                 state.cd_logged[sym] = True
                 state.cooldown_exit_px[sym] = float(c[i])      # ref ~ exit price
                 state.cooldown_realerted[sym] = False
+                _save_cooldown_refs(state)
                 # ФИКС: логируем в critic_dataset чтобы Trend Scout видел cooldown-блоки.
                 # Без этого в critic нет записей о монетах в cooldown → скаут не диагностирует.
                 _log_critic_candidate(
@@ -3618,12 +3646,16 @@ async def _poll_coin(
             elif (getattr(config, "ALERT_DURING_COOLDOWN_ENABLED", False)
                     and not state.cooldown_realerted.get(sym)):
                 try:
+                    if sym not in state.cooldown_exit_px:
+                        _load_cooldown_refs(state)   # restart recovery
                     ex_px = float(state.cooldown_exit_px.get(sym, 0.0) or 0.0)
                     trig = float(getattr(config, "ALERT_DURING_COOLDOWN_TRIGGER_PCT", 5.0))
                     cur_px = float(c[i])
                     if ex_px > 0 and cur_px >= ex_px * (1.0 + trig / 100.0):
                         cont = (cur_px / ex_px - 1.0) * 100.0
                         state.cooldown_realerted[sym] = True
+                        _save_cooldown_refs(state)
+                        botlog.log_cooldown_realert(sym, tf, ex_px, cur_px, cont)
                         await send(
                             f"🔔 <b>{sym}</b> продолжает движение: "
                             f"+{cont:.1f}% после нашего выхода (мы в cooldown, "
@@ -6277,6 +6309,32 @@ async def monitoring_loop(state: MonitorState, send: SendFn) -> None:
                                         _log_decoupling_promote_shadow(_wp)
                                         log.info("decoupling PROMOTE shadow: %d watchlist coins would be promoted to scan",
                                                  len(_wp))
+                                    # H1 ENFORCE (2026-07-07): actually promote to
+                                    # hot_coins (dense polling) — shadow review
+                                    # showed 57% of silent-miss top-20 flagged.
+                                    # Coin is only WATCHED; entries still pass all
+                                    # gates. Fail-open per coin.
+                                    if _wp and bool(getattr(config, "DECOUPLING_PROMOTE_ENABLED", False)):
+                                        _cap = int(getattr(config, "DECOUPLING_PROMOTE_MAX_PER_REFRESH", 5))
+                                        _wp_sorted = sorted(_wp, key=lambda t: -(t[1].get("decoupling_score") or 0))
+                                        _n_prom = 0
+                                        for _ps, _pv in _wp_sorted[:_cap]:
+                                            if _ps in state.positions:
+                                                continue
+                                            try:
+                                                _pdata = await fetch_klines(session, _ps, "1h", limit=config.LIVE_LIMIT)
+                                                if _pdata is None:
+                                                    continue
+                                                _prep = await _analyze_coin_live(_ps, "1h", _pdata)
+                                                state.hot_coins.append(_prep)
+                                                _n_prom += 1
+                                                log.info("DECOUPLING PROMOTE %s [1h] score=%.3f corr=%.2f -> hot_coins",
+                                                         _ps, _pv.get("decoupling_score") or 0.0,
+                                                         _pv.get("trailing_corr") or 0.0)
+                                            except Exception as _pe:
+                                                log.warning("decoupling promote failed for %s: %s", _ps, _pe)
+                                        if _n_prom:
+                                            log.info("decoupling PROMOTE: %d coins added to scan", _n_prom)
                         except Exception as _dec_err:
                             log.warning("decoupling shadow update failed: %s", _dec_err)
 

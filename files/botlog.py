@@ -186,6 +186,21 @@ def log_forward(sym: str, tf: str, mode: str, horizon: int,
     })
 
 
+def log_cooldown_realert(sym: str, tf: str, exit_price: float,
+                         cur_price: float, cont_pct: float) -> None:
+    """Info re-alert during cooldown (no re-entry). Logged so the decision's
+    usefulness is measurable post-hoc (was invisible in bot_events before)."""
+    _write({
+        "event":      "cooldown_realert",
+        "sym":        sym,
+        "tf":         tf,
+        "exit_price": exit_price,
+        "price":      cur_price,
+        "cont_pct":   round(cont_pct, 3),
+        "ts":         _now(),
+    })
+
+
 def log_blocked(sym: str, tf: str, price: float, reason: str,
                 rsi: Optional[float] = None, adx: Optional[float] = None,
                 vol_x: Optional[float] = None, daily_range: Optional[float] = None,
