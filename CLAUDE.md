@@ -202,7 +202,6 @@ To re-run: `pyembed\python.exe files\analyze_blocked_gates.py` from repo root.
 |------|------|--------|
 | `CryptoBot_DailyLearning_EOD` | 02:30 local (00:30 UTC) | Full cycle: snapshot → resolve → train bandit → retrain model → report |
 | `CryptoBot_IntradaySnapshot` | 08:30 / 14:30 / 20:30 local | Feature snapshot → `top_gainer_dataset` |
-| `CryptoBot_Watchdog` | every 10 min | `watchdog_bot.ps1`: if no `bot.py` for THIS root is running, relaunch `.runtime\bot_bg_runner.cmd` + Telegram notice. Log: `.runtime\watchdog.log`. Added 2026-07-31 after the bot died silently on 07-23 (log cut mid-line, no traceback) and went unnoticed for 8 days — zero signals. Never kills anything; only starts when none is running. |
 
 ---
 

@@ -307,7 +307,6 @@ Grace period backtest (2026-04-20): не помогает — проблема �
 |--------|-------|----------|
 | `CryptoBot_DailyLearning_EOD` | 02:30 local (00:30 UTC) | Полный цикл обучения: snapshot → resolve → train bandit → retrain model → report |
 | `CryptoBot_IntradaySnapshot` | 08:30, 14:30, 20:30 local | Сбор фич для top_gainer_dataset (intraday snapshot) |
-| `CryptoBot_Watchdog` | каждые 10 мин | `watchdog_bot.ps1`: если процесс `bot.py` этого проекта не найден — перезапуск через `.runtime\bot_bg_runner.cmd` + уведомление в Telegram. Лог: `.runtime\watchdog.log`. Добавлен 2026-07-31: 07-23 бот умер молча (лог оборвался на полуслове, без traceback), это заметили только через 8 дней — всё это время не было ни одного сигнала. Ничего не убивает, только запускает при отсутствии. |
 
 ---
 
