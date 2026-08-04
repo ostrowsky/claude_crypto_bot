@@ -14,7 +14,9 @@ Sends Telegram messages via callback for all meaningful events.
 import asyncio
 import json
 import logging
+import threading
 from collections import deque
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
@@ -3075,6 +3077,44 @@ def load_positions() -> dict:
         return {}
 
 
+# Label writes rewrite the WHOLE dataset file (critic_dataset.jsonl is ~128 MB,
+# ml_dataset.jsonl ~114 MB), so calling them inline froze the asyncio loop for
+# 130-300s at a time: the Telegram UI timed out and the UI watchdog used to
+# force-exit the process on top of that (2026-08-04). Offload to a single
+# background thread — one worker keeps the rewrites serialised (no concurrent
+# 128 MB passes) while the loop stays responsive. Labels are best-effort: work
+# queued at shutdown is lost, and the daily learning job recomputes them.
+_LABEL_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="labels")
+_label_backlog = 0
+_label_backlog_lock = threading.Lock()
+
+
+def _submit_label_job(fn) -> None:
+    global _label_backlog
+    with _label_backlog_lock:
+        _label_backlog += 1
+        depth = _label_backlog
+    if depth in (25, 100, 250):
+        log.warning("label-write backlog is %d jobs — dataset rewrites are not "
+                    "keeping up (files ~240 MB); consider compaction", depth)
+
+    def _run():
+        global _label_backlog
+        try:
+            fn()
+        except Exception as e:
+            log.warning("label write failed: %s", e)
+        finally:
+            with _label_backlog_lock:
+                _label_backlog -= 1
+
+    try:
+        _LABEL_EXECUTOR.submit(_run)
+    except RuntimeError:            # executor shut down
+        with _label_backlog_lock:
+            _label_backlog -= 1
+
+
 def _fill_trade_outcome_labels(
     pos: "OpenPosition",
     *,
@@ -3082,27 +3122,33 @@ def _fill_trade_outcome_labels(
     exit_reason: str,
     bars_held: int,
 ) -> None:
-    if pos.ml_record_id:
-        ml_dataset.fill_labels(
-            pos.ml_record_id,
-            exit_pnl=exit_pnl,
-            exit_reason=exit_reason,
-            bars_held=bars_held,
-        )
-    if getattr(pos, "critic_record_id", ""):
-        critic_dataset.fill_trade_outcome(
-            pos.critic_record_id,
-            exit_pnl=exit_pnl,
-            exit_reason=exit_reason,
-            bars_held=bars_held,
-        )
+    ml_id = pos.ml_record_id
+    critic_id = getattr(pos, "critic_record_id", "")
+
+    def _work():
+        if ml_id:
+            ml_dataset.fill_labels(
+                ml_id, exit_pnl=exit_pnl, exit_reason=exit_reason, bars_held=bars_held,
+            )
+        if critic_id:
+            critic_dataset.fill_trade_outcome(
+                critic_id, exit_pnl=exit_pnl, exit_reason=exit_reason, bars_held=bars_held,
+            )
+
+    _submit_label_job(_work)
 
 
 def _fill_forward_labels(pos: "OpenPosition", horizon: int, ret_pct: float) -> None:
-    if pos.ml_record_id:
-        ml_dataset.fill_forward_label(pos.ml_record_id, horizon, ret_pct)
-    if getattr(pos, "critic_record_id", ""):
-        critic_dataset.fill_forward_label(pos.critic_record_id, horizon, ret_pct)
+    ml_id = pos.ml_record_id
+    critic_id = getattr(pos, "critic_record_id", "")
+
+    def _work():
+        if ml_id:
+            ml_dataset.fill_forward_label(ml_id, horizon, ret_pct)
+        if critic_id:
+            critic_dataset.fill_forward_label(critic_id, horizon, ret_pct)
+
+    _submit_label_job(_work)
 
 
 def _check_portfolio_limits(

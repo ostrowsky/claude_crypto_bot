@@ -374,6 +374,30 @@ Three steps, each backtest-gated before deploy:
 
 Spec: `docs/specs/features/auto-improvement-loop-spec.md` (Sprint 0, RM-22).
 
+### Event-loop freeze + self-inflicted death (2026-08-04)
+
+Two stacked bugs made the bot die silently and stay dead (07-23: 8 days, zero
+signals; 08-04: 7 hours, surfaced by /menu timing out).
+
+1. **Label writes froze the loop.** `_fill_trade_outcome_labels` /
+   `_fill_forward_labels` (monitor.py ~L3078) called `fill_labels` /
+   `fill_forward_label`, and each of those rewrites the ENTIRE dataset file
+   (`critic_dataset.jsonl` ~128 MB, `ml_dataset.jsonl` ~114 MB) inline in the
+   asyncio loop → stalls of 130-300s, Telegram UI timeouts, WS reconnect storms.
+   Fix: both helpers now enqueue onto a single-worker `_LABEL_EXECUTOR` thread
+   (serialised, so no concurrent 128 MB passes; backlog warns at 25/100/250).
+   Measured: 130-300s stalls every few minutes → **0 lag warnings**.
+   Real fix still open: stop rewriting whole files (append-only patch +
+   periodic compaction) — rewrite cost grows with the datasets.
+
+2. **UI watchdog force-exited into nothing.** On a stall it called `os._exit(2)`
+   "so the wrapper restarts" — but `.runtime/bot_bg_runner.cmd` runs python ONCE
+   with no restart loop, so every force-exit was permanent.
+   Fix: `UI_WATCHDOG_FORCE_EXIT_AFTER_WARNS 3 → 0` (disabled) plus a
+   `force_exit_after_warns > 0` guard — without it 0 meant "exit on the FIRST
+   warning" (`warn_count >= 0`), the opposite of disabling.
+   Re-enable ONLY together with a real restart wrapper.
+
 ### Critical bugs (fixed)
 
 | Date | Problem | Fix |
