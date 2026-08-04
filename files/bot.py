@@ -1847,9 +1847,14 @@ async def _post_init(app: Application) -> None:
                         "UI watchdog: idle=%.0fs, pending updates=%d, warn=%d/%d",
                         idle_sec, pending, warn_count, force_exit_after_warns
                     )
-                    if warn_count >= force_exit_after_warns:
-                        log.error("UI watchdog: triggering force-exit so wrapper restarts")
-                        # Best-effort flush; then hard exit (wrapper relaunches).
+                    # force_exit_after_warns <= 0 disables the exit entirely.
+                    # Guard matters: with the old `>=` a value of 0 would exit on
+                    # the FIRST warning instead of never. Exiting is only safe if
+                    # something actually relaunches the bot — bot_bg_runner.cmd
+                    # does not, so every force-exit was a permanent death
+                    # (2026-07-23: 8 days down; 2026-08-04: 7 hours).
+                    if force_exit_after_warns > 0 and warn_count >= force_exit_after_warns:
+                        log.error("UI watchdog: triggering force-exit (a restart wrapper MUST be running)")
                         _os._exit(2)
                 else:
                     # idle but no pending → quiet period, OK

@@ -1042,12 +1042,20 @@ PEAK_RISK_RSI_FLOOR: float = 75.0     # RSI level where component starts ramping
 PEAK_RISK_EDGE_FLOOR_PCT: float = 5.0  # price edge vs EMA20 where component starts
 
 # ── UI watchdog (2026-05-06) ──────────────────────────────────────────────
-# Detects stuck Telegram polling. If no update has been processed by handlers
-# for WARN_THRESHOLD_SEC AND there are pending Telegram updates,
-# warn N times then force-exit (wrapper relaunches bot).
+# Detects stuck Telegram polling: if no update has been processed by handlers
+# for WARN_THRESHOLD_SEC AND Telegram reports pending updates, warn.
+#
+# FORCE-EXIT DISABLED 2026-08-04. The force-exit path assumed a supervising
+# wrapper would relaunch the bot, but .runtime\bot_bg_runner.cmd runs python
+# ONCE with no restart loop — so every force-exit was a permanent silent death:
+# 2026-07-23 08:42 (8 days down, zero signals) and 2026-08-04 09:18 (7 hours).
+# The trigger is an event-loop stall (a heavy sync task holding the loop for
+# 190-300s), which historically resolves on its own, so staying alive and
+# degraded beats exiting into nothing. 0 = never force-exit (warnings still
+# logged). Re-enable ONLY together with a real restart wrapper.
 # Spec: docs/specs/features/ui-watchdog-spec.md
 UI_WATCHDOG_WARN_THRESHOLD_SEC: float = 90.0
-UI_WATCHDOG_FORCE_EXIT_AFTER_WARNS: int = 3
+UI_WATCHDOG_FORCE_EXIT_AFTER_WARNS: int = 0   # 0 = disabled (was 3)
 # Mode daily-range / slope quality gate (backtest 2026-04-24, 60d, 2197 entries)
 # Root cause: on quiet-market days (daily_range 3-4%) signals are almost all FP
 # because coins don't make big moves regardless of technical setup.
