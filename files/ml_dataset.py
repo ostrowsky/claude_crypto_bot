@@ -229,6 +229,38 @@ def _w(record: Dict[str, Any]) -> None:
         _pylog.warning("ml_dataset write error: %s", e)
 
 
+# Same batching hook as critic_dataset: the live bot sets DEFER_MUTATION so that
+# updates to existing records are queued as mutators (rec -> bool) and replayed
+# together in ONE file pass, instead of rewriting this ~114 MB file per update.
+DEFER_MUTATION = None
+
+
+def _dispatch(mutator) -> None:
+    if DEFER_MUTATION is not None:
+        DEFER_MUTATION(mutator)
+    else:
+        _rewrite_records(mutator)
+
+
+def apply_batch(mutators) -> None:
+    """Apply many per-record mutators in a single file pass."""
+    batch = list(mutators)
+    if not batch:
+        return
+
+    def _combined(rec):
+        changed = False
+        for m in batch:
+            try:
+                if m(rec):
+                    changed = True
+            except Exception as e:
+                _pylog.warning('ml_dataset batch mutator failed: %s', e)
+        return changed
+
+    _rewrite_records(_combined)
+
+
 def _rewrite_records(mutator) -> None:
     """
     Shared read-modify-write path for JSONL updates.
@@ -523,7 +555,7 @@ def fill_pending_from_data(
                 changed = True
             return changed
 
-        _rewrite_records(_mutate)
+        _dispatch(_mutate)
     except Exception as e:
         _pylog.warning("fill_pending_from_data error: %s", e)
 
@@ -577,7 +609,7 @@ def fill_labels(
             rec["labels"]["bars_held"] = new_bars_held
             return True
 
-        _rewrite_records(_mutate)
+        _dispatch(_mutate)
     except Exception as e:
         _pylog.warning("fill_labels error: %s", e)
 
@@ -608,6 +640,6 @@ def fill_forward_label(
             rec["labels"][key_label] = new_label
             return True
 
-        _rewrite_records(_mutate)
+        _dispatch(_mutate)
     except Exception as e:
         _pylog.warning("fill_forward_label error: %s", e)

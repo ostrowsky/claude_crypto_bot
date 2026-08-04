@@ -229,10 +229,44 @@ def get_record(record_id: str) -> Optional[Dict[str, Any]]:
     return None
 
 
-# Optional hook: when set to a callable, expensive whole-file updates are handed
-# to it instead of running inline (the live bot points this at a background
-# worker so the asyncio loop is never blocked by a 128 MB rewrite).
-DEFER_UPDATE = None
+# Optional hook for the live bot. Every update to an existing record needs a full
+# pass over this ~128 MB file, so doing them one-by-one is what froze the asyncio
+# loop. When DEFER_MUTATION is set, each update is handed over as a *mutator*
+# (rec -> bool) instead of being applied immediately; the live process queues
+# them and replays a whole batch in ONE pass via apply_batch(). Scripts and tests
+# leave the hook unset and keep the original inline behaviour.
+DEFER_MUTATION = None
+
+
+def _dispatch(mutator) -> None:
+    if DEFER_MUTATION is not None:
+        DEFER_MUTATION(mutator)
+    else:
+        _rewrite_records(mutator)
+
+
+def apply_batch(mutators) -> None:
+    """Apply many per-record mutators in a single file pass.
+
+    Each mutator filters by record id itself and returns True when it changed
+    the record, so they compose: one read+write of the file no matter how many
+    updates were queued. Cost drops from N x 128 MB to 1 x 128 MB per flush.
+    """
+    batch = list(mutators)
+    if not batch:
+        return
+
+    def _combined(rec: Dict[str, Any]) -> bool:
+        changed = False
+        for m in batch:
+            try:
+                if m(rec):
+                    changed = True
+            except Exception as e:   # one bad mutator must not drop the batch
+                _pylog.warning("critic_dataset batch mutator failed: %s", e)
+        return changed
+
+    _rewrite_records(_combined)
 
 
 def _rewrite_records(mutator) -> None:
@@ -326,7 +360,7 @@ def _update_existing_candidate(
         changed = True
         return True
 
-    _rewrite_records(_mutate)
+    _dispatch(_mutate)
     return changed
 
 
@@ -365,12 +399,7 @@ def log_candidate(
 ) -> str:
     record_id = _candidate_id(sym, tf, bar_ts)
     if _is_logged(record_id):
-        # Updating an existing candidate rewrites the WHOLE file (~128 MB), which
-        # froze the live asyncio loop for 90-300s (2026-08-04). The live process
-        # sets DEFER_UPDATE to push that rewrite onto a background worker; other
-        # callers (scripts, tests) leave it None and get the original inline
-        # behaviour. Only plain scalars are captured, so nothing races.
-        _update = lambda: _update_existing_candidate(   # noqa: E731
+        _update_existing_candidate(
             record_id=record_id,
             action=action,
             reason_code=reason_code,
@@ -389,10 +418,6 @@ def log_candidate(
             signal_flags=signal_flags,
             near_miss=near_miss,
         )
-        if DEFER_UPDATE is not None:
-            DEFER_UPDATE(_update)
-        else:
-            _update()
         return record_id
 
     rec = build_runtime_record(
@@ -477,7 +502,7 @@ def mark_trade_taken(record_id: str, linked_ml_record_id: str = "") -> None:
             return False
         return changed
 
-    _rewrite_records(_mutate)
+    _dispatch(_mutate)
 
 
 def fill_trade_outcome(record_id: str, exit_pnl: float, exit_reason: str, bars_held: int) -> None:
@@ -516,7 +541,7 @@ def fill_trade_outcome(record_id: str, exit_pnl: float, exit_reason: str, bars_h
             pass
         return True
 
-    _rewrite_records(_mutate)
+    _dispatch(_mutate)
 
 
 def fill_forward_label(record_id: str, horizon: int, ret_pct: float) -> None:
@@ -537,7 +562,7 @@ def fill_forward_label(record_id: str, horizon: int, ret_pct: float) -> None:
         rec["labels"][key_label] = new_label
         return True
 
-    _rewrite_records(_mutate)
+    _dispatch(_mutate)
 
 
 def fill_pending_from_data(sym: str, tf: str, t_arr: Any, c_arr: Any, bar_ms: int,
@@ -599,7 +624,7 @@ def fill_pending_from_data(sym: str, tf: str, t_arr: Any, c_arr: Any, bar_ms: in
 
         return changed
 
-    _rewrite_records(_mutate)
+    _dispatch(_mutate)
 
 
 def _teacher_local_window(target_day: date, phase: str, tz: ZoneInfo) -> tuple[datetime, datetime]:

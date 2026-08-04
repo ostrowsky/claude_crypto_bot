@@ -15,8 +15,8 @@ import asyncio
 import json
 import logging
 import threading
+import time
 from collections import deque
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
@@ -3077,50 +3077,76 @@ def load_positions() -> dict:
         return {}
 
 
-# Label writes rewrite the WHOLE dataset file (critic_dataset.jsonl is ~128 MB,
-# ml_dataset.jsonl ~114 MB), so calling them inline froze the asyncio loop for
-# 130-300s at a time: the Telegram UI timed out and the UI watchdog used to
-# force-exit the process on top of that (2026-08-04). Offload to a single
-# background thread — one worker keeps the rewrites serialised (no concurrent
-# 128 MB passes) while the loop stays responsive. Labels are best-effort: work
-# queued at shutdown is lost, and the daily learning job recomputes them.
-_LABEL_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="labels")
-_label_backlog = 0
-_label_backlog_lock = threading.Lock()
+# Dataset updates (labels, candidate re-logs, mark_trade_taken) each need a full
+# pass over a ~128 MB file. Doing them inline froze the asyncio loop for 130-300s
+# (2026-08-04: Telegram timeouts, and the UI watchdog killing the process on top).
+#
+# Both dataset modules now hand their updates over as mutators instead of
+# rewriting immediately. We collect them here and flush on a background thread:
+# one pass over each file applies EVERY queued mutation, so N updates cost one
+# rewrite instead of N. Best-effort — anything still queued at shutdown is lost
+# and the daily learning job recomputes it.
+_MUT_FLUSH_SEC = 5.0
+_mut_lock = threading.Lock()
+_mut_pending: Dict[str, list] = {"critic": [], "ml": []}
+_mut_flusher_started = False
 
 
-def _submit_label_job(fn) -> None:
-    global _label_backlog
-    with _label_backlog_lock:
-        _label_backlog += 1
-        depth = _label_backlog
-    if depth in (25, 100, 250):
-        log.warning("label-write backlog is %d jobs — dataset rewrites are not "
-                    "keeping up (files ~240 MB); consider compaction", depth)
+def _queue_mutation(kind: str, mutator) -> None:
+    with _mut_lock:
+        _mut_pending[kind].append(mutator)
+        depth = len(_mut_pending[kind])
+    if depth in (500, 2000, 5000):
+        log.warning("%s mutation queue at %d — flushes are not keeping up "
+                    "(dataset ~128 MB); consider compaction", kind, depth)
+    _start_mutation_flusher()
 
-    def _run():
-        global _label_backlog
+
+def _flush_mutations() -> None:
+    with _mut_lock:
+        critic_batch = _mut_pending["critic"]
+        ml_batch = _mut_pending["ml"]
+        _mut_pending["critic"] = []
+        _mut_pending["ml"] = []
+    for kind, batch, mod in (("critic", critic_batch, critic_dataset),
+                             ("ml", ml_batch, ml_dataset)):
+        if not batch:
+            continue
         try:
-            fn()
+            t0 = time.monotonic()
+            mod.apply_batch(batch)
+            log.info("%s dataset: applied %d queued updates in one pass (%.1fs)",
+                     kind, len(batch), time.monotonic() - t0)
         except Exception as e:
-            log.warning("label write failed: %s", e)
-        finally:
-            with _label_backlog_lock:
-                _label_backlog -= 1
-
-    try:
-        _LABEL_EXECUTOR.submit(_run)
-    except RuntimeError:            # executor shut down
-        with _label_backlog_lock:
-            _label_backlog -= 1
+            log.warning("%s batch flush failed (%d updates lost): %s", kind, len(batch), e)
 
 
-# Re-logging a candidate that already exists (same sym/tf/bar) also rewrites the
-# whole 128 MB file, and that happens on nearly every scanned candidate — the
-# single biggest source of loop freezes. Route those updates through the same
-# worker. The candidate id is derived from sym/tf/bar_ts, so callers still get
-# the right id back immediately.
-critic_dataset.DEFER_UPDATE = _submit_label_job
+def _mutation_flusher_loop() -> None:
+    while True:
+        time.sleep(_MUT_FLUSH_SEC)
+        try:
+            with _mut_lock:
+                pending = len(_mut_pending["critic"]) + len(_mut_pending["ml"])
+            if pending:
+                _flush_mutations()
+        except Exception as e:
+            log.warning("mutation flusher error (continuing): %s", e)
+
+
+def _start_mutation_flusher() -> None:
+    global _mut_flusher_started
+    if _mut_flusher_started:
+        return
+    with _mut_lock:
+        if _mut_flusher_started:
+            return
+        _mut_flusher_started = True
+    threading.Thread(target=_mutation_flusher_loop, name="dataset-flush",
+                     daemon=True).start()
+
+
+critic_dataset.DEFER_MUTATION = lambda m: _queue_mutation("critic", m)
+ml_dataset.DEFER_MUTATION = lambda m: _queue_mutation("ml", m)
 
 
 def _fill_trade_outcome_labels(
@@ -3130,33 +3156,23 @@ def _fill_trade_outcome_labels(
     exit_reason: str,
     bars_held: int,
 ) -> None:
-    ml_id = pos.ml_record_id
-    critic_id = getattr(pos, "critic_record_id", "")
-
-    def _work():
-        if ml_id:
-            ml_dataset.fill_labels(
-                ml_id, exit_pnl=exit_pnl, exit_reason=exit_reason, bars_held=bars_held,
-            )
-        if critic_id:
-            critic_dataset.fill_trade_outcome(
-                critic_id, exit_pnl=exit_pnl, exit_reason=exit_reason, bars_held=bars_held,
-            )
-
-    _submit_label_job(_work)
+    if pos.ml_record_id:
+        ml_dataset.fill_labels(
+            pos.ml_record_id, exit_pnl=exit_pnl, exit_reason=exit_reason,
+            bars_held=bars_held,
+        )
+    if getattr(pos, "critic_record_id", ""):
+        critic_dataset.fill_trade_outcome(
+            pos.critic_record_id, exit_pnl=exit_pnl, exit_reason=exit_reason,
+            bars_held=bars_held,
+        )
 
 
 def _fill_forward_labels(pos: "OpenPosition", horizon: int, ret_pct: float) -> None:
-    ml_id = pos.ml_record_id
-    critic_id = getattr(pos, "critic_record_id", "")
-
-    def _work():
-        if ml_id:
-            ml_dataset.fill_forward_label(ml_id, horizon, ret_pct)
-        if critic_id:
-            critic_dataset.fill_forward_label(critic_id, horizon, ret_pct)
-
-    _submit_label_job(_work)
+    if pos.ml_record_id:
+        ml_dataset.fill_forward_label(pos.ml_record_id, horizon, ret_pct)
+    if getattr(pos, "critic_record_id", ""):
+        critic_dataset.fill_forward_label(pos.critic_record_id, horizon, ret_pct)
 
 
 def _check_portfolio_limits(
@@ -5479,13 +5495,8 @@ async def _poll_coin(
                 )
                 pos.ml_record_id = ml_id
                 if pos.critic_record_id:
-                    # Also a full 128 MB rewrite — offload like the label writes,
-                    # otherwise every ENTRY freezes the loop for ~90s.
-                    _crit_id = pos.critic_record_id
-                    _submit_label_job(
-                        lambda: critic_dataset.mark_trade_taken(
-                            _crit_id, linked_ml_record_id=ml_id)
-                    )
+                    critic_dataset.mark_trade_taken(
+                        pos.critic_record_id, linked_ml_record_id=ml_id)
             except Exception as _ml_err:
                 log.warning("ml_dataset.log_signal_candidate failed for %s: %s", sym, _ml_err)
 
