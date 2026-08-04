@@ -235,16 +235,16 @@ def _w(record: Dict[str, Any]) -> None:
 DEFER_MUTATION = None
 
 
-def _dispatch(mutator) -> None:
+def _dispatch(mutator, record_id=None) -> None:
     if DEFER_MUTATION is not None:
-        DEFER_MUTATION(mutator)
+        DEFER_MUTATION(record_id, mutator)
     else:
         _rewrite_records(mutator)
 
 
-def apply_batch(mutators) -> None:
-    """Apply many per-record mutators in a single file pass."""
-    batch = list(mutators)
+def apply_batch(pairs) -> None:
+    """Apply many queued updates in a single file pass."""
+    batch = [m for _rid, m in pairs if m is not None]
     if not batch:
         return
 
@@ -271,14 +271,10 @@ def _rewrite_records(mutator) -> None:
     if not ML_FILE.exists():
         return
     try:
-        # Most rewrite attempts are no-ops. Pre-scan without the expensive
-        # cross-process lock and only take the lock when a real rewrite is
-        # needed. We still re-read under lock before writing, so we keep the
-        # latest file contents.
-        _, maybe_changed, maybe_bad_rows = _collect_mutated_lines(mutator)
-        if not (maybe_changed or maybe_bad_rows):
-            return
-
+        # There used to be a pre-scan here to avoid taking the cross-process lock
+        # on a no-op. On this ~114 MB file that pre-scan parses every record a
+        # SECOND time and doubles the cost of every flush, so parse once inside
+        # the lock — callers only reach this when there is work to do.
         with _dataset_io_lock():
             updated, changed, had_bad_rows = _collect_mutated_lines(mutator)
             if not (changed or had_bad_rows):
@@ -609,7 +605,7 @@ def fill_labels(
             rec["labels"]["bars_held"] = new_bars_held
             return True
 
-        _dispatch(_mutate)
+        _dispatch(_mutate, record_id)
     except Exception as e:
         _pylog.warning("fill_labels error: %s", e)
 
@@ -640,6 +636,6 @@ def fill_forward_label(
             rec["labels"][key_label] = new_label
             return True
 
-        _dispatch(_mutate)
+        _dispatch(_mutate, record_id)
     except Exception as e:
         _pylog.warning("fill_forward_label error: %s", e)

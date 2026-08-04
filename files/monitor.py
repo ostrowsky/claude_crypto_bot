@@ -3092,9 +3092,9 @@ _mut_pending: Dict[str, list] = {"critic": [], "ml": []}
 _mut_flusher_started = False
 
 
-def _queue_mutation(kind: str, mutator) -> None:
+def _queue_mutation(kind: str, record_id, mutator) -> None:
     with _mut_lock:
-        _mut_pending[kind].append(mutator)
+        _mut_pending[kind].append((record_id, mutator))
         depth = len(_mut_pending[kind])
     if depth in (500, 2000, 5000):
         log.warning("%s mutation queue at %d — flushes are not keeping up "
@@ -3145,8 +3145,8 @@ def _start_mutation_flusher() -> None:
                      daemon=True).start()
 
 
-critic_dataset.DEFER_MUTATION = lambda m: _queue_mutation("critic", m)
-ml_dataset.DEFER_MUTATION = lambda m: _queue_mutation("ml", m)
+critic_dataset.DEFER_MUTATION = lambda rid, m: _queue_mutation("critic", rid, m)
+ml_dataset.DEFER_MUTATION = lambda rid, m: _queue_mutation("ml", rid, m)
 
 
 def _fill_trade_outcome_labels(

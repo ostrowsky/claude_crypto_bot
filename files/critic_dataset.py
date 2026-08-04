@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import threading
 import time
 from collections import OrderedDict
@@ -270,45 +271,110 @@ def get_record(record_id: str) -> Optional[Dict[str, Any]]:
 DEFER_MUTATION = None
 
 
-def _dispatch(mutator) -> None:
+def _dispatch(mutator, record_id: Optional[str] = None) -> None:
+    """Apply a mutation now, or hand it to the live bot's batcher.
+
+    record_id lets the batcher skip parsing records the batch does not target;
+    pass None when the mutation may touch arbitrary records."""
     if DEFER_MUTATION is not None:
-        DEFER_MUTATION(mutator)
+        DEFER_MUTATION(record_id, mutator)
     else:
         _rewrite_records(mutator)
 
 
-def apply_batch(mutators) -> None:
-    """Apply many per-record mutators in a single file pass.
+_ID_RE = re.compile(rb'"id":\s*"([^"]+)"')
 
-    Each mutator filters by record id itself and returns True when it changed
-    the record, so they compose: one read+write of the file no matter how many
-    updates were queued. Cost drops from N x 128 MB to 1 x 128 MB per flush.
+
+def apply_batch(pairs) -> None:
+    """Apply many queued updates in a single streaming pass.
+
+    `pairs` is [(record_id, mutator), ...]; record_id may be None when a mutator
+    can touch arbitrary records.
+
+    The expensive part of a rewrite is not the I/O (a raw read of this ~128 MB
+    file takes ~3.5s) but json.loads + json.dumps of all ~32k records, which cost
+    78-144s per flush and starved the event loop. A flush usually targets a
+    handful of ids, so lines whose id is not in the batch are copied through
+    VERBATIM — no parse, no re-serialisation.
     """
-    batch = list(mutators)
-    if not batch:
+    batch = [(rid, m) for rid, m in pairs if m is not None]
+    if not batch or not CRITIC_FILE.exists():
         return
 
-    def _combined(rec: Dict[str, Any]) -> bool:
+    by_id: Dict[str, list] = {}
+    untargeted = []                       # mutators without a known record id
+    for rid, m in batch:
+        if rid:
+            by_id.setdefault(str(rid), []).append(m)
+        else:
+            untargeted.append(m)
+
+    def _run(rec: Dict[str, Any], muts) -> bool:
         changed = False
-        for m in batch:
+        for m in muts:
             try:
                 if m(rec):
                     changed = True
-            except Exception as e:   # one bad mutator must not drop the batch
+            except Exception as e:        # one bad mutator must not drop the batch
                 _pylog.warning("critic_dataset batch mutator failed: %s", e)
         return changed
 
-    _rewrite_records(_combined)
+    try:
+        with _dataset_io_lock():
+            tmp = CRITIC_FILE.with_name(
+                f"{CRITIC_FILE.name}.{os.getpid()}.{threading.get_ident()}.tmp"
+            )
+            changed_any = False
+            with CRITIC_FILE.open("rb") as src, tmp.open("wb") as out:
+                for raw in src:
+                    if not raw.strip():
+                        continue
+                    muts = list(untargeted)
+                    if by_id:
+                        m = _ID_RE.search(raw)
+                        rid = m.group(1).decode("utf-8", "replace") if m else None
+                        if rid is not None and rid in by_id:
+                            muts += by_id[rid]
+                        elif rid is None:
+                            # id not found by the fast path — fall back to a
+                            # substring probe so we never silently skip a record.
+                            for cand, cms in by_id.items():
+                                if f'"{cand}"'.encode("utf-8") in raw:
+                                    muts += cms
+                    if not muts:
+                        out.write(raw)               # untouched: copy as-is
+                        continue
+                    try:
+                        rec = json.loads(raw.decode("utf-8", "replace"))
+                    except json.JSONDecodeError:
+                        continue                     # drop unparsable row
+                    if not isinstance(rec, dict):
+                        continue
+                    if _run(rec, muts):
+                        changed_any = True
+                        out.write(
+                            (json.dumps(rec, ensure_ascii=False, cls=_Enc) + "\n")
+                            .encode("utf-8")
+                        )
+                    else:
+                        out.write(raw)
+            if changed_any:
+                _atomic_replace_with_retry(tmp, CRITIC_FILE)
+            else:
+                tmp.unlink(missing_ok=True)
+    except Exception as e:
+        _pylog.warning("critic_dataset batch apply error: %s", e)
 
 
 def _rewrite_records(mutator) -> None:
     if not CRITIC_FILE.exists():
         return
     try:
-        _, maybe_changed, maybe_bad_rows = _collect_mutated_lines(mutator)
-        if not (maybe_changed or maybe_bad_rows):
-            return
-
+        # NOTE: there used to be a dry-run _collect_mutated_lines() here to avoid
+        # taking the lock when nothing changed. On a 128 MB file that dry run
+        # parses every record a SECOND time, doubling the cost of every flush
+        # (measured 78-144s per pass). Callers only get here when there is work
+        # to do, so parse once, inside the lock.
         with _dataset_io_lock():
             updated, changed, had_bad_rows = _collect_mutated_lines(mutator)
             if not (changed or had_bad_rows):
@@ -392,7 +458,7 @@ def _update_existing_candidate(
         changed = True
         return True
 
-    _dispatch(_mutate)
+    _dispatch(_mutate, record_id)
     return changed
 
 
@@ -534,7 +600,7 @@ def mark_trade_taken(record_id: str, linked_ml_record_id: str = "") -> None:
             return False
         return changed
 
-    _dispatch(_mutate)
+    _dispatch(_mutate, record_id)
 
 
 def fill_trade_outcome(record_id: str, exit_pnl: float, exit_reason: str, bars_held: int) -> None:
@@ -573,7 +639,7 @@ def fill_trade_outcome(record_id: str, exit_pnl: float, exit_reason: str, bars_h
             pass
         return True
 
-    _dispatch(_mutate)
+    _dispatch(_mutate, record_id)
 
 
 def fill_forward_label(record_id: str, horizon: int, ret_pct: float) -> None:
@@ -594,7 +660,7 @@ def fill_forward_label(record_id: str, horizon: int, ret_pct: float) -> None:
         rec["labels"][key_label] = new_label
         return True
 
-    _dispatch(_mutate)
+    _dispatch(_mutate, record_id)
 
 
 def fill_pending_from_data(sym: str, tf: str, t_arr: Any, c_arr: Any, bar_ms: int,
