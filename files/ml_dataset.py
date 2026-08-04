@@ -87,6 +87,7 @@ ML Dataset Logger — ml_dataset.jsonl
 import json
 import logging
 import os
+import re
 import threading
 import time
 from contextlib import contextmanager
@@ -242,23 +243,82 @@ def _dispatch(mutator, record_id=None) -> None:
         _rewrite_records(mutator)
 
 
+_ID_RE = re.compile(rb'"id":\s*"([^"]+)"')
+
+
 def apply_batch(pairs) -> None:
-    """Apply many queued updates in a single file pass."""
-    batch = [m for _rid, m in pairs if m is not None]
-    if not batch:
+    """Apply many queued updates in a single streaming pass.
+
+    `pairs` is [(record_id, mutator), ...]; record_id may be None when a mutator
+    can touch arbitrary records. Lines whose id is not in the batch are copied
+    through verbatim, so a flush costs a raw file copy instead of json.loads +
+    json.dumps over every record (same fix as critic_dataset).
+    """
+    batch = [(rid, m) for rid, m in pairs if m is not None]
+    if not batch or not ML_FILE.exists():
         return
 
-    def _combined(rec):
+    by_id: Dict[str, list] = {}
+    untargeted = []
+    for rid, m in batch:
+        if rid:
+            by_id.setdefault(str(rid), []).append(m)
+        else:
+            untargeted.append(m)
+
+    def _run(rec, muts) -> bool:
         changed = False
-        for m in batch:
+        for m in muts:
             try:
                 if m(rec):
                     changed = True
             except Exception as e:
-                _pylog.warning('ml_dataset batch mutator failed: %s', e)
+                _pylog.warning("ml_dataset batch mutator failed: %s", e)
         return changed
 
-    _rewrite_records(_combined)
+    try:
+        with _dataset_io_lock():
+            tmp = ML_FILE.with_name(
+                f"{ML_FILE.name}.{os.getpid()}.{threading.get_ident()}.tmp"
+            )
+            changed_any = False
+            with ML_FILE.open("rb") as src, tmp.open("wb") as out:
+                for raw in src:
+                    if not raw.strip():
+                        continue
+                    muts = list(untargeted)
+                    if by_id:
+                        m = _ID_RE.search(raw)
+                        rid = m.group(1).decode("utf-8", "replace") if m else None
+                        if rid is not None and rid in by_id:
+                            muts += by_id[rid]
+                        elif rid is None:
+                            for cand, cms in by_id.items():
+                                if f'"{cand}"'.encode("utf-8") in raw:
+                                    muts += cms
+                    if not muts:
+                        out.write(raw)
+                        continue
+                    try:
+                        rec = json.loads(raw.decode("utf-8", "replace"))
+                    except json.JSONDecodeError:
+                        continue
+                    if not isinstance(rec, dict):
+                        continue
+                    if _run(rec, muts):
+                        changed_any = True
+                        out.write(
+                            (json.dumps(rec, ensure_ascii=False, cls=_Enc) + "\n")
+                            .encode("utf-8")
+                        )
+                    else:
+                        out.write(raw)
+            if changed_any:
+                _atomic_replace_with_retry(tmp, ML_FILE)
+            else:
+                tmp.unlink(missing_ok=True)
+    except Exception as e:
+        _pylog.warning("ml_dataset batch apply error: %s", e)
 
 
 def _rewrite_records(mutator) -> None:
