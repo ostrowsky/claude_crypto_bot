@@ -210,16 +210,48 @@ def _append(record: Dict[str, Any]) -> None:
             f.write(json.dumps(record, ensure_ascii=False, cls=_Enc) + "\n")
 
 
+def _iter_lines_reverse(path: Path, chunk: int = 1 << 20):
+    """Yield the file's lines newest-first without loading it into memory."""
+    with path.open("rb") as f:
+        f.seek(0, os.SEEK_END)
+        pos = f.tell()
+        tail = b""
+        while pos > 0:
+            size = min(chunk, pos)
+            pos -= size
+            f.seek(pos)
+            block = f.read(size) + tail
+            parts = block.split(b"\n")
+            tail = parts.pop(0)          # may be an incomplete first line
+            for part in reversed(parts):
+                if part.strip():
+                    yield part
+        if tail.strip():
+            yield tail
+
+
 def get_record(record_id: str) -> Optional[Dict[str, Any]]:
+    """Look up one record by id.
+
+    Used while showing the Telegram menu (position metadata backfill). The old
+    implementation read the whole ~128 MB file and json.loads'ed EVERY line,
+    which measured 17.6s per lookup — with a few open positions that froze the
+    event loop for a minute and the menu timed out (2026-08-04).
+
+    Two changes make it near-instant: scan newest-first (records for open
+    positions were appended recently, so the match is near the end) and skip the
+    JSON parse unless the raw line even contains the id.
+    """
     if not record_id or not CRITIC_FILE.exists():
         return None
+    needle = f'"{record_id}"'.encode("utf-8")
     try:
         with _dataset_io_lock():
-            for line in CRITIC_FILE.read_text(encoding="utf-8").splitlines():
-                if not line.strip():
+            for raw in _iter_lines_reverse(CRITIC_FILE):
+                if needle not in raw:
                     continue
                 try:
-                    rec = json.loads(line)
+                    rec = json.loads(raw.decode("utf-8", errors="replace"))
                 except json.JSONDecodeError:
                     continue
                 if isinstance(rec, dict) and rec.get("id") == record_id:
