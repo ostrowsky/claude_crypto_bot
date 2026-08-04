@@ -229,6 +229,12 @@ def get_record(record_id: str) -> Optional[Dict[str, Any]]:
     return None
 
 
+# Optional hook: when set to a callable, expensive whole-file updates are handed
+# to it instead of running inline (the live bot points this at a background
+# worker so the asyncio loop is never blocked by a 128 MB rewrite).
+DEFER_UPDATE = None
+
+
 def _rewrite_records(mutator) -> None:
     if not CRITIC_FILE.exists():
         return
@@ -359,7 +365,12 @@ def log_candidate(
 ) -> str:
     record_id = _candidate_id(sym, tf, bar_ts)
     if _is_logged(record_id):
-        _update_existing_candidate(
+        # Updating an existing candidate rewrites the WHOLE file (~128 MB), which
+        # froze the live asyncio loop for 90-300s (2026-08-04). The live process
+        # sets DEFER_UPDATE to push that rewrite onto a background worker; other
+        # callers (scripts, tests) leave it None and get the original inline
+        # behaviour. Only plain scalars are captured, so nothing races.
+        _update = lambda: _update_existing_candidate(   # noqa: E731
             record_id=record_id,
             action=action,
             reason_code=reason_code,
@@ -378,6 +389,10 @@ def log_candidate(
             signal_flags=signal_flags,
             near_miss=near_miss,
         )
+        if DEFER_UPDATE is not None:
+            DEFER_UPDATE(_update)
+        else:
+            _update()
         return record_id
 
     rec = build_runtime_record(

@@ -3115,6 +3115,14 @@ def _submit_label_job(fn) -> None:
             _label_backlog -= 1
 
 
+# Re-logging a candidate that already exists (same sym/tf/bar) also rewrites the
+# whole 128 MB file, and that happens on nearly every scanned candidate — the
+# single biggest source of loop freezes. Route those updates through the same
+# worker. The candidate id is derived from sym/tf/bar_ts, so callers still get
+# the right id back immediately.
+critic_dataset.DEFER_UPDATE = _submit_label_job
+
+
 def _fill_trade_outcome_labels(
     pos: "OpenPosition",
     *,
@@ -5471,7 +5479,13 @@ async def _poll_coin(
                 )
                 pos.ml_record_id = ml_id
                 if pos.critic_record_id:
-                    critic_dataset.mark_trade_taken(pos.critic_record_id, linked_ml_record_id=ml_id)
+                    # Also a full 128 MB rewrite — offload like the label writes,
+                    # otherwise every ENTRY freezes the loop for ~90s.
+                    _crit_id = pos.critic_record_id
+                    _submit_label_job(
+                        lambda: critic_dataset.mark_trade_taken(
+                            _crit_id, linked_ml_record_id=ml_id)
+                    )
             except Exception as _ml_err:
                 log.warning("ml_dataset.log_signal_candidate failed for %s: %s", sym, _ml_err)
 
