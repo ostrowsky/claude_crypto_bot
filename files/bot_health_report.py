@@ -834,6 +834,14 @@ def render_telegram(r: dict) -> str:
             every = max(2, round(100 / sm))
             out.append(f"<b>Главный тормоз:</b> каждую ~{every}-ю ракету "
                        f"из нашего списка бот вообще не видит.")
+        # Uptime context: the numbers above count only days the bot actually ran.
+        # Without this line an outage reads as a performance collapse (2026-07-23:
+        # 8 days down -> report said "~2 из 100" while live days were at a record).
+        _dwin = ns_md.get("days_window")
+        _dfull = ns_md.get("days_full")
+        if _dwin and _dfull is not None and _dfull < _dwin:
+            out.append(f"⚠️ <b>Бот работал {_dfull} из {_dwin} дней</b> — "
+                       f"цифры выше только за рабочие дни; остальные не в счёт.")
     else:
         out.append("<b>Главное:</b> результат за сегодня ещё считается.")
     out.append("")

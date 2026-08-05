@@ -55,6 +55,43 @@ def load_winners(dataset_path: Path, label_field: str, cut_dt: datetime,
     return winners, eod_ret
 
 
+MIN_ACTIVE_HOURS = 18   # a full trading day for the bot; below this it was down
+
+
+def load_uptime(cut_dt: datetime):
+    """Which days did the bot actually run?
+
+    The metric is a ratio over top-20 of the window, and a day the bot was down
+    contributes only misses — so an outage reads exactly like a collapse in
+    performance. On 2026-07-23..07-31 the bot was dead for 8 days and the report
+    announced "~2 of 100" while the live days were at their best-ever level.
+
+    A running day emits events almost every hour (400-2500/day); a dead day emits
+    none and a partial day only covers part of the clock. Days that cover fewer
+    than MIN_ACTIVE_HOURS are reported separately and excluded from the ratio.
+    """
+    hours: dict[str, set] = {}
+    with io.open(ROOT/"files"/"bot_events.jsonl", encoding="utf-8", errors="replace") as f:
+        for ln in f:
+            if '"event"' not in ln:
+                continue
+            try:
+                e = json.loads(ln)
+            except Exception:
+                continue
+            ts = str(e.get("ts", ""))
+            try:
+                dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+            except Exception:
+                continue
+            if dt < cut_dt:
+                continue
+            hours.setdefault(dt.strftime("%Y-%m-%d"), set()).add(dt.hour)
+    full = {d for d, hh in hours.items() if len(hh) >= MIN_ACTIVE_HOURS}
+    partial = {d: len(hh) for d, hh in hours.items() if len(hh) < MIN_ACTIVE_HOURS}
+    return full, partial, hours
+
+
 def load_entries(cut_dt: datetime):
     first_entry = {}; pnl_pairs = {}; entries = {}
     with io.open(ROOT/"files"/"bot_events.jsonl", encoding="utf-8") as f:
@@ -137,12 +174,16 @@ def main():
 
     first_entry, pnl_pairs = load_entries(cut_dt)
     watchlist = load_watchlist()  # canonical NS: tradeable universe only
+    full_days, partial_days, _hours = load_uptime(cut_dt)
 
     # Top-20 (existing) — filtered to watchlist per the canonical definition
-    top20, eod_ret = load_winners(ROOT/"files"/"top_gainer_dataset.jsonl",
-                                  label_field="label_top20", cut_dt=cut_dt,
-                                  watchlist=watchlist)
+    top20_all, eod_ret = load_winners(ROOT/"files"/"top_gainer_dataset.jsonl",
+                                      label_field="label_top20", cut_dt=cut_dt,
+                                      watchlist=watchlist)
+    # Uptime-adjusted: only days the bot could actually act on.
+    top20 = {k for k in top20_all if k[0] in full_days}
     res_top20 = compute_north_star(top20, eod_ret, first_entry, pnl_pairs, "top20")
+    res_raw = compute_north_star(top20_all, eod_ret, first_entry, pnl_pairs, "top20_raw")
 
     # Sustained (P1.1 — try v2 dataset, fall back if absent)
     res_sustained = None
@@ -156,6 +197,17 @@ def main():
 
     # Output
     print(f"=== NORTH-STAR · last {args.days}d ===\n")
+    down = args.days - len(full_days)
+    print(f"uptime: {len(full_days)}/{args.days} full days"
+          + (f"  ·  DOWN/partial: {down} "
+             f"({', '.join(sorted(partial_days)) or 'no data at all'})" if down else ""))
+    if down:
+        print(f"  metric below counts only the {len(full_days)} full days "
+              f"(a day the bot was down contributes only misses).")
+        print(f"  for reference, counting all days: "
+              f"EC={res_raw['early_capture']:.3f} cov={res_raw['decomp_coverage']:.2f} "
+              f"(n={res_raw['n']}) — DO NOT read as performance")
+    print()
     for r in [res_top20, res_sustained]:
         if r is None: continue
         print(f"EarlyCapture@{r['label']:<10}  {r['early_capture']:.3f}  "
@@ -176,6 +228,10 @@ def main():
     # METRIC_JSON for daily aggregator (keep top-20 as primary)
     metric = {
         "metric": "NS_EarlyCapture_top20",
+        "days_window": args.days,
+        "days_full": len(full_days),
+        "days_down_or_partial": args.days - len(full_days),
+        "raw_early_capture_all_days": res_raw["early_capture"],
         "n": res_top20["n"],
         "early_capture": res_top20["early_capture"],
         "decomp_coverage": res_top20["decomp_coverage"],

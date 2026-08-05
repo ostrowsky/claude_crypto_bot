@@ -51,6 +51,11 @@ with io.open(ROOT / "files" / "top_gainer_dataset.jsonl", encoding="utf-8") as f
 
 # 2) Bot events per (date, sym)
 events_by = defaultdict(list)  # (date, sym) -> [(ev, reason)]
+# Uptime: a day the bot was down yields only "no_event" and would be read as a
+# silent-miss collapse (the 07-23..07-31 outage did exactly that). Days covering
+# fewer than MIN_ACTIVE_HOURS are excluded and reported separately.
+MIN_ACTIVE_HOURS = 18
+active_hours = defaultdict(set)  # date -> {hour, ...}
 with io.open(ROOT / "files" / "bot_events.jsonl", encoding="utf-8") as f:
     for ln in f:
         try: e = json.loads(ln)
@@ -62,6 +67,7 @@ with io.open(ROOT / "files" / "bot_events.jsonl", encoding="utf-8") as f:
         sym = e.get("sym") or e.get("symbol") or ""
         if not sym: continue
         d = dt.strftime("%Y-%m-%d")
+        active_hours[d].add(dt.hour)
         ev = e.get("event","")
         # decision events use various shapes; try multiple keys for reason
         reason = (e.get("decision") or {}).get("reason_code") if isinstance(e.get("decision"), dict) else None
@@ -76,7 +82,11 @@ no_event_examples = []
 blocked_examples = []
 day_breakdown = defaultdict(lambda: Counter())
 
+full_days = {d for d, hh in active_hours.items() if len(hh) >= MIN_ACTIVE_HOURS}
+skipped_days = sorted(d for d in top20_by_day if d not in full_days)
 for d, syms in sorted(top20_by_day.items()):
+    if d not in full_days:
+        continue
     for sym in syms:
         evs = events_by.get((d, sym), [])
         ev_types = [x[0] for x in evs]
@@ -132,9 +142,15 @@ if blocked_examples:
     for d, sym, r, n in blocked_examples:
         print(f"  {d}  {sym:<14} top_reason={r}  (n_blocks={n})")
 
+print(f"\nuptime: {len(full_days)} full days counted; "
+      f"{len(skipped_days)} day(s) excluded as down/partial"
+      + (f" ({', '.join(skipped_days)})" if skipped_days else ""))
+
 # METRIC_JSON for daily aggregator
 metric = {
     "metric": "C1_C2_coverage_funnel",
+    "days_full": len(full_days),
+    "days_excluded_down": len(skipped_days),
     "n_top20_winners": total,
     "entered": classes.get("entered", 0),
     "blocked_only": classes.get("blocked_only", 0),
