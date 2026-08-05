@@ -15,6 +15,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import re
 import json
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -429,6 +430,42 @@ def filter_locked_keys(hypotheses: list[dict]) -> list[dict]:
     return [h for h in hypotheses if h.get("config_key") not in DNT_KEYS]
 
 
+def known_config_keys() -> set[str]:
+    """Module-level tunables actually defined in config.py."""
+    try:
+        src = (PL.FILES_DIR / "config.py").read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return set()
+    return set(re.findall(r"^([A-Z][A-Z0-9_]*)\s*[:=]", src, re.M))
+
+
+def filter_unknown_keys(hypotheses: list[dict]) -> list[dict]:
+    """Drop proposals that target a parameter the bot does not have.
+
+    Both layers invent names: the rule layer builds keys by interpolation
+    (f"ML_PROBA_MIN_{mode}", f"GATE_{gate}_THRESHOLD"), and the LLM layer makes
+    them up outright. On 2026-08-05 ALL 16 queued hypotheses referenced keys
+    absent from config.py — two of them proposed position sizing, which this
+    alert-only bot does not have. Nothing had reached a decision since 06-17
+    because the queue was pure noise, while the morning report kept advertising a
+    ready-to-run approve command for a nonexistent parameter.
+    """
+    known = known_config_keys()
+    if not known:                       # cannot verify -> do not silently drop
+        return hypotheses
+    kept, dropped = [], []
+    for h in hypotheses:
+        if h.get("config_key") in known:
+            kept.append(h)
+        else:
+            dropped.append(f"{h.get('rule')}({h.get('config_key')})")
+    if dropped:
+        print(f"[L2] dropped {len(dropped)} hypothesis(es) targeting unknown "
+              f"config keys: {', '.join(dropped[:6])}"
+              + (" ..." if len(dropped) > 6 else ""))
+    return kept
+
+
 def rank(hypotheses: list[dict]) -> list[dict]:
     """Sort by (severity, days_red, abs(expected_delta upper))."""
     sev_order = {"critical": 3, "red": 2, "yellow": 1}
@@ -479,6 +516,7 @@ def main():
     hypotheses = dedup_by_key(rule_hyps + claude_hyps)
     hypotheses = filter_already_tried(hypotheses)
     hypotheses = filter_locked_keys(hypotheses)
+    hypotheses = filter_unknown_keys(hypotheses)
     # Attach incident evidence BEFORE ranking so severity bumps take effect
     incident_counts = _mode_incident_counts()
     _attach_incident_evidence(hypotheses, incident_counts)
