@@ -244,6 +244,84 @@ def _load_cooldown_refs(state) -> None:
         pass
 
 
+_soft_promote_day = ""
+_soft_promoted_today: set = set()
+
+
+async def _soft_promote_watchlist(session, state) -> int:
+    """Promote calm-but-trending watchlist coins into the scan.
+
+    Targets the blind spot between the two existing mechanisms: discovery needs a
+    full momentum signal, decoupling promotion needs low correlation to the
+    market. A coin that simply grinds up with the market (POL: +1.3%/day for 13
+    days) matches neither and is never even looked at.
+
+    Rule (validated over 42d x 94 symbols in _backtest_soft_promotion.py):
+    1h close > MA7 > MA25 surfaces 84% of never-scanned top-20 at +23 coins/day.
+    Here it is capped at SOFT_PROMOTE_MAX_PER_DAY, taking the strongest by
+    distance above MA25 — that ranking is a heuristic, NOT part of the backtest,
+    so the cap is what keeps the cost bounded and measurable.
+
+    Promotion only means "watch it"; every entry gate still applies.
+    """
+    global _soft_promote_day, _soft_promoted_today
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    if today != _soft_promote_day:
+        _soft_promote_day, _soft_promoted_today = today, set()
+
+    cap = int(getattr(config, "SOFT_PROMOTE_MAX_PER_DAY", 10))
+    budget = cap - len(_soft_promoted_today)
+    if budget <= 0:
+        return 0
+
+    hot = {r.symbol for r in state.hot_coins}
+    cands = [s for s in config.load_watchlist()
+             if s not in hot and s not in state.positions
+             and s not in _soft_promoted_today]
+    if not cands:
+        return 0
+
+    import correlation_guard as _cg
+    tf = str(getattr(config, "SOFT_PROMOTE_TF", "1h"))
+    tasks = {s: asyncio.create_task(_cg._fetch_closes_async(session, s, tf, 30))
+             for s in cands}
+    scored = []
+    for s, t in tasks.items():
+        try:
+            closes = await t
+        except Exception:
+            closes = None
+        if not closes or len(closes) < 25:
+            continue
+        c = float(closes[-1])
+        ma7 = sum(closes[-7:]) / 7.0
+        ma25 = sum(closes[-25:]) / 25.0
+        if ma25 <= 0 or not (c > ma7 > ma25):
+            continue
+        scored.append((c / ma25 - 1.0, s))          # strength above the slow MA
+
+    if not scored:
+        return 0
+    scored.sort(reverse=True)
+    n = 0
+    for strength, sym in scored[:budget]:
+        try:
+            data = await fetch_klines(session, sym, tf, limit=config.LIVE_LIMIT)
+            if data is None:
+                continue
+            state.hot_coins.append(await _analyze_coin_live(sym, tf, data))
+            _soft_promoted_today.add(sym)
+            n += 1
+            log.info("SOFT PROMOTE %s [%s] +%.1f%% over MA25 -> hot_coins",
+                     sym, tf, strength * 100)
+        except Exception as e:
+            log.warning("soft promote failed for %s: %s", sym, e)
+    if n:
+        log.info("soft promotion: %d coins added to scan (%d/%d used today)",
+                 n, len(_soft_promoted_today), cap)
+    return n
+
+
 def _log_decoupling_promote_shadow(pairs) -> None:
     """H1 SHADOW: append flagged-but-not-hot watchlist coins (would-promote-to-
     scan) so a later replay can measure the silent-miss coverage lift. No real
@@ -6408,6 +6486,21 @@ async def monitoring_loop(state: MonitorState, send: SendFn) -> None:
                                             log.info("decoupling PROMOTE: %d coins added to scan", _n_prom)
                         except Exception as _dec_err:
                             log.warning("decoupling shadow update failed: %s", _dec_err)
+
+                        # ── Soft scan-promotion (P1, 2026-08-05) ────────────
+                        # Decoupling promotion only surfaces coins living their
+                        # own life (corr 0.1-0.3); calm market-correlated movers
+                        # like POL stay invisible - POL went 15 days unscanned
+                        # while trending. Measured over 42d x 94 symbols, the
+                        # rule "1h close > MA7 > MA25" surfaces 84% of the
+                        # never-scanned top-20 for +23 coins/day of scan load.
+                        # Capped per day so the load stays bounded; entries still
+                        # pass every gate, this only decides WHO gets watched.
+                        try:
+                            if bool(getattr(config, "SOFT_PROMOTE_ENABLED", False)):
+                                await _soft_promote_watchlist(session, state)
+                        except Exception as _sp_err:
+                            log.warning("soft promotion failed: %s", _sp_err)
 
                 # Heartbeat каждые ~10 минут (600с / POLL_SEC итераций)
                 _heartbeat_counter += 1

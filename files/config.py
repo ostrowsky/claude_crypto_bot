@@ -1163,6 +1163,16 @@ DECOUPLING_GATE_ENABLED: bool = False             # reserved; do not enable with
 DECOUPLING_PROMOTE_SHADOW_ENABLED: bool = True    # rollback = False
 DECOUPLING_PROMOTE_ENABLED: bool = True           # 2026-07-07 ENFORCE: 9d shadow = 57% silent-miss top-20 flagged (4/7), 53% of all top-20. rollback=False
 DECOUPLING_PROMOTE_MAX_PER_REFRESH: int = 5       # cap new promotes per refresh (scan-load)
+# Soft scan-promotion (P1, 2026-08-05). Covers the blind spot between discovery
+# (needs full momentum) and decoupling promotion (needs low market correlation):
+# calm coins that grind up WITH the market, like POL (+1.3%/day for 13 days,
+# 15 days without a single scan). Rule "1h close > MA7 > MA25" measured over
+# 42d x 94 symbols surfaces 84% of never-scanned top-20 for +23 coins/day; the
+# daily cap trims that to a bounded cost. Promotion = watch only, all entry gates
+# still apply. rollback = SOFT_PROMOTE_ENABLED False.
+SOFT_PROMOTE_ENABLED: bool = True
+SOFT_PROMOTE_MAX_PER_DAY: int = 10
+SOFT_PROMOTE_TF: str = "1h"
 
 # ── ML-Gated Portfolio Rotation ──────────────────────────────────────────────
 # Когда портфель полон и существующая score-based ротация не нашла замену,
