@@ -398,6 +398,29 @@ signals; 08-04: 7 hours, surfaced by /menu timing out).
    warning" (`warn_count >= 0`), the opposite of disabling.
    Re-enable ONLY together with a real restart wrapper.
 
+### Hypothesis pipeline produces unusable proposals (2026-08-05, OPEN)
+
+All 16 pending L2 hypotheses reference `config_key`s that **do not exist** in
+`config.py` (`MAX_LATENESS_PCT_IMPULSE_SPEED`, `ML_PROBA_MIN_IMPULSE_SPEED`,
+`ENTRY_SCORE_MIN_5M`, ...), and two propose position sizing, which this bot does
+not have (it is an alert system). None has a registered validator, so L3 cannot
+check them either. The morning report still advertises the "best" one with a
+ready-to-run `pipeline_approve.py` command — **do not run it**, it would target a
+nonexistent parameter.
+
+Consequence: no decision has come through the pipeline since 2026-06-17; every
+change applied since then came from manual analysis. Minimum fix: validate
+`config_key` against `config.py` at generation time and drop hypotheses whose key
+is unknown. Status report: `docs/reports/2026-08-05-roadmap-status.md`.
+
+### Morning report ignores downtime (2026-08-05, OPEN)
+
+The North Star metric is a 14-day window with no notion of the bot being down, so
+the 8-day outage (07-23..07-31) counted every top-20 of those days as a miss and
+the report announced "СТАЛО ХУЖЕ ... ~2 из 100". Restricted to days the bot was
+actually alive: coverage 67%, silent-miss 8% — the best figures on record. Mark
+days without data as "no data" instead of misses before trusting trend claims.
+
 ### Critical bugs (fixed)
 
 | Date | Problem | Fix |
