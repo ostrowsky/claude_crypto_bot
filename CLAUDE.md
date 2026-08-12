@@ -69,6 +69,27 @@ Binance API -> Indicators -> Strategy (7 entry modes)
     -> Entry signal -> Telegram
 ```
 
+### Monitored set — the ENTIRE watchlist (2026-08-12)
+
+`MONITOR_FULL_WATCHLIST = True`: every watchlist coin is polled, so "the coin was
+not being watched" is no longer a possible cause of a miss.
+
+Before this the set was curated and `bot.py::_update_hot_coins` **rewrote**
+`state.hot_coins` on every auto-reanalyze (30 min), wiping every promotion
+(discovery / decoupling / soft). Observed: 18 coins -> 9 within 11 minutes, and
+POL went 15 days without a single scan. The scan already analyses the whole
+watchlist (`in_play + skipped` = all coins), so keeping them all costs no extra
+request; symbols the scan lost to a transient `fetch_klines` None are re-added as
+stub `CoinReport`s (`_poll_coin` fetches its own klines).
+
+Cost is bounded by ROTATION, not by set size: `MAX_POLL_PER_CYCLE = 45` coins per
+60s tick -> full sweep of ~105 in ~3 cycles (~3 min). **Coins with an open
+position are polled every cycle** regardless of rotation — trailing stops cannot
+wait. Rollback: `MONITOR_FULL_WATCHLIST = False`.
+
+Superseded by this and disabled to avoid dead work: `SOFT_PROMOTE_ENABLED=False`,
+decoupling promote-to-scan skipped (decoupling scoring/shadow logging untouched).
+
 ### 7 entry modes
 `trend` (15m) · `strong_trend` (1h) · `retest` (1h) · `alignment` (1h MTF) · `impulse` (15m) · `impulse_speed` (1h) · `breakout`
 

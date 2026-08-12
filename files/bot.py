@@ -922,6 +922,27 @@ def _update_hot_coins(state, in_play, skipped) -> None:
                 continue
             seen.add(r.symbol)
             deduped.append(r)
+
+        # Скан теряет монету целиком, если разовый fetch_klines вернул None
+        # (таймаут/лимит): в strategy._run_analysis такой символ просто не
+        # попадает в all_reports. При полном охвате это означало бы, что монета
+        # не наблюдается до следующего скана — те самые 97 из 105. Добираем
+        # недостающие заглушкой: _poll_coin всё равно сам грузит свечи, ему
+        # достаточно символа и таймфрейма.
+        missing = [s for s in config.load_watchlist() if s not in seen]
+        if missing:
+            from strategy import CoinReport
+            tf0 = (config.TIMEFRAMES or ["15m"])[0]
+            for sym in missing:
+                deduped.append(CoinReport(
+                    symbol=sym, tf=tf0,
+                    today_signals=[], today_accuracy={}, today_confirmed=False,
+                    best_horizon=0, best_accuracy=0.0, in_play=False,
+                    note="добор до полного watchlist (скан не вернул отчёт)",
+                ))
+            log.info("full watchlist: %d coins from scan + %d re-added = %d",
+                     len(seen), len(missing), len(deduped))
+
         state.hot_coins = deduped
         _ensure_positions_monitored(state)
         return
