@@ -1170,9 +1170,28 @@ DECOUPLING_PROMOTE_MAX_PER_REFRESH: int = 5       # cap new promotes per refresh
 # 42d x 94 symbols surfaces 84% of never-scanned top-20 for +23 coins/day; the
 # daily cap trims that to a bounded cost. Promotion = watch only, all entry gates
 # still apply. rollback = SOFT_PROMOTE_ENABLED False.
-SOFT_PROMOTE_ENABLED: bool = True
+# Superseded by MONITOR_FULL_WATCHLIST (2026-08-12): when every coin is watched
+# anyway, promotion machinery is dead work. Kept for rollback.
+SOFT_PROMOTE_ENABLED: bool = False
 SOFT_PROMOTE_MAX_PER_DAY: int = 10
 SOFT_PROMOTE_TF: str = "1h"
+
+# ── Monitor the ENTIRE watchlist (2026-08-12, operator decision) ─────────────
+# Before this the watched set was curated: the market scan decided who is
+# "in play" and auto-reanalyze REWROTE state.hot_coins every 30 min, wiping
+# every promotion (discovery / decoupling / soft). Coins therefore dropped out
+# constantly (18 -> 9 within 11 minutes) and some were not scanned for days
+# (POL: 15 days), which is exactly the silent-miss bucket the North Star loses
+# on. Watching the whole list makes coverage 100% by construction and removes
+# the entire "who gets watched" problem.
+#
+# Cost is bounded by rotation instead of by set size: each poll cycle takes the
+# next MAX_POLL_PER_CYCLE coins, so a full sweep takes ~ceil(N/cap) cycles
+# (~2-3 min with 105 coins at 45/cycle). Coins with an open position are always
+# polled regardless of the rotation — their trailing stop cannot wait.
+# rollback = MONITOR_FULL_WATCHLIST False.
+MONITOR_FULL_WATCHLIST: bool = True
+MAX_POLL_PER_CYCLE: int = 45
 
 # ── ML-Gated Portfolio Rotation ──────────────────────────────────────────────
 # Когда портфель полон и существующая score-based ротация не нашла замену,

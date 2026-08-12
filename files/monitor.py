@@ -6357,12 +6357,32 @@ async def monitoring_loop(state: MonitorState, send: SendFn) -> None:
             log.warning("Enhanced signals startup failed, continuing without", exc_info=True)
 
     _heartbeat_counter = 0
+    _poll_cursor = 0            # rotates the poll slice over the full watchlist
     async with aiohttp.ClientSession() as session:
         while state.running:
             try:
+                # With MONITOR_FULL_WATCHLIST the watched set is the whole
+                # watchlist (~105), so polling every coin every cycle would put
+                # ~105 kline fetches + indicator passes into a single 60s tick.
+                # Instead rotate: each cycle takes the next slice, so every coin
+                # is visited every ceil(N/MAX_POLL_PER_CYCLE) cycles (~2-3 min at
+                # the defaults) — fine for 15m/1h strategies. Coins with an OPEN
+                # POSITION are always polled: their trailing stop cannot wait.
+                _coins = list(state.hot_coins)
+                _cap = int(getattr(config, "MAX_POLL_PER_CYCLE", 0) or 0)
+                if _cap > 0 and len(_coins) > _cap:
+                    _held = [r for r in _coins if r.symbol in state.positions]
+                    _rest = [r for r in _coins if r.symbol not in state.positions]
+                    _budget = max(1, _cap - len(_held))
+                    _start = _poll_cursor % max(1, len(_rest))
+                    _slice = _rest[_start:_start + _budget]
+                    if len(_slice) < _budget:
+                        _slice += _rest[:_budget - len(_slice)]
+                    _poll_cursor = (_start + _budget) % max(1, len(_rest))
+                    _coins = _held + _slice
                 tasks = [
                     _poll_coin(session, r, state, send)
-                    for r in state.hot_coins
+                    for r in _coins
                 ]
                 results = await asyncio.gather(*tasks, return_exceptions=True)
                 errors = [exc for exc in results if isinstance(exc, Exception)]
@@ -6463,7 +6483,8 @@ async def monitoring_loop(state: MonitorState, send: SendFn) -> None:
                                     # showed 57% of silent-miss top-20 flagged.
                                     # Coin is only WATCHED; entries still pass all
                                     # gates. Fail-open per coin.
-                                    if _wp and bool(getattr(config, "DECOUPLING_PROMOTE_ENABLED", False)):
+                                    if (_wp and bool(getattr(config, "DECOUPLING_PROMOTE_ENABLED", False))
+                                            and not bool(getattr(config, "MONITOR_FULL_WATCHLIST", False))):
                                         _cap = int(getattr(config, "DECOUPLING_PROMOTE_MAX_PER_REFRESH", 5))
                                         _wp_sorted = sorted(_wp, key=lambda t: -(t[1].get("decoupling_score") or 0))
                                         _n_prom = 0

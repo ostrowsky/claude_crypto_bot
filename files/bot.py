@@ -904,15 +904,37 @@ def _update_hot_coins(state, in_play, skipped) -> None:
     Это главный фикс: раньше монеты типа TRXUSDT (signal_now=True, confirmed=False)
     полностью игнорировались мониторингом. Теперь они включаются.
     """
+    # MONITOR_FULL_WATCHLIST: следим за ВСЕМИ монетами списка.
+    # Раньше этот метод раз в 30 минут (auto-reanalyze) ПОЛНОСТЬЮ перезаписывал
+    # набор наблюдения тем, что скан считал in_play, и стирал все промоуты —
+    # discovery, decoupling и soft-promote жили максимум до следующего скана.
+    # Отсюда же провалы вида «18 монет в 11:25 → 9 в 11:36» и монеты, не
+    # сканировавшиеся сутками (POL — 15 дней). Скан и так анализирует весь
+    # watchlist, in_play + skipped = все монеты, так что полный охват не стоит
+    # ни одного лишнего запроса здесь; стоимость опроса ограничена ротацией
+    # в monitor (MAX_POLL_PER_CYCLE).
+    if bool(getattr(config, "MONITOR_FULL_WATCHLIST", False)):
+        hot = list(in_play) + list(skipped)
+        seen = set()
+        deduped = []
+        for r in hot:                      # на символ — лучший отчёт (ranked)
+            if r.symbol in seen:
+                continue
+            seen.add(r.symbol)
+            deduped.append(r)
+        state.hot_coins = deduped
+        _ensure_positions_monitored(state)
+        return
+
     # Confirmed всегда в списке
     hot = list(in_play)
-    
+
     # Добавляем не-confirmed с активным сигналом прямо сейчас
     already = {r.symbol for r in hot}
     for r in skipped:
         if r.signal_now and r.symbol not in already:
             hot.append(r)
-    
+
     state.hot_coins = hot
     _ensure_positions_monitored(state)
 
