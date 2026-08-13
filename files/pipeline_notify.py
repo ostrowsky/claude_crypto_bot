@@ -939,6 +939,19 @@ def _generator_state() -> tuple[int | None, str | None, int | None]:
         return None, newest, flags
 
 
+def _today_red_flags() -> list[dict]:
+    """Red flags from the freshest health report (may be today's or yesterday's)."""
+    try:
+        files = sorted(PL.HEALTH.glob("health-*.json"))
+        if not files:
+            return []
+        data = PL.read_json(files[-1]) or {}
+        rf = data.get("red_flags")
+        return rf if isinstance(rf, list) else []
+    except Exception:
+        return []
+
+
 def build_progress_block() -> str | None:
     """"What next" when the approve queue is empty.
 
@@ -991,6 +1004,20 @@ def build_progress_block() -> str | None:
                    f"зарезали фильтры {fn.get('blocked_only', 0)} · "
                    f"не увидели {fn.get('no_event', 0)}.</i>")
 
+    # Today's red flags are the real "next step" when the queue is empty: they
+    # carry concrete evidence (a named coin and the gate that blocked it), and
+    # without them the block would claim "nothing to propose" on a day the
+    # report also shouts about 3 critical alarms.
+    for rf in _today_red_flags():
+        ev = (rf.get("evidence") or {}).get("missed_top_gainers") or []
+        if rf.get("id") == "RF_early_capture" and ev:
+            worst = max(ev, key=lambda x: x.get("day_change_pct") or 0)
+            reason = str(worst.get("reason") or "").split(":")[0][:60]
+            out.append(f"🚨 <b>Разбор за вчера:</b> {worst.get('symbol')} "
+                       f"+{worst.get('day_change_pct'):.0f}% — не взяли "
+                       f"({reason}).")
+            break
+
     days, since, flags = _generator_state()
     if days is None:
         out.append("⏸ Идей нет: <b>генератор ни разу не отчитывался</b> — "
@@ -1000,8 +1027,16 @@ def build_progress_block() -> str | None:
                    f"(последний прогон {since}). Это не «идей нет», а сбой "
                    f"контура — чинить его, а не ждать предложений.")
     elif flags == 0:
-        out.append(f"✅ Идей нет по делу: генератор отработал {since} и "
-                   f"<b>устойчивых проблем не нашёл</b> — предлагать нечего.")
+        # "No proposals" next to a red flag is not a contradiction — the
+        # generator only acts on problems that persist >= 4 of 7 days — but the
+        # report has to say so, or the two lines read as nonsense.
+        if _today_red_flags():
+            out.append(f"⏳ Генератор отработал {since}: тревоги есть, но они "
+                       f"<b>ещё не устойчивы</b> (нужно ≥4 дней из 7) — "
+                       f"поэтому предложений нет. Если повторится — появится идея.")
+        else:
+            out.append(f"✅ Идей нет по делу: генератор отработал {since} и "
+                       f"<b>устойчивых проблем не нашёл</b> — предлагать нечего.")
     else:
         out.append(f"⏸ Очередь пуста: генератор отработал {since}, нашёл "
                    f"проблем: {flags}, но ни одна идея не прошла проверку.")
