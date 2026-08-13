@@ -44,6 +44,56 @@ must update its status row and the North Star progress table.**
 
 ---
 
+## 0a. Truth harness — how to not fool ourselves
+
+Every number in this project has at some point looked good and meant nothing.
+These rules exist because each was violated and cost real time. **A change is not
+done until it answers them.**
+
+### The rules
+
+1. **A ratio without its base rate is not evidence.** `recall@20 = 100%` was
+   celebrated for months; the bandit reaches it by firing ENTER on **73% of
+   everything** — lift 1.36. Always publish base rate and lift next to any
+   recall / coverage / hit-rate.
+2. **Name the features that already contain the answer.** `top_gainer_model`
+   scores AUC 0.99 while `tg_return_since_open` is an input and the label is "was
+   the day's return top-20". That model confirms a move in progress; it does not
+   predict one. If a feature could encode the label, say so in the same breath as
+   the score.
+3. **In-sample numbers are never an achievement.** Report holdout only, split by
+   TIME, never at random — rows of the same day leak into each other.
+4. **Compare only comparable windows.** A 5-working-day window against a 10-day
+   one produced a fake "СТАЛО ХУЖЕ" after the outage. Endpoints must match in
+   sample size, or the answer is "рано судить".
+5. **A metric must know what it does not know.** Days the bot was down counted as
+   misses until 2026-08-05 — an outage read as a performance collapse. Absence of
+   data is not evidence of failure.
+6. **Validate a gate on the bot's OWN entries, not on the market.** The
+   weak-extension filter was strong across all market episodes and worthless on
+   the bot's entries: the gates upstream mean it never samples that population.
+7. **Behaviour changes ship behind a flag with a stated rollback**, and are
+   measured in SHADOW first whenever the shadow can answer the question.
+8. **Negative results are committed**, with the numbers that killed them. Nine
+   hypotheses in this repo were refuted; re-testing them is waste.
+9. **Every claim in this file must be machine-checkable.** `_audit_md_vs_config.py`
+   verifies flags and dataset sizes; a claim that cannot be checked should be
+   phrased so it can be.
+10. **A report may not state a conclusion the data does not support.** "Рано
+    судить" is a valid answer and is preferred over an invented trend.
+
+### Enforcement
+
+- `pyembed\python.exe files\_harness_check.py` — runs the MD-vs-config audit and
+  prints this checklist. Exit code 1 on drift. Wired as a **git pre-commit hook**;
+  it is also the first thing to run when picking up work in this repo.
+- Every PR/commit touching behaviour or metrics states which rule it satisfies
+  (usually 1, 3, 6, 7).
+- When a rule is violated on purpose, say so in the commit message with the
+  reason — silence is the failure mode this section exists to prevent.
+
+---
+
 ## 1. Purpose & success metric
 
 Telegram bot scanning Binance Futures/Spot in real time, generating early BUY signals on coins that will be in the daily top gainers by EOD.

@@ -124,7 +124,14 @@ def main():
     print(f"\nGate = keep top-half by model score (OOS):")
     print(f"  ALL test avg_ret5={allr5:+.3f}")
     print(f"  KEEP n={nk} avg_ret5={ar5:+.3f} avg_pnl={apnl:+.3f} win={wk:.0f}%")
-    print(f"  big movers(ret_10>={WINNER_RET}%): {len(big)} kept {len(kept_big)} -> recall {rec:.0f}%")
+    # §0a rule 1: a recall means nothing without the rate the gate keeps overall.
+    # Keeping the top half already keeps ~50% of everything, so a recall near 50%
+    # is no skill at all — print the base rate and the lift next to it.
+    keep_rate = (nk / len(te) * 100) if te else float("nan")
+    lift = (rec / keep_rate) if keep_rate else float("nan")
+    print(f"  big movers(ret_10>={WINNER_RET}%): {len(big)} kept {len(kept_big)} -> "
+          f"recall {rec:.0f}%  (base rate: gate keeps {keep_rate:.0f}% of ALL "
+          f"entries, lift {lift:.2f}x)")
 
     # top feature weights
     order = np.argsort(-np.abs(w[:-1]))

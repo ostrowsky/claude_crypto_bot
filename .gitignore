@@ -63,7 +63,9 @@ venv/
 env/
 
 # Claude Code session data
-.claude/
+.claude
+!.claude/skills/
+!.claude/skills/**/
 
 # Build artifacts
 stage1_warning_patch_v2.zip
