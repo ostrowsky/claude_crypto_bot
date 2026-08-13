@@ -38,7 +38,7 @@ time they are used; P3 is a research programme.
 | G3 | `why_no_signal` — one command answers "где сигналы по X?" | **P0** | hours | shipped 2026-08-13 |
 | G9 | Restart stack: tests first, then verify every worker is up | **P0** | hours | shipped 2026-08-13 |
 | G7 | Daily artifact names its denominator + blocker harm | **P1** | 1 day | shipped 2026-08-13 |
-| G1 | SQLite event store with byte-offset incremental sync | **P1** | 2–3 days | planned |
+| G1 | SQLite event store with byte-offset incremental sync | **P1 — next** | 2–3 days | planned; write model proven broken 2026-08-13 |
 | G4 | Forward-cohort promotion gate before production | **P1** | 1–2 days | planned |
 | E3 | Freshness SLO per learning artifact | **P1** | hours | shipped 2026-08-13 |
 | G2 | Canonical continuous OHLCV store + coverage gate | **P2** | 2 days | planned |
@@ -121,6 +121,30 @@ rewriting whole files". Streaming rewrites and reverse `get_record` (17.6s →
 **Gate:** identical aggregates from the SQLite path and the JSONL path on the
 same window, plus wall-clock before/after for `analyze_blocked_gates.py`. A
 mismatch means the migration lost rows.
+
+**Raised to the top of P1 on 2026-08-13 — the write model is not slow, it is
+failing.** Fixing the stale backfill lock (E3) let the backfill run for the
+first time since mid-June. It fetched every label and then died on the last
+step:
+
+```
+PermissionError: [WinError 5]
+  critic_dataset.jsonl.backfill.tmp -> critic_dataset.jsonl
+```
+
+On Windows a file held open by the live bot cannot be replaced, and replacing
+the whole file is how every writer here updates it. So the 11 908 rows are
+*still* unlabelled, and this is why: the lock going stale was a symptom, and the
+crash that orphaned it was almost certainly this same failure.
+
+The debris confirms it. Nineteen orphaned `.tmp` files were sitting in `files/`,
+**1.09 GB**, owned by long-dead PIDs, the oldest 40 days — one per failed
+rewrite. 952 MB of them (every PID-tagged orphan) were removed;
+`critic_dataset.jsonl.backfill.tmp` is kept because it holds the computed labels
+and nothing else does.
+
+An append-only journal with a synced store makes this class of failure
+impossible: a patch appends, and readers never contend with the writer.
 
 ### G4 — forward cohort before production
 
