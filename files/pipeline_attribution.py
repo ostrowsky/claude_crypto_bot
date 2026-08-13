@@ -334,12 +334,12 @@ def attribute(
     baseline_path = PB.BASELINES_DIR / f"baseline_pre_{decision_id}.json"
     baseline = PL.read_json(baseline_path)
     if not baseline:
-        return {"verdict": "no_baseline",
+        return {"decision_id": decision_id, "verdict": "no_baseline",
                 "reason": f"no baseline_pre_{decision_id}.json — run pipeline_baseline.py --backfill-approved"}
 
     age = (datetime.now(timezone.utc) - ts).days
     if age < days_after:
-        return {"verdict": "needs_data",
+        return {"decision_id": decision_id, "verdict": "needs_data",
                 "reason": f"only {age}d after apply, need {days_after}"}
 
     # Data-blackout guard: if the post-apply window overlaps a known
@@ -356,7 +356,7 @@ def attribute(
     ref_post  = PB.collect_window(ts, ts + timedelta(days=ref_window_days))
 
     if len(post_rows) < MIN_POST_SAMPLES:
-        return {"verdict": "needs_data",
+        return {"decision_id": decision_id, "verdict": "needs_data",
                 "reason": f"only {len(post_rows)} post-apply health reports, need >= {MIN_POST_SAMPLES}"}
 
     pre_rows = baseline.get("pre_rows", [])
@@ -407,11 +407,13 @@ def attribute(
     rationale: list[str] = []
     expected_hits = []
     expected_misses = []
+    unmeasured_expected = []
 
     for em, em_str in expected.items():
         pm = per_metric.get(em)
         if not pm or pm.get("status") == "insufficient_data":
             expected_misses.append(em)
+            unmeasured_expected.append(em)
             rationale.append(f"{em}: insufficient_data")
             continue
         rng = _parse_expected_range(em_str)
@@ -470,18 +472,19 @@ def attribute(
             f"(pre={v['pre']}, post={v['post']})"
         )
 
-    # Final verdict
-    if regressions or obj_violations:
-        verdict_str = "regression"
-    elif not expected:
-        verdict_str = "skip"
+    # Final verdict.  Missing measurements are not negative evidence: an outer
+    # `miss` made reports claim a decision failed even when every rationale was
+    # merely `insufficient_data`.
+    if not expected:
         rationale.append("decision has no expected_delta — cannot evaluate")
-    elif expected_misses and not expected_hits:
-        verdict_str = "miss"
-    elif expected_misses and expected_hits:
-        verdict_str = "partial"
-    else:
-        verdict_str = "hit"
+    verdict_str = _final_verdict(
+        expected_count=len(expected),
+        expected_hits=expected_hits,
+        expected_misses=expected_misses,
+        unmeasured_expected=unmeasured_expected,
+        regressions=regressions,
+        objective_violations=obj_violations,
+    )
 
     return {
         "decision_id":         decision_id,
@@ -493,11 +496,29 @@ def attribute(
         "expected_metrics":    list(expected.keys()),
         "expected_hits":       expected_hits,
         "expected_misses":     expected_misses,
+        "unmeasured_expected": unmeasured_expected,
         "regressions":         regressions,
         "portfolio_objectives": portfolio_obj,
         "rationale":           rationale,
         "per_metric":          per_metric,
     }
+
+
+def _final_verdict(*, expected_count: int, expected_hits: list,
+                   expected_misses: list, unmeasured_expected: list,
+                   regressions: list, objective_violations: list) -> str:
+    """Choose a verdict without conflating unavailable metrics with misses."""
+    if regressions or objective_violations:
+        return "regression"
+    if expected_count == 0:
+        return "skip"
+    if len(unmeasured_expected) == expected_count:
+        return "insufficient_data"
+    if expected_misses and not expected_hits:
+        return "miss"
+    if expected_misses and expected_hits:
+        return "partial"
+    return "hit"
 
 
 # ---------------------------------------------------------------------------

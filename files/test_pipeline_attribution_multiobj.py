@@ -183,5 +183,40 @@ class ConstantsTests(unittest.TestCase):
         self.assertGreaterEqual(A.MULTI_OBJ_MIN_TRADES, 1)
 
 
+class VerdictIntegrityTests(unittest.TestCase):
+    def test_all_unmeasured_metrics_are_insufficient_not_miss(self):
+        verdict = A._final_verdict(
+            expected_count=2,
+            expected_hits=[],
+            expected_misses=["precision", "recall"],
+            unmeasured_expected=["precision", "recall"],
+            regressions=[],
+            objective_violations=[],
+        )
+        self.assertEqual(verdict, "insufficient_data")
+
+    def test_measured_miss_remains_miss(self):
+        verdict = A._final_verdict(
+            expected_count=1,
+            expected_hits=[],
+            expected_misses=["watchlist_top_early_capture_pct"],
+            unmeasured_expected=[],
+            regressions=[],
+            objective_violations=[],
+        )
+        self.assertEqual(verdict, "miss")
+
+    def test_risk_violation_still_overrides_unmeasured_targets(self):
+        verdict = A._final_verdict(
+            expected_count=1,
+            expected_hits=[],
+            expected_misses=["custom_metric"],
+            unmeasured_expected=["custom_metric"],
+            regressions=[],
+            objective_violations=[{"constraint": "maxdd_abs_growth"}],
+        )
+        self.assertEqual(verdict, "regression")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

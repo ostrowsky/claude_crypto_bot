@@ -14,6 +14,7 @@ Spec-first workflow. См. [`../../AGENTS.md`](../../AGENTS.md) для проц�
 | [`contextual-bandit`](./features/contextual-bandit-spec.md) | shipped | LinUCB entry (2 arms) + trail (5 arms). Async reward, источники, training pipeline. |
 | [`ml-candidate-ranker`](./features/ml-candidate-ranker-spec.md) | shipped | CatBoost ranker (quality, EV, expected_return/drawdown, TG-prob) + hard veto. |
 | [`top-gainer-model`](./features/top-gainer-model-spec.md) | shipped | Daily CatBoost top-N классификаторы (top5/10/20/50) + intraday snapshots + critic. |
+| [`health-report-integrity`](./features/health-report-integrity-spec.md) | shipped 2026-08-13 | Completed-day critic fallback, data-quality alerts, comparable North-Star trend, and honest attribution wording. |
 | [`portfolio-rotation`](./features/portfolio-rotation-spec.md) | shipped 2026-04-17 | ML-gated weak-leg eviction через soft-trail (`trail_stop = price × 1.001`). |
 | [`correlation-guard`](./features/correlation-guard-spec.md) | shipped | Pearson log-return clustering (Union-Find) + cap позиций в кластере. |
 | [`trend-quality-guard`](./features/trend-quality-guard-spec.md) | shipped | RSI / price-edge / daily-range cap для 15m `trend` (с bull-day relaxation). |

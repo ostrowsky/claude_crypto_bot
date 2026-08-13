@@ -203,7 +203,7 @@ def main():
              f"({', '.join(sorted(partial_days)) or 'no data at all'})" if down else ""))
     if down:
         print(f"  metric below counts only the {len(full_days)} full days "
-              f"(a day the bot was down contributes only misses).")
+              f"(down/partial days are excluded, not scored as misses).")
         print(f"  for reference, counting all days: "
               f"EC={res_raw['early_capture']:.3f} cov={res_raw['decomp_coverage']:.2f} "
               f"(n={res_raw['n']}) — DO NOT read as performance")
