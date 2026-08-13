@@ -38,7 +38,7 @@ time they are used; P3 is a research programme.
 | G3 | `why_no_signal` — one command answers "где сигналы по X?" | **P0** | hours | shipped 2026-08-13 |
 | G9 | Restart stack: tests first, then verify every worker is up | **P0** | hours | shipped 2026-08-13 |
 | G7 | Daily artifact names its denominator + blocker harm | **P1** | 1 day | shipped 2026-08-13 |
-| G1 | SQLite event store with byte-offset incremental sync | **P1 — next** | 2–3 days | planned; write model proven broken 2026-08-13 |
+| G1 | SQLite event store with byte-offset incremental sync | **P1** | 2–3 days | read path shipped 2026-08-13; write path open |
 | G4 | Forward-cohort promotion gate before production | **P1** | 1–2 days | planned |
 | E3 | Freshness SLO per learning artifact | **P1** | hours | shipped 2026-08-13 |
 | G2 | Canonical continuous OHLCV store + coverage gate | **P2** | 2 days | planned |
@@ -145,6 +145,20 @@ and nothing else does.
 
 An append-only journal with a synced store makes this class of failure
 impossible: a patch appends, and readers never contend with the writer.
+
+**Read path shipped 2026-08-13** — `files/event_store.py`, spec at
+[`event-store`](../specs/features/event-store-spec.md). Full sync of 245 967
+rows 40.9s; re-sync with nothing appended **0.02s**. The parity gate passes
+(identical per-event and per-reason aggregates) and earned its keep on the first
+run by exposing that `bot_events.jsonl` writes `trend_chop` as a short code for
+the gate whose free text reads `trend/1h chop:` — 15 626 rows the taxonomy had
+been dropping into `unclassified`, including in the harm table shipped hours
+earlier. 10 tests on real files.
+
+**Write path still open.** Nothing writes labels through the store yet, so
+`backfill_critic_labels` continues to rewrite `critic_dataset.jsonl` whole and
+still cannot run while the bot holds it. Until that migrates, label backfills
+need a stopped bot. That slice is what actually retires the `.tmp` graveyard.
 
 ### G4 — forward cohort before production
 

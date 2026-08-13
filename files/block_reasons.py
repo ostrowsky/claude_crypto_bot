@@ -62,6 +62,11 @@ _CODE_ALIASES: dict[str, str] = {
     "cooldown": "symbol_cooldown",
     "portfolio": "portfolio_full",
     "correlation_guard_shadow": "correlation_guard",
+    # `bot_events.jsonl` writes `trend_chop` (15 626 rows) for the same gate the
+    # free text calls `trend/1h chop:`. Found by the event-store parity check,
+    # which reported 7 517 blocks as `trend_1h_chop` from one field and
+    # `unclassified` from the other — the same events, two spellings.
+    "trend_chop": "trend_1h_chop",
     # not blocks; mapped so they can never be mistaken for one
     "entry_score_soft_pass": "entry_score_soft_pass",
     "near_miss": "near_miss",

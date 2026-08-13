@@ -17,6 +17,7 @@ Spec-first workflow. См. [`../../AGENTS.md`](../../AGENTS.md) для проц�
 | [`health-report-integrity`](./features/health-report-integrity-spec.md) | shipped 2026-08-13 | Completed-day critic fallback, data-quality alerts, comparable North-Star trend, and honest attribution wording. |
 | [`truth-harness`](./features/truth-harness-spec.md) | shipped 2026-08-13 | TH-01…TH-12, full/staged compliance profiles, pre-commit enforcement and audit skill; current bot has open blocking findings. |
 | [`operational-diagnostics`](./features/operational-diagnostics-spec.md) | shipped 2026-08-13 | `why_no_signal` answers "где сигналы по X?" from the logs; restart stack fails loudly with a test regression gate and `-FailIfNotRunning` status checks. |
+| [`event-store`](./features/event-store-spec.md) | shipped 2026-08-13 (read path) | JSONL stays the journal; SQLite mirror synced from the last byte offset. Full sync 40.9s, re-sync 0.02s, aggregates verified identical. Write path still rewrites whole files. |
 | [`portfolio-rotation`](./features/portfolio-rotation-spec.md) | shipped 2026-04-17 | ML-gated weak-leg eviction через soft-trail (`trail_stop = price × 1.001`). |
 | [`correlation-guard`](./features/correlation-guard-spec.md) | shipped | Pearson log-return clustering (Union-Find) + cap позиций в кластере. |
 | [`trend-quality-guard`](./features/trend-quality-guard-spec.md) | shipped | RSI / price-edge / daily-range cap для 15m `trend` (с bull-day relaxation). |
