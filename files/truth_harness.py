@@ -207,14 +207,32 @@ def audit_model_provenance(audit: Audit, root: Path = ROOT) -> None:
         )
 
     audit.checked("TH04_BANDIT_POST_FIT")
-    trained_first = offline.find('results["entry_bandit"] = train_entry_bandit()')
-    evaluated_after = offline.find('results["bandit_accuracy"] = evaluate_bandit_accuracy')
-    if trained_first >= 0 and evaluated_after > trained_first:
+    # Ordering (train before evaluate) used to stand in for contamination, but
+    # it is only a proxy: what actually matters is whether the headline number
+    # comes from a bandit that never saw the evaluation days. Check that
+    # directly — evaluate_bandit_accuracy must fit its own holdout bandit on
+    # the earlier days and hold the later ones out.
+    holdout_fit = (
+        "LinUCBBandit(n_arms=2, n_features=N_FEATURES, alpha=live.alpha)" in offline
+        and "train_rows" in offline and "eval_days" in offline
+    )
+    scope_declared = '"out_of_sample_time_holdout"' in offline
+    if not (holdout_fit and scope_declared):
         audit.add(
             "TH04_BANDIT_POST_FIT", "TH-04", "error",
             "Bandit recall is evaluated post-fit on records used by the bandit",
-            "run_offline_training trains before evaluate_bandit_accuracy",
-            "Call it diagnostic-only or use a frozen pre-fit model on later days.",
+            f"evaluate_bandit_accuracy: holdout_fit={holdout_fit}, "
+            f"scope_declared={scope_declared}",
+            "Fit a fresh bandit on the earlier days and grade the later ones.",
+        )
+    elif '"in_sample_post_fit"' not in offline:
+        # The in-sample echo is the diagnostic: dropping it hides the gap that
+        # §0 rule 3 exists to keep visible.
+        audit.add(
+            "TH04_BANDIT_POST_FIT", "TH-04", "warn",
+            "Holdout bandit recall no longer publishes its in-sample counterpart",
+            "in_sample_post_fit missing from evaluate_bandit_accuracy",
+            "Report both; the gap between them is the diagnostic.",
         )
 
 

@@ -223,14 +223,61 @@ Rule of thumb: if a file is >1 MB or lives in `.runtime/`, use scripted aggregat
 
 ### Asymmetric reward scheme
 
+"Worth entering" = the row is in its day's top-`BANDIT_FORWARD_TOP_N` by the
+move **still ahead of the snapshot** AND that move clears
+`BANDIT_FORWARD_MIN_PCT`. See "Training-label leak fix" below for why it is no
+longer "the coin was a top-20 gainer".
+
 | Situation | Reward |
 |-----------|--------|
-| ENTER + top-20 gainer | +1.0 |
-| SKIP + top-20 gainer | **-0.8** (miss penalty) |
-| SKIP + not top gainer | +0.10 |
-| ENTER + not top gainer | -0.12 |
+| ENTER + worth entering | +1.0 |
+| SKIP + worth entering | **-0.8** (miss penalty) |
+| SKIP + nothing left to catch | +0.10 |
+| ENTER + nothing left to catch | -0.12 |
 | ENTER + fast reversal (≤3 bars, P&L < -0.5%) | **-0.6** (planned, see § 4a) |
 | SKIP + fast reversal | **+0.30** (planned) |
+
+### Training-label leak fix (2026-08-13) — TH-01/TH-03/TH-04
+
+The bandit was paid +1.0 for ENTER whenever a row carried `label_top20`, and
+`use_earliest_snapshot=True` picks the earliest record of a calendar day — which
+is the 00 UTC one, i.e. the EOD resolution of a day already **over** (41% of
+trained rows). Measured on the rows it trained on: 34.8% had
+`|eod_return − return_since_open| < 0.5%` (nothing left to decide) and the median
+move still ahead was **+1.75%**. A fresh bandit trained on that label scored
+**lift 0.65×** on a temporal holdout — worse than random. That, not skill, is
+where "recall@20 = 100%" (§0a rule 1) came from.
+
+Two defects in the same path had to go with it:
+- `_load_top_gainer_dataset` read the **first** 50k of 118 625 lines, freezing
+  the training window at 2026-06-05 for 69 days. Now reads the tail.
+- `train_entry_bandit` did `batch_update` onto the saved state every run: 8.39M
+  updates from ~44.6k unique samples (~188× re-ingestion), which baked the old
+  label into `A/b` and shrank the exploration bonus without new evidence — so
+  "UCB separation growing" measured nothing either. Now rebuilds from scratch.
+
+Label comparison (309 days, split by time, holdout 9765 rows; target = the coin
+still has ≥ +3% ahead, base rate 2.0%) — `files/_backtest_bandit_leak_fix.py`:
+
+| training label | ENTER | caught | precision | lift |
+|---|---|---|---|---|
+| old `label_top20` | 80.3% | 52% | 1.3% | **0.65×** |
+| rank top-20, no floor | 98.0% | 100% | 2.1% | 1.02× |
+| rank top-20 + floor +3% | 43.5% | 99% | 4.6% | 2.28× |
+| **rank top-10 + floor +3%** | **24.3%** | **99%** | **8.3%** | **4.07×** |
+| floor +3%, no rank | 80.0% | 100% | 2.5% | 1.25× |
+
+The floor is load-bearing: a pure rank label mints exactly N winners a day
+whatever the market does and collapses to "ENTER on everything" (1.02×).
+
+Deployed: label + rebuild + tail window, state rebuilt (37 144 updates,
+window 2026-06-23..08-13, base rate 7.5%, 6 289 already-decided rows dropped).
+Old state kept at `files/bandit_entry_state.pre_leakfix.json`.
+Rollback = `BANDIT_FORWARD_REWARD_ENABLED=False` + restore that file.
+
+Caveat (§0a rule 6): measured on the dataset population — every watchlist coin
+at a daily snapshot. Live, the bandit judges candidates that already passed the
+upstream gates, so the live effect must be read off decision logs, not assumed.
 
 ### 4a. Anti-fast-reversal training requirement (2026-04-25)
 
@@ -246,26 +293,41 @@ The model must **avoid emitting BUY when a quick SELL is likely**. Currently 53.
 Implementation order: label → train → backtest (60d) → wire guard. Do NOT enable guard before backtest confirms recall@top20 stays ≥ current.
 
 ### Training sources (entry bandit)
-1. **Primary:** `top_gainer_dataset.jsonl` — ALL ~105 watchlist coins × N daily snapshots.
+1. **Primary:** `top_gainer_dataset.jsonl` — ALL ~105 watchlist coins × N daily
+   snapshots. Read as the TAIL (`BANDIT_TG_MAX_RECORDS`), graded by
+   `offline_rl._build_universal_rows` — the same helper the evaluation uses, so
+   training and grading cannot drift apart.
 2. **Secondary:** `critic_dataset.jsonl` — real bot signals with outcomes.
+   Still labelled by per-day rank of `ret_10` (8.4% of records marked positive);
+   rank-only labelling has the base-rate-by-construction weakness described
+   above, so this source is the next one to re-examine.
 
 ### Top Gainer Model (CatBoost)
 Tier classifiers: top5 / top10 / top20 / top50. Retrained daily via `daily_learning.py`. Metrics: AUC, recall@0.3.
 
-### Learning progress (as of 2026-04-13)
+### Learning progress (rebased 2026-08-13)
 
-| Date | Recall@20 | UCB Sep | Updates |
-|------|-----------|---------|---------|
-| Apr 07 | 99.0% | +0.047 | 86,751 |
-| Apr 13 | 100.0% | **+0.112** | 362,594 |
+Everything before this date was measured against `label_top20` and is **not
+comparable** with what follows: those recall figures (99–100% from Apr 07 on),
+the UCB-separation growth and the top20 AUC of 0.93 were produced by the leaky
+label plus repeated re-ingestion of the same rows. They are kept out of this
+table on purpose — deriving a trend across the label change would be exactly the
+incomparable-windows failure of §0a rule 4.
 
-UCB separation growing (+138% in a week) — bandit is learning to separate winners.
+Current, from an honest time holdout (`evaluate_bandit_accuracy` now fits a fresh
+bandit on the earlier days and grades the last 7):
 
-### Learning progress (as of 2026-04-17 / analysed 2026-04-18)
-- Recall@20 = 100% since Apr 10.
-- UCB sep: 0.015 → **0.136** (x9).
-- Model AUC top20: 0.61 → **0.93** (jump on Apr 15→16: 0.68→0.89).
-- `bandit_n_signal` hit hard cap `8000` on Apr 15 and stuck → fixed: `BANDIT_CRITIC_MAX_RECORDS=25_000` in `config.py`, wired into `offline_rl.py`.
+| Date | scope | recall | ENTER rate | base | lift |
+|------|-------|--------|-----------|------|------|
+| Aug 13 | out-of-sample, 45 train days / 7 eval | 74.2% | 35.3% | 8.1% | **2.10×** |
+| Aug 13 | in-sample echo (same live bandit) | 85.5% | 57.8% | 8.1% | 1.48× |
+
+The two rows exist to stay visible against each other: the in-sample echo reads
+higher on recall and worse on lift, which is the signature §0 rule 3 asks never
+to be collapsed into one number.
+
+`bandit_n_signal` once hit a hard cap of `8000` and stuck → `BANDIT_CRITIC_MAX_RECORDS=25_000`
+in `config.py`, wired into `offline_rl.py`.
 
 ### Pareto sweep of Scout gates (`files/analyze_blocked_gates.py`)
 Key find: actual `take` entries avg_r5 = **-0.016%**, but multiple `blocked` buckets are positive:

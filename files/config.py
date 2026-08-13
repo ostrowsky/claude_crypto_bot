@@ -41,6 +41,32 @@ CRITIC_DATASET_ENABLED: bool = True
 # Was hardcoded 8000 — dataset grew to 10K+ on 2026-04-15 and counter stuck.
 # 25_000 gives ~6 months headroom at current growth rate (~500/day).
 BANDIT_CRITIC_MAX_RECORDS: int = 25_000
+
+# ── Entry-bandit training label (leak fix, 2026-08-13) ──────────────────────
+# The bandit used to be paid +1.0 for ENTER whenever the row carried
+# label_top20. The earliest snapshot of a calendar day is the 00 UTC record —
+# the EOD resolution of a day already OVER — so 34.8% of trained rows had
+# |eod - since_open| < 0.5% and the median move still ahead was +1.75%. A fresh
+# bandit trained on that label scored lift 0.65x on a temporal holdout: worse
+# than random. Reward now follows the move that REMAINS after the snapshot.
+# Measured (309 days, split by time, target = >= +3% still ahead, base 2.0%):
+#   old label_top20            ENTER 80.3%  caught  52%  lift 0.65x
+#   rank top-20, no floor      ENTER 98.0%  caught 100%  lift 1.02x
+#   rank top-10 + floor +3%    ENTER 24.3%  caught  99%  lift 4.07x  <- deployed
+# The floor is load-bearing: a pure rank label fixes the positive count by
+# construction and collapses to "ENTER on everything".
+BANDIT_FORWARD_REWARD_ENABLED: bool = True   # rollback = False (old label)
+BANDIT_FORWARD_TOP_N: int = 10               # day's top-N by remaining move
+BANDIT_FORWARD_MIN_PCT: float = 3.0          # floor; without it lift -> 1.02x
+BANDIT_DECIDED_EPS_PCT: float = 0.5          # day already over -> row dropped
+# LinUCB accumulates A/b, so training on top of saved state keeps the old
+# label forever: 8.39M updates had piled up from ~44.6k unique samples (~188x
+# re-ingestion), which also shrank the exploration bonus without new evidence.
+BANDIT_REBUILD_ON_TRAIN: bool = True         # rollback = False (accumulate)
+# Read the TAIL of top_gainer_dataset.jsonl. It used to read the first 50k of
+# 118_625 lines, freezing the training window at 2026-06-05 for 69 days.
+BANDIT_TG_MAX_RECORDS: int = 50_000
+
 ML_CANDIDATE_RANKER_RUNTIME_ENABLED: bool = True
 ML_CANDIDATE_RANKER_MODEL_FILE: str = "ml_candidate_ranker.json"
 ML_CANDIDATE_RANKER_NEUTRAL_PROBA: float = 0.40  # was 0.50 — lowered: most signals score 0.38-0.48, neutral at 0.50 penalised them all

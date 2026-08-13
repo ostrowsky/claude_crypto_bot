@@ -463,8 +463,16 @@ def build_progress_report(
     # never present it as holdout accuracy or as live capability.
     ba = train_result.get("bandit_accuracy", {})
     if ba.get("status") == "ok":
+        _oos = ba.get("evaluation_scope") == "out_of_sample_time_holdout"
         lines.append("")
-        lines.append("Bandit Post-fit Diagnostic (IN-SAMPLE, not achievement):")
+        if _oos:
+            lines.append(
+                f"Bandit (OUT-OF-SAMPLE, trained on {ba.get('train_days', '?')} earlier "
+                f"days, label={ba.get('label', '?')}):")
+        else:
+            lines.append(
+                f"Bandit Post-fit Diagnostic (IN-SAMPLE, not achievement; "
+                f"scope={ba.get('evaluation_scope', 'unknown')}):")
         lines.append(f"  recall@20: {ba['overall_recall_top20']*100:.1f}% ({ba['total_top20_enter']}/{ba['total_top20']})")
         lines.append(
             f"  ENTER rate: {ba.get('action_rate', 0)*100:.1f}% "
@@ -527,6 +535,11 @@ def save_progress(
         "bandit_recall_lift": ba.get("lift"),
         "bandit_precision": ba.get("precision"),
         "bandit_ucb_separation": ba.get("ucb_separation"),
+        # Which label produced the numbers above. Rows written before
+        # 2026-08-13 used `label_top20`, whose positives were mostly days
+        # already over — their recall is not comparable with what follows.
+        "bandit_label": ba.get("label"),
+        "bandit_n_dropped_decided": eb.get("n_dropped_decided"),
         "bandit_total_updates": eb.get("total_updates"),
         "bandit_n_universal": eb.get("n_universal_samples", 0),
         "bandit_n_signal": eb.get("n_signal_samples", 0),

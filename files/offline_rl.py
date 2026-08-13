@@ -146,10 +146,17 @@ def _load_bot_events_exits() -> Dict[str, dict]:
 # ── Top-gainer dataset loader ────────────────────────────────────────────────
 
 def _load_top_gainer_dataset(max_records: int = 50000) -> List[dict]:
-    """Load records from top_gainer_dataset.jsonl (ALL watchlist symbols with EOD labels)."""
+    """Load the MOST RECENT records from top_gainer_dataset.jsonl.
+
+    This used to `break` after the first `max_records` lines, which on a
+    118_625-line file meant the bandit trained on the OLDEST 50k rows and its
+    data window sat frozen at 2026-06-05 for 69 days. Keeping a bounded tail
+    (deque) costs the same single pass and always ends at today.
+    """
     if not TOP_GAINER_DATASET_FILE.exists():
         return []
-    records = []
+    from collections import deque
+    keep: deque = deque(maxlen=max(1, int(max_records)))
     with TOP_GAINER_DATASET_FILE.open("r", encoding="utf-8") as fh:
         for line in fh:
             line = line.strip()
@@ -157,13 +164,141 @@ def _load_top_gainer_dataset(max_records: int = 50000) -> List[dict]:
                 continue
             try:
                 rec = json.loads(line)
-                if rec.get("features") and rec.get("symbol"):
-                    records.append(rec)
             except json.JSONDecodeError:
                 continue
-            if len(records) >= max_records:
-                break
-    return records
+            if rec.get("features") and rec.get("symbol"):
+                keep.append(rec)
+    return list(keep)
+
+
+def _forward_move_pct(rec: dict) -> Optional[float]:
+    """Move still AHEAD of the snapshot, in percent, or None if unknowable.
+
+    `eod_return_pct` covers open->close; `tg_return_since_open` covers
+    open->snapshot. What an ENTER decision can still capture is the ratio of
+    the two. This is the only part of the day the bandit can actually earn.
+    """
+    f = rec.get("features") or {}
+    since_open = f.get("tg_return_since_open")
+    eod = rec.get("eod_return_pct")
+    if not isinstance(since_open, (int, float)) or not isinstance(eod, (int, float)):
+        return None
+    den = 1.0 + float(since_open) / 100.0
+    if den <= 0.01:
+        return None
+    return ((1.0 + float(eod) / 100.0) / den - 1.0) * 100.0
+
+
+def _label_params() -> dict:
+    """Entry-label settings, read once so training and evaluation agree.
+
+    They must share this: if the bandit is trained on the remaining move but
+    graded against `label_top20`, the fix looks like a regression.
+    """
+    try:
+        import config as _cfg
+    except Exception:                                    # pragma: no cover
+        _cfg = None
+
+    def g(name, default):
+        return getattr(_cfg, name, default) if _cfg else default
+
+    return {
+        "forward": bool(g("BANDIT_FORWARD_REWARD_ENABLED", True)),
+        "top_n": int(g("BANDIT_FORWARD_TOP_N", 10)),
+        "min_pct": float(g("BANDIT_FORWARD_MIN_PCT", 3.0)),
+        "eps": float(g("BANDIT_DECIDED_EPS_PCT", 0.5)),
+        "rebuild": bool(g("BANDIT_REBUILD_ON_TRAIN", True)),
+        "max_records": int(g("BANDIT_TG_MAX_RECORDS", 50_000)),
+    }
+
+
+def _build_universal_rows(tg_records: List[dict], lp: dict, *,
+                          use_earliest_snapshot: bool = True) -> Tuple[List[dict], int]:
+    """One graded row per (day, symbol): {day, x, positive}.
+
+    Positive = among the day's top-N by the move STILL AHEAD of the snapshot,
+    and that move clears the floor. Rank alone would mint exactly N winners a
+    day whatever the market did (measured: lift 1.02x, ENTER on 98% of rows);
+    the floor is what makes the label mean anything.
+
+    Returns (rows, n_dropped_decided).
+    """
+    from contextual_bandit import extract_context
+
+    by_day_sym: Dict[str, Dict[str, list]] = {}
+    for rec in tg_records:
+        ts_ms = rec.get("ts", 0)
+        if not ts_ms:
+            continue
+        day_key = datetime.utcfromtimestamp(ts_ms / 1000).strftime("%Y-%m-%d")
+        by_day_sym.setdefault(day_key, {}).setdefault(rec.get("symbol", ""), []).append(rec)
+
+    rows: List[dict] = []
+    n_dropped = 0
+    for day_key, sym_recs in by_day_sym.items():
+        picked: List[dict] = []
+        for _sym, recs in sym_recs.items():
+            rec = (min(recs, key=lambda r: r.get("ts", 0)) if use_earliest_snapshot
+                   else max(recs, key=lambda r: r.get("ts", 0)))
+            if lp["forward"]:
+                # A snapshot taken after the day resolved has the whole move in
+                # its own features; there was never a decision to grade.
+                if _day_already_decided(rec, lp["eps"]):
+                    n_dropped += 1
+                    continue
+                fwd = _forward_move_pct(rec)
+                if fwd is None:
+                    continue
+                rec = dict(rec, _fwd_pct=fwd)
+            picked.append(rec)
+
+        if lp["forward"]:
+            ranked = sorted(picked, key=lambda r: -r["_fwd_pct"])
+            winners = {id(r) for r in ranked[:max(0, lp["top_n"])]
+                       if r["_fwd_pct"] >= lp["min_pct"]}
+        else:
+            winners = {id(r) for r in picked if bool(r.get("label_top20", 0))}
+
+        for rec in picked:
+            state, btc_ema50 = _tg_features_to_context(rec.get("features", {}))
+            is_bull = btc_ema50 > 0.3
+            rows.append({
+                "day": day_key,
+                "x": extract_context(state, mode="trend", tf="15m",
+                                     is_bull_day=is_bull,
+                                     market_regime="bull" if is_bull else "neutral",
+                                     btc_vs_ema50=btc_ema50),
+                "positive": id(rec) in winners,
+            })
+    return rows, n_dropped
+
+
+def _universal_samples_from_rows(rows: List[dict]) -> List[tuple]:
+    """Both arms per row, so the bandit sees ENTER and SKIP in one context."""
+    out: List[tuple] = []
+    for r in rows:
+        if r["positive"]:
+            out.append((r["x"], 1, 1.0))     # ENTER rewarded
+            out.append((r["x"], 0, -0.8))    # SKIP penalised heavily
+        else:
+            out.append((r["x"], 0, 0.10))    # SKIP mildly rewarded
+            out.append((r["x"], 1, -0.12))   # ENTER mildly penalised
+    return out
+
+
+def _day_already_decided(rec: dict, eps_pct: float) -> bool:
+    """True when the snapshot is the EOD resolution of a day already over.
+
+    Such a row carries no decision — the whole move is in the features and in
+    the label at once — so training on it teaches hindsight, not prediction.
+    """
+    f = rec.get("features") or {}
+    since_open = f.get("tg_return_since_open")
+    eod = rec.get("eod_return_pct")
+    if not isinstance(since_open, (int, float)) or not isinstance(eod, (int, float)):
+        return True
+    return abs(float(eod) - float(since_open)) < eps_pct
 
 
 def _tg_features_to_context(features: dict) -> Tuple[dict, float]:
@@ -257,7 +392,30 @@ def train_entry_bandit(
         N_ENTRY_ARMS,
     )
 
-    bandit = get_entry_bandit()
+    lp = _label_params()
+    fwd_reward_on = lp["forward"]
+    fwd_top_n = lp["top_n"]
+    fwd_min_pct = lp["min_pct"]
+    rebuild = lp["rebuild"]
+
+    if rebuild:
+        # LinUCB's A/b are sums over the whole history, so batch_update on the
+        # saved state would carry the old (leaky) label forever — and re-adding
+        # the same rows each run had inflated it to 8.39M updates from ~44.6k
+        # unique samples. Rebuild from scratch instead, keeping a one-time
+        # backup of what the leaky label produced.
+        import contextual_bandit as _cb
+        backup = ENTRY_STATE_FILE.with_suffix(".pre_leakfix.json")
+        if ENTRY_STATE_FILE.exists() and not backup.exists():
+            backup.write_bytes(ENTRY_STATE_FILE.read_bytes())
+            log.warning("Entry bandit: pre-leakfix state backed up -> %s", backup.name)
+        from contextual_bandit import LinUCBBandit as _LinUCB, N_FEATURES as _NF
+        bandit = _LinUCB(n_arms=N_ENTRY_ARMS, n_features=_NF, alpha=2.0)
+        # the live process holds the old matrix in memory; drop it so the
+        # rebuilt state is what actually decides
+        _cb._entry_bandit = bandit
+    else:
+        bandit = get_entry_bandit()
     _fr_model, _fr_on = _load_fast_reversal_model()
     try:
         import config as _cfg_fr
@@ -268,63 +426,22 @@ def train_entry_bandit(
     n_fr_pos = 0
 
     # ── Source 1: Universal samples from top_gainer_dataset ─────────────────
-    tg_records = _load_top_gainer_dataset()
-    universal_samples = []
-    n_universal_top = 0
-    tg_days = set()
+    tg_records = _load_top_gainer_dataset(lp["max_records"])
+    universal_rows, n_dropped_decided = _build_universal_rows(
+        tg_records, lp, use_earliest_snapshot=use_earliest_snapshot)
+    universal_samples = _universal_samples_from_rows(universal_rows)
+    n_universal_top = sum(1 for r in universal_rows if r["positive"])
+    tg_days = {r["day"] for r in universal_rows}
 
-    # Group by (date, symbol) to pick earliest snapshot per day per symbol
-    by_day_sym: Dict[str, Dict[str, list]] = {}
-    for rec in tg_records:
-        ts_ms = rec.get("ts", 0)
-        if not ts_ms:
-            continue
-        dt = datetime.utcfromtimestamp(ts_ms / 1000)
-        day_key = dt.strftime("%Y-%m-%d")
-        sym = rec.get("symbol", "")
-        by_day_sym.setdefault(day_key, {}).setdefault(sym, []).append(rec)
-
-    for day_key, sym_recs in by_day_sym.items():
-        tg_days.add(day_key)
-        for sym, recs in sym_recs.items():
-            # Pick earliest snapshot if configured, else latest
-            if use_earliest_snapshot:
-                rec = min(recs, key=lambda r: r.get("ts", 0))
-            else:
-                rec = max(recs, key=lambda r: r.get("ts", 0))
-
-            features = rec.get("features", {})
-            is_top20 = bool(rec.get("label_top20", 0))
-            is_top10 = bool(rec.get("label_top10", 0))
-
-            state, btc_ema50 = _tg_features_to_context(features)
-            # Infer bull day from BTC context
-            is_bull = btc_ema50 > 0.3
-
-            x = extract_context(
-                state, mode="trend", tf="15m",
-                is_bull_day=is_bull,
-                market_regime="bull" if is_bull else "neutral",
-                btc_vs_ema50=btc_ema50,
-            )
-
-            # For universal samples: train BOTH arms per sample.
-            # This creates proper discrimination — the bandit learns
-            # which contexts predict top gainers by seeing rewards
-            # for both ENTER and SKIP in the same context.
-            if is_top20:
-                # Top gainer: strong signal that ENTER was correct
-                universal_samples.append((x, 1, 1.0))    # ENTER rewarded
-                universal_samples.append((x, 0, -0.8))   # SKIP penalized heavily
-                n_universal_top += 1
-            else:
-                # Not top gainer: mild signal that SKIP was correct
-                # Weaker penalty for ENTER to maintain high recall
-                universal_samples.append((x, 0, 0.10))   # SKIP mildly rewarded
-                universal_samples.append((x, 1, -0.12))  # ENTER mildly penalized
-
-    log.info("Universal samples: %d from %d days (%d top gainers)",
-             len(universal_samples), len(tg_days), n_universal_top)
+    n_universal_rows = len(universal_samples) // 2
+    universal_base_rate = (n_universal_top / n_universal_rows) if n_universal_rows else 0.0
+    # §0a rule 1: the positive rate travels with the count, so no reader can
+    # mistake "the bandit learned N winners" for skill.
+    log.info("Universal samples: %d rows from %d days (%d positive = %.1f%% base "
+             "rate, %d dropped as already-decided, label=%s)",
+             n_universal_rows, len(tg_days), n_universal_top,
+             100.0 * universal_base_rate, n_dropped_decided,
+             f"forward top-{fwd_top_n}/>={fwd_min_pct:g}%" if fwd_reward_on else "label_top20")
 
     # ── Source 2: Signal samples from critic_dataset ────────────────────────
     try:
@@ -433,6 +550,14 @@ def train_entry_bandit(
         "n_days": len(tg_days),
         "total_updates": bandit.total_updates,
         "arm_stats": stats,
+        # leak-fix bookkeeping — a positive count is meaningless without these
+        "label": (f"forward_top{fwd_top_n}_min{fwd_min_pct:g}" if fwd_reward_on
+                  else "label_top20"),
+        "n_universal_rows": n_universal_rows,
+        "n_dropped_decided": n_dropped_decided,
+        "universal_base_rate": round(universal_base_rate, 4),
+        "rebuilt_from_scratch": rebuild,
+        "tg_window": (f"{min(tg_days)}..{max(tg_days)}" if tg_days else ""),
     }
 
 
@@ -455,137 +580,139 @@ def _binary_policy_ratio_context(*, total_rows: int, total_enter: int,
         "precision_lift": round(precision / base_rate, 4) if base_rate else 0.0,
     }
 
-def evaluate_bandit_accuracy(n_recent_days: int = 7) -> dict:
-    """
-    Backtest the current entry bandit on recent top_gainer_dataset records.
-
-    For each day, simulate: would the bandit choose ENTER for actual top gainers?
-
-    Returns a *post-fit/in-sample diagnostic*.  The live bandit has already
-    trained on this dataset, so these values are not a holdout achievement.
-    Ratio context (action rate, base rate, precision and lift) is mandatory;
-    recall alone is vacuous when ENTER is selected for most rows.
-    """
-    from contextual_bandit import get_entry_bandit, extract_context
-
-    bandit = get_entry_bandit()
-    if bandit.total_updates < 50:
-        return {"status": "untrained", "total_updates": bandit.total_updates}
-
-    tg_records = _load_top_gainer_dataset()
-    if not tg_records:
-        return {"status": "no_data"}
-
-    # Group by (date, symbol) — pick earliest snapshot
-    by_day_sym: Dict[str, Dict[str, dict]] = {}
-    for rec in tg_records:
-        ts_ms = rec.get("ts", 0)
-        if not ts_ms:
-            continue
-        dt = datetime.utcfromtimestamp(ts_ms / 1000)
-        day_key = dt.strftime("%Y-%m-%d")
-        sym = rec.get("symbol", "")
-        if sym not in by_day_sym.get(day_key, {}):
-            by_day_sym.setdefault(day_key, {})[sym] = rec
-        else:
-            existing_ts = by_day_sym[day_key][sym].get("ts", 0)
-            if ts_ms < existing_ts:
-                by_day_sym[day_key][sym] = rec
-
-    # Keep only most recent N days
-    sorted_days = sorted(by_day_sym.keys(), reverse=True)[:n_recent_days]
-
-    daily_results = []
-    total_top20 = 0
-    total_top20_enter = 0
-    total_rows = 0
-    total_enter = 0
-    total_non_top_enter = 0
-    all_ucb_gaps_top = []
-    all_ucb_gaps_nontop = []
-
-    for day_key in sorted_days:
-        sym_recs = by_day_sym[day_key]
-        day_top20 = 0
-        day_top20_enter = 0
-        day_enter = 0
-
-        for sym, rec in sym_recs.items():
-            features = rec.get("features", {})
-            is_top20 = bool(rec.get("label_top20", 0))
-
-            state, btc_ema50 = _tg_features_to_context(features)
-            is_bull = btc_ema50 > 0.3
-
-            x = extract_context(
-                state, mode="trend", tf="15m",
-                is_bull_day=is_bull,
-                market_regime="bull" if is_bull else "neutral",
-                btc_vs_ema50=btc_ema50,
-            )
-
-            arm, info = bandit.select_arm(x)
-            ucbs = info.get("ucbs", [0, 0])
-            ucb_gap = ucbs[1] - ucbs[0] if len(ucbs) >= 2 else 0.0
-
-            total_rows += 1
+def _score_policy(bandit, rows: List[dict]) -> dict:
+    """Run a bandit over graded rows; ratio context travels with the recall."""
+    total = enter = pos = tp = 0
+    gaps_pos: List[float] = []
+    gaps_neg: List[float] = []
+    per_day: Dict[str, List[int]] = {}
+    for r in rows:
+        arm, info = bandit.select_arm(r["x"])
+        ucbs = info.get("ucbs", [0, 0])
+        gap = ucbs[1] - ucbs[0] if len(ucbs) >= 2 else 0.0
+        total += 1
+        d = per_day.setdefault(r["day"], [0, 0, 0, 0])   # rows, enter, pos, tp
+        d[0] += 1
+        if arm == 1:
+            enter += 1
+            d[1] += 1
+        if r["positive"]:
+            pos += 1
+            d[2] += 1
+            gaps_pos.append(gap)
             if arm == 1:
-                total_enter += 1
-                day_enter += 1
+                tp += 1
+                d[3] += 1
+        else:
+            gaps_neg.append(gap)
 
-            if is_top20:
-                day_top20 += 1
-                total_top20 += 1
-                if arm == 1:  # ENTER
-                    day_top20_enter += 1
-                    total_top20_enter += 1
-                all_ucb_gaps_top.append(ucb_gap)
-            else:
-                if arm == 1:
-                    total_non_top_enter += 1
-                all_ucb_gaps_nontop.append(ucb_gap)
-
-        recall = day_top20_enter / day_top20 if day_top20 > 0 else 0.0
-        daily_results.append({
-            "day": day_key,
-            "n_symbols": len(sym_recs),
-            "n_top20": day_top20,
-            "n_top20_enter": day_top20_enter,
-            "recall_top20": round(recall, 4),
-            "n_enter": day_enter,
-            "action_rate": round(day_enter / len(sym_recs), 4) if sym_recs else 0.0,
-        })
-
-    ratio = _binary_policy_ratio_context(
-        total_rows=total_rows,
-        total_enter=total_enter,
-        total_positive=total_top20,
-        true_positive_enter=total_top20_enter,
-    )
-    overall_recall = ratio["recall"]
-    avg_ucb_gap_top = sum(all_ucb_gaps_top) / len(all_ucb_gaps_top) if all_ucb_gaps_top else 0.0
-    avg_ucb_gap_nontop = sum(all_ucb_gaps_nontop) / len(all_ucb_gaps_nontop) if all_ucb_gaps_nontop else 0.0
+    ratio = _binary_policy_ratio_context(total_rows=total, total_enter=enter,
+                                         total_positive=pos, true_positive_enter=tp)
+    g_pos = sum(gaps_pos)/len(gaps_pos) if gaps_pos else 0.0
+    g_neg = sum(gaps_neg)/len(gaps_neg) if gaps_neg else 0.0
     return {
-        "status": "ok",
-        "evaluation_scope": "in_sample_post_fit",
-        "diagnostic_only": True,
-        "n_days": len(daily_results),
-        "total_rows": total_rows,
-        "total_enter": total_enter,
-        "total_non_top_enter": total_non_top_enter,
-        "overall_recall_top20": round(overall_recall, 4),
-        "total_top20": total_top20,
-        "total_top20_enter": total_top20_enter,
+        "n_days": len(per_day),
+        "total_rows": total,
+        "total_enter": enter,
+        "total_positive": pos,
+        "total_positive_enter": tp,
+        "recall": ratio["recall"],
         "action_rate": ratio["action_rate"],
         "base_rate": ratio["base_rate"],
         "precision": ratio["precision"],
         "lift": ratio["recall_lift"],
         "precision_lift": ratio["precision_lift"],
-        "avg_ucb_gap_top_gainers": round(avg_ucb_gap_top, 4),
-        "avg_ucb_gap_non_top": round(avg_ucb_gap_nontop, 4),
-        "ucb_separation": round(avg_ucb_gap_top - avg_ucb_gap_nontop, 4),
-        "daily": daily_results,
+        "avg_ucb_gap_top_gainers": round(g_pos, 4),
+        "avg_ucb_gap_non_top": round(g_neg, 4),
+        "ucb_separation": round(g_pos - g_neg, 4),
+        "daily": [
+            {"day": day, "n_symbols": v[0], "n_enter": v[1], "n_top20": v[2],
+             "n_top20_enter": v[3],
+             "recall_top20": round(v[3]/v[2], 4) if v[2] else 0.0,
+             "action_rate": round(v[1]/v[0], 4) if v[0] else 0.0}
+            for day, v in sorted(per_day.items(), reverse=True)
+        ],
     }
+
+
+def evaluate_bandit_accuracy(n_recent_days: int = 7) -> dict:
+    """Grade the entry bandit on the LAST n_recent_days, out of sample.
+
+    The headline numbers come from a bandit trained only on the days BEFORE the
+    evaluation window, so they are a genuine time holdout rather than a
+    post-fit echo — the live bandit has already seen every row of this dataset,
+    and reading its own training data back was what produced "recall@20 = 100%"
+    while ENTER fired on 73% of everything.
+
+    The live bandit's in-sample numbers are still returned under
+    `in_sample_post_fit`, because the gap between the two IS the diagnostic
+    (§0 rule 3) and collapsing them into one number hides it.
+
+    Grading uses the same label as training (`_build_universal_rows`), so the
+    two cannot drift apart.
+    """
+    from contextual_bandit import get_entry_bandit, LinUCBBandit, N_FEATURES
+
+    live = get_entry_bandit()
+    if live.total_updates < 50:
+        return {"status": "untrained", "total_updates": live.total_updates}
+
+    lp = _label_params()
+    tg_records = _load_top_gainer_dataset(lp["max_records"])
+    if not tg_records:
+        return {"status": "no_data"}
+
+    rows, _dropped = _build_universal_rows(tg_records, lp)
+    if not rows:
+        return {"status": "no_data"}
+
+    days = sorted({r["day"] for r in rows}, reverse=True)
+    eval_days = set(days[:n_recent_days])
+    train_rows = [r for r in rows if r["day"] not in eval_days]
+    eval_rows = [r for r in rows if r["day"] in eval_days]
+
+    in_sample = _score_policy(live, eval_rows)
+
+    out: dict = {
+        "status": "ok",
+        "label": (f"forward_top{lp['top_n']}_min{lp['min_pct']:g}" if lp["forward"]
+                  else "label_top20"),
+        "in_sample_post_fit": dict(in_sample, evaluation_scope="in_sample_post_fit",
+                                   diagnostic_only=True),
+    }
+
+    if len(train_rows) < 200 or not eval_rows:
+        # Not enough earlier days to train an honest holdout — say so rather
+        # than quietly promoting the in-sample figure (§0a rule 10).
+        out.update(in_sample)
+        out.update({
+            "evaluation_scope": "insufficient_history_for_holdout",
+            "diagnostic_only": True,
+            "n_train_rows": len(train_rows),
+            "overall_recall_top20": in_sample["recall"],
+            "total_top20": in_sample["total_positive"],
+            "total_top20_enter": in_sample["total_positive_enter"],
+            "total_non_top_enter": in_sample["total_enter"] - in_sample["total_positive_enter"],
+        })
+        return out
+
+    holdout = LinUCBBandit(n_arms=2, n_features=N_FEATURES, alpha=live.alpha)
+    holdout.batch_update(_universal_samples_from_rows(train_rows))
+    oos = _score_policy(holdout, eval_rows)
+
+    out.update(oos)
+    out.update({
+        "evaluation_scope": "out_of_sample_time_holdout",
+        "diagnostic_only": False,
+        "n_train_rows": len(train_rows),
+        "train_days": len({r["day"] for r in train_rows}),
+        # kept for backwards compatibility with existing report fields
+        "overall_recall_top20": oos["recall"],
+        "total_top20": oos["total_positive"],
+        "total_top20_enter": oos["total_positive_enter"],
+        "total_non_top_enter": oos["total_enter"] - oos["total_positive_enter"],
+    })
+    return out
 
 
 # ── 2. Trail bandit batch update ────────────────────────────────────────────
