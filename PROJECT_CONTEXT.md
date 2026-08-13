@@ -104,9 +104,15 @@ decoupling (сам расчёт декоплинга и shadow-логирова�
 | `.runtime/rl_worker_bg.json` | PID RL worker |
 | `.runtime/tg_send_dedup.json` | Дедупликация Telegram отчётов |
 | `.runtime/learning_progress.jsonl` | История метрик обучения (daily) |
-| `files/top_gainer_dataset.jsonl` | Фичи ВСЕХ монет из watchlist × N снимков в день |
-| `files/critic_dataset.jsonl` | Сигналы бота с результатами (source: signal-originated) |
-| `files/bot_events.jsonl` | Все события бота (entry, blocked, exit) |
+| `files/top_gainer_dataset.jsonl` (~147 МБ) | Фичи ВСЕХ монет из watchlist × N снимков в день |
+| `files/critic_dataset.jsonl` (~139 МБ) | Сигналы бота с результатами (source: signal-originated) |
+| `files/bot_events.jsonl` (~98 МБ) | Все события бота (entry, blocked, exit) |
+| `files/ml_dataset.jsonl` (~115 МБ) | Сырые данные для обучения ML |
+
+**Размеры растут:** любая операция «пройти по всему файлу» стоит секунды и
+масштабируется с размером. Проверять актуальность цифр:
+`pyembed\python.exe files\_audit_md_vs_config.py` (сверяет заявленное в
+CLAUDE.md с фактическим config и размерами файлов, exit=1 при расхождении).
 
 ---
 

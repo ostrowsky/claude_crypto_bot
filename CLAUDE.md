@@ -123,10 +123,10 @@ decoupling promote-to-scan skipped (decoupling scoring/shadow logging untouched)
 | `.runtime/rl_worker_bg.json` | RL worker PID |
 | `.runtime/tg_send_dedup.json` | Telegram dedup state |
 | `.runtime/learning_progress.jsonl` | Daily learning metrics history |
-| `files/top_gainer_dataset.jsonl` (~29 MB) | Features of ALL watchlist coins × N daily snapshots |
-| `files/critic_dataset.jsonl` (~36 MB) | Bot signals with outcomes (nested: `decision.action`, `decision.reason_code`, `labels.ret_5`, `labels.label_5`) |
-| `files/bot_events.jsonl` (~17 MB) | All bot events (entry / blocked / exit) |
-| `files/ml_dataset.jsonl` (~103 MB) | Raw ML training data |
+| `files/top_gainer_dataset.jsonl` (~147 MB) | Features of ALL watchlist coins × N daily snapshots |
+| `files/critic_dataset.jsonl` (~139 MB) | Bot signals with outcomes (nested: `decision.action`, `decision.reason_code`, `labels.ret_5`, `labels.label_5`) |
+| `files/bot_events.jsonl` (~98 MB) | All bot events (entry / blocked / exit) |
+| `files/ml_dataset.jsonl` (~115 MB) | Raw ML training data |
 
 ### Tests / backtests
 - `files/test_rotation.py` — 21 unit tests for rotation.
@@ -456,7 +456,9 @@ days without data as "no data" instead of misses before trusting trend claims.
 | 2026-04-13 | `is_bull_day_now` used before definition in `monitor.py` (~L3125 vs L3296) → silent crash each cycle, 0 signals overnight | Defined before `_impulse_speed_entry_guard` call |
 | 2026-04-06 | 0 entries despite 12 top gainers (+5–59%) — all blocked | See "Filter overtightening" below |
 
-### Filter overtightening (2026-04-06)
+### Filter overtightening (2026-04-06) — ИСТОРИЧЕСКИЙ РАЗБОР
+
+Значения ниже — то, что поставили ТОГДА. Часть с тех пор дотюнена (`ML_GENERAL_HARD_BLOCK_MIN` сейчас 0.28, `..._BULL_DAY_MIN` 0.22). Текущие значения всегда в `config.py`, здесь — причина правки.
 
 All filters were blocking **100% of top gainers**. Corrected values:
 ```python
@@ -484,15 +486,15 @@ ML_CANDIDATE_RANKER_HARD_VETO_1H_TOP_GAINER_MAX = 0.25  # veto only if final bad
 управление передаётся ATR-trail’у. Цель: атаковать главный leak
 из EX1 baseline — exit_class `ema20_weakness` (median EX1 −0.010).
 Backtest 30 d: 4/982 H5-eligible exits, на одном APEUSDT 04-30
-оставлено +471 % potential на столе. Default: SHADOW=True (logging),
-ENABLED=False (поведение не меняется до acceptance).
+оставлено +471 % potential на столе. Default НА МОМЕНТ ВНЕДРЕНИЯ: SHADOW=True, ENABLED=False.
+**Сейчас в config: ENABLED=True, SHADOW=False** — см. «H5 ACTIVATED» ниже.
 Acceptance перед flip → True: 7 d shadow с ≥3 events.
 Helper: `monitor.py::_h5_should_suppress` (~ L1745).
 Wired в exit-pipeline после WEAK / TREND_HOLD overrides (~ L5325).
 Configs:
 ```python
-H5_TRAILING_ONLY_AFTER_BREAK_EVEN_ENABLED = False
-H5_TRAILING_ONLY_SHADOW = True
+H5_TRAILING_ONLY_AFTER_BREAK_EVEN_ENABLED = True    # активировано 2026-05-05
+H5_TRAILING_ONLY_SHADOW = False                     # shadow снят там же
 H5_BREAK_EVEN_PCT = 0.5
 ```
 Spec: `docs/specs/features/h5-trailing-only-break-even-spec.md`.
@@ -562,9 +564,12 @@ Configs:
 ```python
 TREND_1H_CHOP_FILTER_ENABLED = True
 TREND_1H_CHOP_ADX_MIN   = 25.0
-TREND_1H_CHOP_SLOPE_MIN = 1.2
+TREND_1H_CHOP_SLOPE_MIN = 0.7    # relaxed from 1.2 (slow-build trends were cut)
 TREND_1H_CHOP_VOL_MIN   = 1.3
-TREND_1H_CHOP_USE_BULL_DAY_RELAX = False  # opt-in
+TREND_1H_CHOP_USE_BULL_DAY_RELAX = True   # ON since 2026-08-06 (see below)
+TREND_1H_CHOP_ADX_MIN_BULL_DAY   = 22.0   # bull-day relax: validated, max period —
+TREND_1H_CHOP_SLOPE_MIN_BULL_DAY = 1.0    # bull ADX22-25 band +0.097% & 3 recovered
+TREND_1H_CHOP_VOL_MIN_BULL_DAY   = 1.2    # top-20; the SAME band is -0.822% off bull
 ```
 Rollback: `TREND_1H_CHOP_FILTER_ENABLED=False`.
 Spec: `docs/specs/features/trend-1h-chop-filter-spec.md`.
@@ -586,7 +591,7 @@ and trail-update sites in `monitor.py` (helpers `_trail_min_buffer_pct`,
 `_compute_trail_buffer` ~ L1705). Defaults:
 ```python
 TRAIL_MIN_BUFFER_PCT_ENABLED = True
-TRAIL_MIN_BUFFER_PCT_IMPULSE_SPEED = 0.08    # 8% (was 1.5%) — EX1 capture fix 2026-06-01
+TRAIL_MIN_BUFFER_PCT_IMPULSE_SPEED = 0.015   # 8% was ROLLED BACK 2026-06-05 (live regression)
 TRAIL_MIN_BUFFER_PCT_STRONG_TREND  = 0.015
 TRAIL_MIN_BUFFER_PCT_IMPULSE       = 0.012
 # trend / alignment / retest / breakout / default = 0.0
@@ -643,8 +648,8 @@ Live rules include: `ranker_hard_veto`, `correlation_guard`, `ml_proba_zone`, `t
 BANDIT_ENABLED = True
 ML_GENERAL_HARD_BLOCK_MAX = 1.01              # 1.01 = no upper cap
 TOP_GAINER_CRITIC_ENABLED = True
-RL_TRAIN_TELEGRAM_REPORTS_ENABLED = True
-TOP_GAINER_CRITIC_TELEGRAM_REPORTS_ENABLED = True
+RL_TRAIN_TELEGRAM_REPORTS_ENABLED = False           # live: off
+TOP_GAINER_CRITIC_TELEGRAM_REPORTS_ENABLED = False  # live: off
 TREND_15M_QUALITY_GUARD_ENABLED = True
 ML_CANDIDATE_RANKER_HARD_VETO_ENABLED = True
 ROTATION_ENABLED = True
