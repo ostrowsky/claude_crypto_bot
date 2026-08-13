@@ -40,7 +40,7 @@ time they are used; P3 is a research programme.
 | G7 | Daily artifact names its denominator + blocker harm | **P1** | 1 day | planned |
 | G1 | SQLite event store with byte-offset incremental sync | **P1** | 2–3 days | planned |
 | G4 | Forward-cohort promotion gate before production | **P1** | 1–2 days | planned |
-| E3 | Freshness SLO per learning artifact | **P1** | hours | part shipped 2026-08-13 (stale-lock half) |
+| E3 | Freshness SLO per learning artifact | **P1** | hours | shipped 2026-08-13 |
 | G2 | Canonical continuous OHLCV store + coverage gate | **P2** | 2 days | planned |
 | G6 | Decomposed bandit reward components (logged, not enforced) | **P2** | 1 day | planned |
 | G10 | Inherit their refuted hypotheses; re-test H5 their way | **P2** | 1 day | planned |
@@ -152,8 +152,15 @@ recycle, and fails safe: if the check itself errors it assumes alive, so a
 working backfill is never displaced. Six tests in `test_backfill_lock.py`,
 including the exact zero-byte artefact found in production.
 
-Still owed for E3 proper: a declared write interval per artifact and an alarm
-when one lapses. This fix removes one cause; it does not detect the next one.
+**Shipped 2026-08-13 — the manifest.** `files/artifact_freshness.py` declares a
+maximum age for each of eleven artifacts, every limit set at roughly 2–3× the
+cadence measured that day so jitter never fires, and every limit carrying a
+stated reason. A flag-gated artifact reports `disabled` rather than `stale`
+(`fast_reversal_catboost.cbm` is 46 days old on purpose) because a checker that
+cries wolf is one people stop reading — and then the next real stall is
+invisible again. The flag lookup fails open, so a config error cannot hide a
+stall. Wired into the harness as `TH05_ARTIFACT_FRESHNESS`; 11 tests use real
+backdated files, including the gate above.
 
 ---
 

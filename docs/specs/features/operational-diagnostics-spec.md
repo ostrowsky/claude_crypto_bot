@@ -148,9 +148,54 @@ lock, a live owner, a dead owner, an expired lock, the exact zero-byte artefact
 found in production, and an unavailable liveness check. Suite after the change:
 763 tests, 40 failing, unchanged from baseline.
 
-This removes one cause of a silent input stall. It does **not** detect the next
-one — a declared write interval per artifact with an alarm remains open as
-roadmap item E3.
+This removes one cause of a silent input stall. Detecting the next one is the
+freshness manifest below.
+
+## Artifact freshness SLO — how a stall gets noticed
+
+**Truth-harness invariant: TH-05.** A learning input that stopped arriving is
+neither a crash nor a filter decision; it is missing evidence, and every number
+downstream inherits the gap without saying so. Two cases prompted this: our
+backfill lock (58 days) and, in the sibling bot, `critic_dataset.jsonl` frozen
+on 2026-08-04 while every other dataset kept updating.
+
+`files/artifact_freshness.py` declares a maximum age for each artifact the loop
+depends on:
+
+| artifact | limit | observed 2026-08-13 |
+|---|---|---|
+| `bot_events.jsonl` | 2h | 0.0h |
+| `critic_dataset.jsonl` · `ml_dataset.jsonl` | 6h | 0.0h · 0.2h |
+| `ml_candidate_ranker.json` | 6h | 0.3h |
+| `top_gainer_dataset.jsonl` | 12h | 3.2h |
+| `bandit_entry_state.json` · `top_gainer_model.json` | 36h | 4.8h · 15.1h |
+| `learning_progress.jsonl` · `metrics_daily.jsonl` · `pipeline/health` | 36h | 15.1h · 5.8h · 4.8h |
+| `fast_reversal_catboost.cbm` | 36h, flag-gated | disabled |
+
+Every limit is roughly 2–3× the observed cadence, so normal jitter never fires.
+Each carries a stated reason in code: a threshold without one rots into a number
+nobody dares change.
+
+An artifact behind a config flag reports `disabled`, not `stale`, when the flag
+is off. `fast_reversal_catboost.cbm` is 46 days old on purpose, and a checker
+that cries wolf about it is one people stop reading — after which the next real
+stall is invisible again. The flag lookup fails **open**: if config cannot be
+read the artifact is treated as expected, so a config error never hides a stall.
+
+Wired into `truth_harness.audit_artifact_freshness` as `TH05_ARTIFACT_FRESHNESS`
+(stale → error, missing → warning), so it runs with every full audit rather than
+waiting to be remembered. Also standalone:
+
+```
+pyembed\python.exe files\artifact_freshness.py         # table, exit 1 if stale
+pyembed\python.exe files\artifact_freshness.py --json
+```
+
+Verification: `python -m unittest test_artifact_freshness` — 11 tests using real
+backdated files rather than a mocked clock, including the roadmap gate (alarm
+fires on a deliberately stale copy, scaled to the 58-day outage), the boundary
+case, a disabled flag, an unreadable config, and directory artifacts taking
+their newest file.
 
 ## Fixed along the way
 

@@ -434,6 +434,38 @@ def render(audit: Audit) -> str:
     return "\n".join(lines)
 
 
+def audit_artifact_freshness(audit: Audit, root: Path = ROOT) -> None:
+    """TH-05: a metric must know what it does not know.
+
+    A learning input that stopped arriving is not a crash and not a filter
+    decision — it is missing evidence, and every downstream number silently
+    inherits the gap. `.runtime/backfill_critic.lock` held for 1389 hours and
+    11 908 rows went unlabelled with nothing in any report about it.
+    """
+    audit.checked("TH05_ARTIFACT_FRESHNESS")
+    try:
+        sys.path.insert(0, str(root / "files"))
+        import artifact_freshness  # noqa: PLC0415
+        rows = artifact_freshness.check(root=root)
+    except Exception as exc:                                  # pragma: no cover
+        audit.add("TH05_ARTIFACT_FRESHNESS", "TH-05", "error",
+                  "Artifact freshness could not be evaluated",
+                  f"{type(exc).__name__}: {exc}",
+                  "A checker that cannot run is not a pass.")
+        return
+    for row in rows:
+        if row["status"] == "stale":
+            audit.add("TH05_ARTIFACT_FRESHNESS", "TH-05", "error",
+                      f"Learning input stopped arriving: {row['name']}",
+                      f"age={row['age_h']:.1f}h > {row['max_age_h']:.0f}h — {row['why']}",
+                      "Find why it stopped before trusting anything derived from it.")
+        elif row["status"] == "missing":
+            audit.add("TH05_ARTIFACT_FRESHNESS", "TH-05", "warning",
+                      f"Declared learning artifact is absent: {row['name']}",
+                      row["path"],
+                      "Either it was never produced, or the manifest is wrong.")
+
+
 def build_audit(profile: str, *, staged: bool = False,
                 root: Path = ROOT) -> Audit:
     audit = Audit(profile)
@@ -445,6 +477,7 @@ def build_audit(profile: str, *, staged: bool = False,
     audit_enforcement(audit, root, check_git_config=True)
     audit_model_provenance(audit, root)
     audit_health_report(audit, root)
+    audit_artifact_freshness(audit, root)
     audit_legacy_evidence_memory(audit, root)
     return audit
 
