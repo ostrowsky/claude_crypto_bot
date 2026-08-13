@@ -63,9 +63,6 @@ venv/
 env/
 
 # Claude Code session data
-.claude
-!.claude/skills/
-!.claude/skills/**/
 
 # Build artifacts
 stage1_warning_patch_v2.zip
@@ -89,3 +86,8 @@ desktop.ini
 history/
 evaluation_output/
 skills/*/__pycache__/
+
+# Claude Code: local settings/worktrees stay out, project skills are versioned
+.claude/*
+!.claude/skills/
+!.claude/skills/**
