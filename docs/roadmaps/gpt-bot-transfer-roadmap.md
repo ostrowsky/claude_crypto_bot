@@ -40,7 +40,7 @@ time they are used; P3 is a research programme.
 | G7 | Daily artifact names its denominator + blocker harm | **P1** | 1 day | planned |
 | G1 | SQLite event store with byte-offset incremental sync | **P1** | 2–3 days | planned |
 | G4 | Forward-cohort promotion gate before production | **P1** | 1–2 days | planned |
-| E3 | Freshness SLO per learning artifact | **P1** | hours | planned |
+| E3 | Freshness SLO per learning artifact | **P1** | hours | part shipped 2026-08-13 (stale-lock half) |
 | G2 | Canonical continuous OHLCV store + coverage gate | **P2** | 2 days | planned |
 | G6 | Decomposed bandit reward components (logged, not enforced) | **P2** | 1 day | planned |
 | G10 | Inherit their refuted hypotheses; re-test H5 their way | **P2** | 1 day | planned |
@@ -137,6 +137,23 @@ this: scheduled tasks silently skipped for 11 days on battery power.
 
 **Gate:** declare the expected write interval per artifact, then verify the
 alarm fires on a deliberately stale copy.
+
+**Part shipped 2026-08-13 — the stale-lock instance.** Looking for our version
+of this defect found a worse one. `.runtime/backfill_critic.lock` was an empty
+file **1389 hours (58 days) old**: the lock was `O_CREAT|O_EXCL` with no owner
+and no timestamp, so the run that died in mid-June left it forever and every
+backfill since returned at INFO level with `Backfill already running`. 11 894
+rows sat unlabelled the whole time and no report said a word.
+
+The lock now records `{pid, ts}`, respects a live holder, and takes over a dead
+or expired one with a WARNING — an input that stopped filling is not routine
+news. `_lock_owner_alive` requires the PID to be a *python* process, since PIDs
+recycle, and fails safe: if the check itself errors it assumes alive, so a
+working backfill is never displaced. Six tests in `test_backfill_lock.py`,
+including the exact zero-byte artefact found in production.
+
+Still owed for E3 proper: a declared write interval per artifact and an alarm
+when one lapses. This fix removes one cause; it does not detect the next one.
 
 ---
 

@@ -40,6 +40,11 @@ BATCH_SIZE   = 10    # параллельных запросов к Binance
 SLEEP_BATCH  = 0.35  # секунды между батчами (rate-limit)
 HORIZONS     = (3, 5, 10)
 _LOCK_FILE   = ROOT.parent / ".runtime" / "backfill_critic.lock"
+# A crash used to leave the lock behind forever: the file carried no owner and
+# no timestamp, so every later run skipped at INFO level. Found 2026-08-13 with
+# an empty lock 1389 hours (58 days) old and 11 894 rows still unlabelled — a
+# learning input dead since mid-June with nothing in any report about it.
+_LOCK_TTL_SEC = 3 * 3600
 
 
 # ── I/O helpers ───────────────────────────────────────────────────────────────
@@ -167,6 +172,72 @@ async def _fill_one(
     return rec
 
 
+# ── Cross-process lock ─────────────────────────────────────────────────────────
+
+def _lock_owner_alive(pid: int) -> bool:
+    """True only when that PID is running AND is a python process.
+
+    PIDs are recycled, so "a process with this id exists" is not enough — the
+    number may belong to something unrelated started after the crash.
+    """
+    if pid <= 0:
+        return False
+    try:
+        import subprocess
+        out = subprocess.run(
+            ["tasklist", "/FI", f"PID eq {pid}", "/NH", "/FO", "CSV"],
+            capture_output=True, text=True, timeout=10,
+        ).stdout.lower()
+        return "python" in out
+    except Exception:
+        # Cannot tell -> assume alive, so a working backfill is never displaced.
+        return True
+
+
+def _acquire_lock() -> bool:
+    """Take the lock, stealing it when the previous owner is demonstrably gone.
+
+    Returns False when a live backfill already holds it.
+    """
+    payload = json.dumps({"pid": os.getpid(), "ts": time.time()})
+    try:
+        fd = os.open(str(_LOCK_FILE), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        os.write(fd, payload.encode("utf-8"))
+        os.close(fd)
+        return True
+    except FileExistsError:
+        pass
+
+    try:
+        raw = _LOCK_FILE.read_text(encoding="utf-8").strip()
+        info = json.loads(raw) if raw else {}
+    except (OSError, json.JSONDecodeError):
+        info = {}
+    try:
+        age = time.time() - _LOCK_FILE.stat().st_mtime
+    except OSError:
+        age = 0.0
+
+    pid = int(info.get("pid") or 0)
+    stale = age > _LOCK_TTL_SEC or not _lock_owner_alive(pid)
+    if not stale:
+        log.info("Backfill already running (pid=%s, %.0fs), skipping", pid, age)
+        return False
+
+    # WARNING, not INFO: an input that stopped filling is not routine news.
+    log.warning(
+        "Backfill lock is stale (pid=%s alive=%s, age=%.1fh > %.1fh) — taking it over. "
+        "The previous run died without releasing it.",
+        pid or "unknown", _lock_owner_alive(pid), age / 3600, _LOCK_TTL_SEC / 3600,
+    )
+    try:
+        _LOCK_FILE.write_text(payload, encoding="utf-8")
+        return True
+    except OSError as exc:
+        log.error("Could not take over the backfill lock: %s", exc)
+        return False
+
+
 # ── Batch runner ───────────────────────────────────────────────────────────────
 
 async def run(dry_run: bool = False) -> None:
@@ -176,11 +247,7 @@ async def run(dry_run: bool = False) -> None:
 
     # Cross-process lock: only one backfill at a time
     _LOCK_FILE.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        fd = os.open(str(_LOCK_FILE), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-        os.close(fd)
-    except FileExistsError:
-        log.info("Backfill already running (lock file exists), skipping")
+    if not _acquire_lock():
         return
 
     try:

@@ -116,6 +116,42 @@ print — every `httpx` line contains it in the URL (§13).
   deliberately failing test — exit 1, test named — then removing it. A live run
   restarted both workers and reported `RESTART OK` with new PIDs.
 
+## Backfill lock — a dead run must not block labels forever
+
+**Truth-harness invariants: TH-05** (a metric must know what it does not know —
+absence of data is not evidence of anything) and **TH-12** (every change
+traceable to evidence).
+
+Looking for our instance of the other bot's stale-input defect found a worse
+one. `.runtime/backfill_critic.lock` was an empty file **1389 hours (58 days)
+old**. The lock was `O_CREAT|O_EXCL` with no owner and no timestamp, so the run
+that died in mid-June left it behind permanently and every backfill since
+returned at INFO level with `Backfill already running (lock file exists),
+skipping`. 11 894 rows stayed unlabelled and no report mentioned it — the
+learning loop was quietly missing an input for two months.
+
+Behaviour now:
+
+- the lock records `{pid, ts}`;
+- a live holder is respected and the run skips, as before;
+- a dead or expired holder (`_LOCK_TTL_SEC = 3h`) is taken over, logged at
+  **WARNING** — an input that stopped filling is not routine news;
+- `_lock_owner_alive` requires the pid to be a *python* process, because pids
+  recycle and "some process has this id" is not evidence the backfill lives;
+- the liveness check fails safe: if it errors, the owner is assumed alive, so a
+  working backfill is never displaced.
+
+Rollback: revert the file; the lock degrades to the previous behaviour.
+
+Verification: `python -m unittest test_backfill_lock` — 6 tests covering a free
+lock, a live owner, a dead owner, an expired lock, the exact zero-byte artefact
+found in production, and an unavailable liveness check. Suite after the change:
+763 tests, 40 failing, unchanged from baseline.
+
+This removes one cause of a silent input stall. It does **not** detect the next
+one — a declared write interval per artifact with an alarm remains open as
+roadmap item E3.
+
 ## Fixed along the way
 
 `test_correlation_guard.py` replaced `sys.modules["config"]` with a stub at
