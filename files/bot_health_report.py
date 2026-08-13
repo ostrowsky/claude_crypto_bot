@@ -64,15 +64,27 @@ def collect_training_health(today: date, n_days_trend: int = 7) -> dict:
     }
 
 
-def collect_critic(today: date) -> dict:
-    """Take latest critic snapshot for today (final preferred over midday)."""
-    for phase in ("final", "midday"):
-        p = PL.REPORTS / f"top_gainer_critic_{today.isoformat()}_{phase}.json"
+def collect_critic(today: date, max_final_age_days: int = 3) -> dict:
+    """Take the best critic available for an operational morning report.
+
+    Today's final is preferred, then today's midday.  Before either exists,
+    fall back to the latest *completed* final critic rather than silently
+    disabling all deployment checks.  The age metadata lets red-flag logic
+    distinguish the expected previous-day final from stale evidence.
+    """
+    candidates = [(today, "final"), (today, "midday")]
+    candidates.extend((today - timedelta(days=age), "final")
+                      for age in range(1, max_final_age_days + 1))
+    for critic_day, phase in candidates:
+        p = PL.REPORTS / f"top_gainer_critic_{critic_day.isoformat()}_{phase}.json"
         if p.exists():
             data = PL.read_json(p)
             if data:
                 data["_phase_used"] = phase
                 data["_source_file"] = str(p)
+                data["_critic_target_date"] = str(
+                    data.get("target_day_local") or critic_day.isoformat())
+                data["_fallback_days"] = (today - critic_day).days
                 return {"available": True, "data": data}
     return {"available": False}
 
@@ -310,8 +322,68 @@ def compute_north_star(deploy: dict, baseline: dict) -> dict:
 # ---------------------------------------------------------------------------
 
 
-def detect_red_flags(deploy: dict, per_mode: dict, gap: dict, scout: dict, critic_raw: dict) -> list[dict]:
+def detect_red_flags(deploy: dict, per_mode: dict, gap: dict, scout: dict,
+                     critic_raw: dict, metrics_daily: dict | None = None) -> list[dict]:
     flags = []
+
+    # RF0 — Evidence integrity.  A missing critic used to yield an empty list
+    # and therefore the user-facing lie "No red flags".  The expected morning
+    # state is yesterday's final (fallback_days=1); midday is explicitly
+    # partial and older finals are stale.
+    if not critic_raw.get("available"):
+        flags.append({
+            "id": "RF_critic_unavailable",
+            "metric": "critic_available",
+            "value": 0.0,
+            "threshold": 1.0,
+            "severity": "critical",
+            "evidence": {},
+            "root_cause_hypothesis": "Нет critic evidence: deployment-health и live North Star проверить нельзя.",
+        })
+    else:
+        critic_data = critic_raw.get("data") or {}
+        phase = critic_data.get("_phase_used")
+        age = int(critic_data.get("_fallback_days") or 0)
+        if phase != "final":
+            flags.append({
+                "id": "RF_critic_partial",
+                "metric": "critic_final_available",
+                "value": 0.0,
+                "threshold": 1.0,
+                "severity": "red",
+                "evidence": {"phase": phase,
+                             "target_date": critic_data.get("_critic_target_date")},
+                "root_cause_hypothesis": "Доступен только partial/midday critic; итоговые deployment-метрики ещё не подтверждены.",
+            })
+        elif age > 1:
+            flags.append({
+                "id": "RF_critic_stale",
+                "metric": "critic_age_days",
+                "value": float(age),
+                "threshold": 1.0,
+                "severity": "critical" if age > 2 else "red",
+                "evidence": {"target_date": critic_data.get("_critic_target_date")},
+                "root_cause_hypothesis": "Последний final critic старше последнего завершённого торгового дня.",
+            })
+
+    # More than one partial/down day cannot be explained solely by today's
+    # unfinished UTC day and is an operational-coverage alert.
+    md = (metrics_daily or {}).get("metrics") or {}
+    ns_md = md.get("NS_EarlyCapture_top20") or {}
+    down = ns_md.get("days_down_or_partial")
+    if isinstance(down, (int, float)) and down > 1:
+        unexpected = float(down - 1)
+        flags.append({
+            "id": "RF_uptime_gap",
+            "metric": "unexpected_down_or_partial_days",
+            "value": unexpected,
+            "threshold": 0.0,
+            "severity": "critical" if unexpected >= 3 else "red",
+            "evidence": {"days_window": ns_md.get("days_window"),
+                         "days_full": ns_md.get("days_full"),
+                         "days_down_or_partial": down},
+            "root_cause_hypothesis": "В окне есть неполные/нерабочие дни сверх текущего незавершённого дня.",
+        })
 
     # RF1 — Early capture rate
     ec = deploy.get("watchlist_top_early_capture_pct")
@@ -433,6 +505,8 @@ def build_report(today: date) -> dict:
         deploy = {
             "available": True,
             "phase": critic_raw["data"].get("_phase_used"),
+            "critic_target_date": critic_raw["data"].get("_critic_target_date"),
+            "critic_fallback_days": critic_raw["data"].get("_fallback_days"),
             "watchlist_top_bought_pct":        round(bought / total, 4),
             "watchlist_top_early_capture_pct": round(early / total, 4),
             "false_positive_rate":             round(fp / buys, 4),
@@ -446,7 +520,8 @@ def build_report(today: date) -> dict:
 
     gap = compute_training_to_live_gap(training, deploy) if training.get("available") and deploy.get("available") else {"available": False}
     north_star = compute_north_star(deploy, baseline)
-    red_flags = detect_red_flags(deploy, per_mode, gap, scout, critic_raw)
+    red_flags = detect_red_flags(deploy, per_mode, gap, scout, critic_raw,
+                                 metrics_daily)
     dnt = PL.load_do_not_touch()
 
     report = {
@@ -626,8 +701,15 @@ def render_markdown(r: dict) -> str:
 
 
 def _ns_history() -> list[tuple[str, float]]:
-    """(date, early_capture) series from metrics_daily, oldest→newest."""
-    out: list[tuple[str, float]] = []
+    """Comparable (date, early_capture) series, oldest→newest.
+
+    Metrics before the uptime-adjusted 14-day schema used a different
+    denominator.  Prefer schema-marked records and de-duplicate repeated daily
+    pipeline runs.  A bounded legacy fallback keeps the report useful on a
+    fresh installation that has not accumulated two current-schema rows yet.
+    """
+    comparable: dict[str, float] = {}
+    legacy: dict[str, float] = {}
     for row in PL.iter_jsonl(PL.METRICS_DAILY):
         m = row.get("metrics") or row
         ns = m.get("NS_EarlyCapture_top20") or m.get("_compute_early_capture.py") or {}
@@ -635,10 +717,44 @@ def _ns_history() -> list[tuple[str, float]]:
         if ec is None:
             continue
         try:
-            out.append((str(row.get("ts", ""))[:10], float(ec)))
+            day = str(row.get("ts", ""))[:10]
+            if not day:
+                continue
+            value = float(ec)
+            legacy[day] = value
+            if ns.get("days_window") == 14 and ns.get("days_full") is not None:
+                comparable[day] = value
         except (TypeError, ValueError):
             continue
-    return out
+    chosen = comparable if len(comparable) >= 2 else legacy
+    return sorted(chosen.items())[-14:]
+
+
+def _ns_history_with_meta() -> list[tuple[str, float, int | None]]:
+    """(date, early_capture, days_full) — same series as _ns_history, but keeps
+    how many working days each point was computed over, so the verdict can
+    refuse to compare a 5-day window with a 10-day one."""
+    comparable: dict[str, tuple[float, int | None]] = {}
+    legacy: dict[str, tuple[float, int | None]] = {}
+    for row in PL.iter_jsonl(PL.METRICS_DAILY):
+        m = row.get("metrics") or row
+        ns = m.get("NS_EarlyCapture_top20") or m.get("_compute_early_capture.py") or {}
+        ec = ns.get("early_capture")
+        if ec is None:
+            continue
+        day = str(row.get("ts", ""))[:10]
+        if not day:
+            continue
+        try:
+            value = float(ec)
+        except (TypeError, ValueError):
+            continue
+        df = ns.get("days_full")
+        legacy[day] = (value, df if isinstance(df, int) else None)
+        if ns.get("days_window") == 14 and df is not None:
+            comparable[day] = (value, df)
+    chosen = comparable if len(comparable) >= 2 else legacy
+    return [(d, v, f) for d, (v, f) in sorted(chosen.items())[-14:]]
 
 
 def _per100(frac: float) -> int:
@@ -648,13 +764,25 @@ def _per100(frac: float) -> int:
 
 def _progress_verdict() -> tuple[str, str, str]:
     """Line-1 answer in PLAIN words: developing / flat / worse.
-    Judged only on the North Star over the longest history (§0)."""
-    h = _ns_history()
+    Judged only on the North Star over the longest history (§0).
+
+    Endpoints must cover a comparable number of WORKING days. After the 8-day
+    outage the 14-day window refilled gradually (days_full 5 -> 10, n 13 -> 26)
+    and the average simply regressed toward its true level; comparing those
+    endpoints produced "СТАЛО ХУЖЕ ~11 -> ~7" out of pure window growth. A
+    headline verdict built on incomparable samples is worse than none.
+    """
+    h = _ns_history_with_meta()
     if len(h) < 2:
         return ("❔", "ПОКА НЕ ЯСНО", "мало истории, чтобы судить")
-    first_v, last_v = h[0][1], h[-1][1]
+    (d0, first_v, f0), (d1, last_v, f1) = h[0], h[-1]
+    if f0 is not None and f1 is not None and abs(f0 - f1) > 2:
+        return ("❔", "РАНО СУДИТЬ",
+                f"окно ещё наполняется после простоя: {d0} считалось по {f0} "
+                f"рабочим дням, {d1} — по {f1}. Сравнивать их нельзя")
     delta_pp = (last_v - first_v) * 100
-    trend = f"за период: ~{_per100(first_v)} → ~{_per100(last_v)} из 100 ракет"
+    trend = (f"за сопоставимый период {h[0][0]}–{h[-1][0]}: "
+             f"~{_per100(first_v)} → ~{_per100(last_v)} из 100 ракет")
     if delta_pp > 1.0:
         return ("📈", "РАЗВИВАЕТСЯ (медленно)", trend)
     if delta_pp < -1.0:
@@ -762,12 +890,16 @@ def _past_decisions_resume() -> list[str]:
                          f"⏳ рано судить (ещё ~{14 - age} дн)")
             continue
         res = results_by_id.get(s.get("decision_id") or "")
-        verdict = (res or {}).get("verdict")
-        if not res or verdict in (None, "no_baseline", "insufficient_data"):
+        status = _attribution_status(res)
+        if status == "no_baseline":
+            lines.append(f"  • {name} — ⚠️ baseline отсутствует; эффект не измеряется")
+        elif status == "insufficient_data":
+            lines.append(f"  • {name} — ⚠️ baseline есть, но целевые метрики не записывались")
+        elif status == "pending":
             lines.append(f"  • {name} — применили · ⏳ ещё считаем")
-        elif verdict in ("hit", "improvement", "win", "accept"):
+        elif status == "helped":
             lines.append(f"  • {name} — ✅ помогло")
-        elif verdict in ("regression", "miss", "worse"):
+        elif status == "harmed":
             misses = res.get("expected_misses") or []
             det = f" (просело: {_metric_plain.get(misses[0], misses[0])})" if misses else ""
             lines.append(f"  • {name} — ❌ не помогло / навредило{det}")
@@ -775,6 +907,30 @@ def _past_decisions_resume() -> list[str]:
             lines.append(f"  • {name} — ⚠️ эффект смешанный")
 
     return lines[-4:] if lines else ["  • пока ни одно решение не применяли"]
+
+
+def _attribution_status(result: dict | None) -> str:
+    """Normalize attribution into a truthful user-facing state.
+
+    The attribution engine can emit outer verdict ``miss`` when every expected
+    metric is actually ``insufficient_data``.  That is absence of measurement,
+    not evidence of harm.
+    """
+    if not result:
+        return "pending"
+    verdict = result.get("verdict")
+    if verdict == "no_baseline":
+        return "no_baseline"
+    if verdict in (None, "insufficient_data", "needs_data"):
+        return "insufficient_data"
+    rationale = [str(x).lower() for x in (result.get("rationale") or [])]
+    if rationale and all("insufficient_data" in x for x in rationale):
+        return "insufficient_data"
+    if verdict in ("hit", "improvement", "win", "accept"):
+        return "helped"
+    if verdict in ("regression", "miss", "worse"):
+        return "harmed"
+    return "mixed"
 
 
 def _action_needed_count() -> int:
@@ -807,12 +963,22 @@ def render_telegram(r: dict) -> str:
 
     p_emoji, p_head, p_trend = _progress_verdict()
     n_act = _action_needed_count()
-    act = (f"👉 нужно твоё решение ({n_act})" if n_act
-           else "👉 от тебя ничего не требуется")
+    if n_act:
+        act = f"👉 нужно твоё решение ({n_act})"
+    elif rf or not (r.get("deployment_health") or {}).get("available"):
+        act = "👉 требуется проверка данных/метрик"
+    else:
+        act = "👉 от тебя ничего не требуется"
 
     out = [f"🩺 <b>Бот</b> — {r['target_date']}", ""]
     out.append(f"{p_emoji} <b>{p_head}</b>   ·   {act}")
     out.append("")
+
+    dh = r.get("deployment_health") or {}
+    critic_day = dh.get("critic_target_date")
+    if dh.get("available") and critic_day:
+        out.append(f"🧾 final critic: {critic_day}")
+        out.append("")
 
     ec = ns_md.get("early_capture")
     if ec is not None:
@@ -824,24 +990,46 @@ def render_telegram(r: dict) -> str:
         cov = funnel.get("coverage_pct_raw")
         sm = funnel.get("silent_miss_pct")
         capm = ns_md.get("decomp_capture_mean")
-        if cov is not None and capm:
+        if cov is not None and capm is not None:
             caught = round(cov / 10.0)
-            fifth = max(1, round(1 / capm))
+            fifth = max(1, round(1 / capm)) if capm > 0 else None
             out.append(f"<b>Где теряем:</b> из 10 ракет нашего списка "
                        f"~{caught} поймал, из пойманных взял лишь "
-                       f"1/{fifth} их роста.")
+                       f"{'1/' + str(fifth) if fifth else '0%'} их роста.")
+        coverage = ns_md.get("decomp_coverage")
+        lead = ns_md.get("decomp_time_lead_mean")
+        components = {
+            "coverage": coverage,
+            "capture": capm,
+            "lead": lead,
+        }
+        components = {k: float(v) for k, v in components.items()
+                      if isinstance(v, (int, float))}
+        if components:
+            bottleneck = min(components, key=components.get)
+            value = components[bottleneck]
+            if bottleneck == "capture":
+                out.append(f"<b>Главный тормоз:</b> монетизация после входа — "
+                           f"бот сохраняет лишь ~{round(value * 100)}% движения пойманных ракет.")
+            elif bottleneck == "coverage":
+                out.append(f"<b>Главный тормоз:</b> покрытие — бот входит лишь "
+                           f"примерно в {round(value * 100)}% ракет списка.")
+            else:
+                out.append(f"<b>Главный тормоз:</b> запаздывание — после входа "
+                           f"остаётся около {round(value * 100)}% времени движения.")
         if sm is not None and sm > 0:
             every = max(2, round(100 / sm))
-            out.append(f"<b>Главный тормоз:</b> каждую ~{every}-ю ракету "
-                       f"из нашего списка бот вообще не видит.")
+            out.append(f"<b>Совсем не видит:</b> каждую ~{every}-ю ракету "
+                       f"из нашего списка.")
         # Uptime context: the numbers above count only days the bot actually ran.
         # Without this line an outage reads as a performance collapse (2026-07-23:
         # 8 days down -> report said "~2 из 100" while live days were at a record).
         _dwin = ns_md.get("days_window")
         _dfull = ns_md.get("days_full")
         if _dwin and _dfull is not None and _dfull < _dwin:
-            out.append(f"⚠️ <b>Бот работал {_dfull} из {_dwin} дней</b> — "
-                       f"цифры выше только за рабочие дни; остальные не в счёт.")
+            out.append(f"⚠️ <b>Покрытие работы: {_dfull} полных дней из {_dwin}</b> — "
+                       f"{_dwin - _dfull} дня неполные или без данных; "
+                       f"метрики считают только полные дни.")
     else:
         out.append("<b>Главное:</b> результат за сегодня ещё считается.")
     out.append("")
@@ -866,6 +1054,8 @@ def render_telegram(r: dict) -> str:
         crit = sum(1 for x in rf if x.get("severity") == "critical")
         tail = f" ({crit} серьёзн.)" if crit else ""
         out.append(f"🚨 {len(rf)} сигнал(ов) тревоги{tail} — детали в полном отчёте")
+    elif not dh.get("available"):
+        out.append("⚠️ статус тревог неизвестен: deployment evidence недоступен")
     else:
         out.append("✅ Тревог нет")
 
