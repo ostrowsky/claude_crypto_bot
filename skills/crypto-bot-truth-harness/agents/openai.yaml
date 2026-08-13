@@ -1,0 +1,4 @@
+interface:
+  display_name: "Crypto Bot Truth Harness"
+  short_description: "Audit bot metrics and MD compliance"
+  default_prompt: "Use $crypto-bot-truth-harness to audit this bot change for truthful metrics and MD compliance."

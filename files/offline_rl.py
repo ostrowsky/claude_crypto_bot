@@ -438,13 +438,33 @@ def train_entry_bandit(
 
 # ── Bandit prediction accuracy (backtest) ───────────────────────────────────
 
+def _binary_policy_ratio_context(*, total_rows: int, total_enter: int,
+                                 total_positive: int,
+                                 true_positive_enter: int) -> dict:
+    """Return the minimum context required to interpret policy recall."""
+    recall = true_positive_enter / total_positive if total_positive else 0.0
+    action_rate = total_enter / total_rows if total_rows else 0.0
+    base_rate = total_positive / total_rows if total_rows else 0.0
+    precision = true_positive_enter / total_enter if total_enter else 0.0
+    return {
+        "recall": round(recall, 4),
+        "action_rate": round(action_rate, 4),
+        "base_rate": round(base_rate, 4),
+        "precision": round(precision, 4),
+        "recall_lift": round(recall / action_rate, 4) if action_rate else 0.0,
+        "precision_lift": round(precision / base_rate, 4) if base_rate else 0.0,
+    }
+
 def evaluate_bandit_accuracy(n_recent_days: int = 7) -> dict:
     """
     Backtest the current entry bandit on recent top_gainer_dataset records.
 
     For each day, simulate: would the bandit choose ENTER for actual top gainers?
 
-    Returns dict with recall@20, avg UCB gap, per-day breakdown.
+    Returns a *post-fit/in-sample diagnostic*.  The live bandit has already
+    trained on this dataset, so these values are not a holdout achievement.
+    Ratio context (action rate, base rate, precision and lift) is mandatory;
+    recall alone is vacuous when ENTER is selected for most rows.
     """
     from contextual_bandit import get_entry_bandit, extract_context
 
@@ -478,6 +498,9 @@ def evaluate_bandit_accuracy(n_recent_days: int = 7) -> dict:
     daily_results = []
     total_top20 = 0
     total_top20_enter = 0
+    total_rows = 0
+    total_enter = 0
+    total_non_top_enter = 0
     all_ucb_gaps_top = []
     all_ucb_gaps_nontop = []
 
@@ -485,6 +508,7 @@ def evaluate_bandit_accuracy(n_recent_days: int = 7) -> dict:
         sym_recs = by_day_sym[day_key]
         day_top20 = 0
         day_top20_enter = 0
+        day_enter = 0
 
         for sym, rec in sym_recs.items():
             features = rec.get("features", {})
@@ -504,6 +528,11 @@ def evaluate_bandit_accuracy(n_recent_days: int = 7) -> dict:
             ucbs = info.get("ucbs", [0, 0])
             ucb_gap = ucbs[1] - ucbs[0] if len(ucbs) >= 2 else 0.0
 
+            total_rows += 1
+            if arm == 1:
+                total_enter += 1
+                day_enter += 1
+
             if is_top20:
                 day_top20 += 1
                 total_top20 += 1
@@ -512,6 +541,8 @@ def evaluate_bandit_accuracy(n_recent_days: int = 7) -> dict:
                     total_top20_enter += 1
                 all_ucb_gaps_top.append(ucb_gap)
             else:
+                if arm == 1:
+                    total_non_top_enter += 1
                 all_ucb_gaps_nontop.append(ucb_gap)
 
         recall = day_top20_enter / day_top20 if day_top20 > 0 else 0.0
@@ -521,18 +552,35 @@ def evaluate_bandit_accuracy(n_recent_days: int = 7) -> dict:
             "n_top20": day_top20,
             "n_top20_enter": day_top20_enter,
             "recall_top20": round(recall, 4),
+            "n_enter": day_enter,
+            "action_rate": round(day_enter / len(sym_recs), 4) if sym_recs else 0.0,
         })
 
-    overall_recall = total_top20_enter / total_top20 if total_top20 > 0 else 0.0
+    ratio = _binary_policy_ratio_context(
+        total_rows=total_rows,
+        total_enter=total_enter,
+        total_positive=total_top20,
+        true_positive_enter=total_top20_enter,
+    )
+    overall_recall = ratio["recall"]
     avg_ucb_gap_top = sum(all_ucb_gaps_top) / len(all_ucb_gaps_top) if all_ucb_gaps_top else 0.0
     avg_ucb_gap_nontop = sum(all_ucb_gaps_nontop) / len(all_ucb_gaps_nontop) if all_ucb_gaps_nontop else 0.0
-
     return {
         "status": "ok",
+        "evaluation_scope": "in_sample_post_fit",
+        "diagnostic_only": True,
         "n_days": len(daily_results),
+        "total_rows": total_rows,
+        "total_enter": total_enter,
+        "total_non_top_enter": total_non_top_enter,
         "overall_recall_top20": round(overall_recall, 4),
         "total_top20": total_top20,
         "total_top20_enter": total_top20_enter,
+        "action_rate": ratio["action_rate"],
+        "base_rate": ratio["base_rate"],
+        "precision": ratio["precision"],
+        "lift": ratio["recall_lift"],
+        "precision_lift": ratio["precision_lift"],
         "avg_ucb_gap_top_gainers": round(avg_ucb_gap_top, 4),
         "avg_ucb_gap_non_top": round(avg_ucb_gap_nontop, 4),
         "ucb_separation": round(avg_ucb_gap_top - avg_ucb_gap_nontop, 4),
@@ -832,6 +880,11 @@ def _log_offline_event(results: dict, n_total: int, n_new: int) -> None:
         "entry_bandit_n_signal": eb.get("n_signal_samples", 0),
         "entry_bandit_n_top_gainers": eb.get("n_universal_top_gainers", 0),
         "bandit_recall_top20": ba.get("overall_recall_top20"),
+        "bandit_evaluation_scope": ba.get("evaluation_scope"),
+        "bandit_action_rate": ba.get("action_rate"),
+        "bandit_top20_base_rate": ba.get("base_rate"),
+        "bandit_recall_lift": ba.get("lift"),
+        "bandit_precision": ba.get("precision"),
         "bandit_ucb_separation": ba.get("ucb_separation"),
         "trail_bandit_status": results.get("trail_bandit", {}).get("status"),
         "exit_status": results.get("exit_policy", {}).get("status"),

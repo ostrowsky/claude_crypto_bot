@@ -34,7 +34,7 @@ diagnostic / supporting, в primary не участвуют.
 | Бизнес-вопрос | Canonical metric | Источник | Cadence |
 |---------------|------------------|----------|---------|
 | **«Бот зарабатывает деньги?»** | `alpha_vs_buy_and_hold_pct` | skill `report.json.summary` | weekly |
-| **«Бот видит победителей?»** | `recall@top20` | `learning_progress.jsonl` (existing) | daily |
+| **«Бот видит будущих победителей?»** | OOS `recall@top20` + action rate + base rate + lift | frozen policy on later immutable EOD labels, complete-day temporal holdout | daily/weekly |
 | **«Качество отдельной сделки?»** | per-trade `verdict` | skill `report.json.trade_verdicts[]` | per trade |
 | **«Где утекает прибыль?»** | EX1 (Phase D ZigZag mode) | `_backtest_ex1_realized_potential.py --use-zigzag` | weekly |
 | **«Бандит учится?»** | `bandit_ucb_separation` | `report_rl_daily.py` | daily |
@@ -43,6 +43,13 @@ diagnostic / supporting, в primary не участвуют.
 | **«Раннее срабатывание?»** | `time_to_signal` median (E1) | `_backtest_time_to_signal.py` | daily |
 | **«Уверенно ли торгуем?»** | `whipsaw_rate` (Q2) | `_backtest_whipsaw_rate.py` | daily |
 | **«Fast-reversal под контролем?»** | `fast_reversal_rate` (Q1) | `_backtest_fast_reversal_by_mode.py` | daily |
+
+Truth status as of 2026-08-13 (TH-01…TH-04, TH-11): existing bandit recall
+is post-fit/in-sample and is diagnostic-only; `label_top20` is created from a
+same-snapshot rolling-24h leaderboard; aggregate portfolio alpha is stale;
+daily EX1 runs deprecated proxy-mode rather than `--use-zigzag`. Health reports
+must show those answers as `unknown`/`provisional`, never replace them with a
+nearby proxy, until the sources above are restored.
 
 ### Holistic single-number (для дашборда / TG-digest)
 

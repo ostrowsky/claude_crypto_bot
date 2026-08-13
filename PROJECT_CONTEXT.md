@@ -4,7 +4,14 @@
 
 Telegram-бот для сканирования Binance Futures/Spot в режиме реального времени и генерации ранних сигналов BUY на монеты, которые к концу дня окажутся в топе по росту (top gainers).
 
-**Главная метрика успеха (North Star):** максимально ранний сигнал BUY на монеты из топ-20 по суточному росту. Операционализирована как `watchlist_top_early_capture_pct` — доля топ-20 в watchlist'е, на которые бот выдал BUY с `capture_ratio ≥ 0.35` (до 35% от дневного движения).
+**Главная метрика успеха (North Star):** максимально ранний BUY на монеты,
+которые войдут в неизменяемый later-EOD top-20 по дневному росту:
+`EarlyCapture@top20 = mean(coverage × realized_capture × time_lead)` по
+winner-days из `watchlist ∩ global-top20`. Цель — **0.40**, минимально
+приемлемо — **0.25**. Старый бинарный
+`watchlist_top_early_capture_pct` из critic-отчётов — отдельная deployment
+диагностика. Пока ground truth строится из rolling-24h snapshot того же момента,
+North Star обязан называться **предварительным** и не доказывает прогресс.
 
 **Проект:** `D:\Projects\claude_crypto_bot\`  
 **Второй бот (НЕ ТРОГАТЬ):** `D:\Projects\gpt_crypto_bot\` — работает независимо на другом Telegram токене.
@@ -62,10 +69,18 @@ Telegram-бот для сканирования Binance Futures/Spot в режи
    В репозитории 9 отвергнутых гипотез; перепроверять их — трата.
 9. **Каждое утверждение MD должно проверяться машинно.**
 10. **Отчёт не должен утверждать больше, чем показывают данные.**
+11. **Proxy не заменяет бизнес-результат.** Training recall/AUC не доказывают
+    live capture или доходность; P&L режима не заменяет portfolio alpha.
+12. **Каждая доработка трассируется до evidence:** spec, focused tests,
+    verification и применимые `TH-01`…`TH-12`.
 
-**Проверка:** `pyembed\python.exe files\_harness_check.py` (механическая часть,
-код 1 при расхождении, стоит в git pre-commit) и скилл `md-compliance` —
-полный аудит вместе с тем, что скрипт проверить не может.
+**Проверка:** `pyembed\python.exe files\truth_harness.py full` для полного
+аудита; `.githooks/pre-commit` запускает профиль `change --staged` и
+`git diff --cached --check`. Скилл
+`skills/crypto-bot-truth-harness/SKILL.md` выполняет judgment-проверки.
+`files/_harness_check.py` и `.claude/skills/md-compliance/SKILL.md` остаются
+дополнительными MD/config/live-state проверками.
+Нормативная спека: `docs/specs/features/truth-harness-spec.md`.
 
 ---
 

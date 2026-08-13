@@ -81,12 +81,23 @@ done until it answers them.**
    phrased so it can be.
 10. **A report may not state a conclusion the data does not support.** "Рано
     судить" is a valid answer and is preferred over an invented trend.
+11. **Proxy is not the business outcome.** Training recall/AUC cannot answer
+    whether the bot catches moves or earns money; per-mode P&L cannot replace
+    canonical portfolio alpha.
+12. **Every change is traceable to evidence.** Spec, focused tests, validation
+    result and applicable `TH-01`…`TH-12` IDs must travel together.
 
 ### Enforcement
 
-- `pyembed\python.exe files\_harness_check.py` — runs the MD-vs-config audit and
-  prints this checklist. Exit code 1 on drift. Wired as a **git pre-commit hook**;
-  it is also the first thing to run when picking up work in this repo.
+- `pyembed\python.exe files\truth_harness.py full` — full current-state audit;
+  `_harness_check.py` remains an additional MD/config/live-state checker.
+- `.githooks/pre-commit` runs `truth_harness.py change --staged` plus
+  `git diff --cached --check`. Enable it with
+  `git config core.hooksPath .githooks` in every worktree.
+- Project skill: `skills/crypto-bot-truth-harness/SKILL.md`; use it for the
+  judgment checks that cannot be established by static code. The lighter
+  `.claude/skills/md-compliance/SKILL.md` remains available for MD-only audits.
+- Normative contract: `docs/specs/features/truth-harness-spec.md`.
 - Every PR/commit touching behaviour or metrics states which rule it satisfies
   (usually 1, 3, 6, 7).
 - When a rule is violated on purpose, say so in the commit message with the
@@ -98,8 +109,15 @@ done until it answers them.**
 
 Telegram bot scanning Binance Futures/Spot in real time, generating early BUY signals on coins that will be in the daily top gainers by EOD.
 
-**Main metric (North Star):** earliest possible BUY on a coin that ends up in top-20 daily gainers (before the main move). Operationalised as
-`watchlist_top_early_capture_pct = #(bot bought top-20 with capture_ratio ≥ 0.35) / #(top-20 in watchlist)`.
+**Main metric (North Star):** earliest possible BUY on a coin that ends up in
+the immutable later-EOD top-20 daily gainers, before the main move.
+
+`EarlyCapture@top20 = mean(coverage × realized_capture × time_lead)` over
+winner-days in `watchlist ∩ global-top20`; target **0.40**, acceptable floor
+**0.25**. The older binary `watchlist_top_early_capture_pct` from critic reports
+is a separate deployment diagnostic, not the North Star. Until immutable
+later-EOD labels replace the current rolling-24h same-snapshot labels, the
+computed North Star must be marked **provisional** and cannot prove progress.
 
 - Project root: `D:\Projects\claude_crypto_bot\`
 - **DO NOT TOUCH** `D:\Projects\gpt_crypto_bot\` — separate bot, separate Telegram token, independent process. Always check cmdline before killing any python PID.

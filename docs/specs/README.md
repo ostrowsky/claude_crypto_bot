@@ -15,6 +15,7 @@ Spec-first workflow. См. [`../../AGENTS.md`](../../AGENTS.md) для проц�
 | [`ml-candidate-ranker`](./features/ml-candidate-ranker-spec.md) | shipped | CatBoost ranker (quality, EV, expected_return/drawdown, TG-prob) + hard veto. |
 | [`top-gainer-model`](./features/top-gainer-model-spec.md) | shipped | Daily CatBoost top-N классификаторы (top5/10/20/50) + intraday snapshots + critic. |
 | [`health-report-integrity`](./features/health-report-integrity-spec.md) | shipped 2026-08-13 | Completed-day critic fallback, data-quality alerts, comparable North-Star trend, and honest attribution wording. |
+| [`truth-harness`](./features/truth-harness-spec.md) | shipped 2026-08-13 | TH-01…TH-12, full/staged compliance profiles, pre-commit enforcement and audit skill; current bot has open blocking findings. |
 | [`portfolio-rotation`](./features/portfolio-rotation-spec.md) | shipped 2026-04-17 | ML-gated weak-leg eviction через soft-trail (`trail_stop = price × 1.001`). |
 | [`correlation-guard`](./features/correlation-guard-spec.md) | shipped | Pearson log-return clustering (Union-Find) + cap позиций в кластере. |
 | [`trend-quality-guard`](./features/trend-quality-guard-spec.md) | shipped | RSI / price-edge / daily-range cap для 15m `trend` (с bull-day relaxation). |
@@ -24,7 +25,7 @@ Spec-first workflow. См. [`../../AGENTS.md`](../../AGENTS.md) для проц�
 | [`ml-signal-blindspot-recovery`](./features/ml-signal-blindspot-recovery-spec.md) | draft | Audit + oversampling weight для blind-spot syms (TRU/BLUR/MDT/ORDI/AUDIO). 24 % top-20 проходят через ML-block. |
 | [`breakout-15m-disable`](./features/breakout-15m-disable-spec.md) | draft | Отключение `breakout/15m`: даже на 5/45 top-20 entries `avg_pnl=+0.03 %`. |
 | [`eod-health-alert`](./features/eod-health-alert-spec.md) | draft | TG-алерт при `n_collected=0` / AUC drop / bandit stall в EOD-цикле. |
-| [`metrics-framework`](./features/metrics-framework-spec.md) | draft | 13 метрик в 4 слоях (Coverage / Earliness / Quality / Discrimination) + north-star `EarlyCapture@top20`. Привязка каждой инициативы к target-метрике. |
+| [`metrics-framework`](./features/metrics-framework-spec.md) | provisional | 13 метрик в 4 слоях + North Star `EarlyCapture@top20`; immutable later-EOD ground truth ещё требуется. |
 | [`entry-event-logger-fix`](./features/entry-event-logger-fix-spec.md) | shipped 2026-04-30 | Добавлены `ranker_top_gainer_prob`, `ranker_ev`, `ranker_quality_proba`, `signal_mode`, `candidate_score` в entry-event payload. Разблокирует валидацию 1A и 4A. |
 | [`dynamic-max-hold`](./features/dynamic-max-hold-spec.md) | draft | Продление `max_hold_bars` если ADX растёт + price > EMA20 + pnl>0. Validated +0.039 NS (capture 0.16→0.24). Whitelist: impulse_speed, strong_trend, trend, retest. |
 | [`trend-1h-chop-filter`](./features/trend-1h-chop-filter-spec.md) | shipped 2026-05-01 v2.6.0 | Block `trend/1h` if `(ADX<25) OR (slope<1.2) OR (vol_x<1.3)`. Backtest: precision 1.2 %→16.7 %, recall 100 %, avg_pnl −0.17 %→+1.58 %. |

@@ -459,12 +459,20 @@ def build_progress_report(
         for s in stats:
             lines.append(f"  [{s['name']}] n={s['n_updates']}  theta_norm={s['theta_norm']}  bias={s['bias_est']}")
 
-    # Bandit accuracy
+    # Bandit diagnostic. This runs after fitting on the same accumulated data;
+    # never present it as holdout accuracy or as live capability.
     ba = train_result.get("bandit_accuracy", {})
     if ba.get("status") == "ok":
         lines.append("")
-        lines.append("Bandit Prediction Accuracy (backtest):")
+        lines.append("Bandit Post-fit Diagnostic (IN-SAMPLE, not achievement):")
         lines.append(f"  recall@20: {ba['overall_recall_top20']*100:.1f}% ({ba['total_top20_enter']}/{ba['total_top20']})")
+        lines.append(
+            f"  ENTER rate: {ba.get('action_rate', 0)*100:.1f}% "
+            f"({ba.get('total_enter', 0)}/{ba.get('total_rows', 0)}) | "
+            f"top20 base: {ba.get('base_rate', 0)*100:.1f}% | "
+            f"recall lift vs action-rate: {ba.get('lift', 0):.2f}x | "
+            f"precision: {ba.get('precision', 0)*100:.1f}%"
+        )
         lines.append(f"  UCB gap: top_gainers={ba['avg_ucb_gap_top_gainers']:+.4f}  others={ba['avg_ucb_gap_non_top']:+.4f}")
         lines.append(f"  separation: {ba['ucb_separation']:+.4f} (higher = better discrimination)")
         daily = ba.get("daily", [])
@@ -486,6 +494,9 @@ def build_progress_report(
         for k in ["n_records", "auc_top20", "recall_at_03_top20", "precision_at_03_top20"]:
             if k in model_result:
                 lines.append(f"  {k}: {model_result[k]}")
+        lines.append("  ⚠ label=current 24h leaderboard at snapshot; "
+                     "tg_return_since_open can encode it. AUC is diagnostic, "
+                     "not proof of forecasting the final leaderboard.")
 
     return "\n".join(lines)
 
@@ -510,12 +521,20 @@ def save_progress(
         "n_top20_in_universe": len(collect_result.get("top20_in_universe", [])),
         "n_top20_in_watchlist": len(collect_result.get("top20_in_watchlist", [])),
         "bandit_recall_top20": ba.get("overall_recall_top20"),
+        "bandit_evaluation_scope": ba.get("evaluation_scope"),
+        "bandit_action_rate": ba.get("action_rate"),
+        "bandit_top20_base_rate": ba.get("base_rate"),
+        "bandit_recall_lift": ba.get("lift"),
+        "bandit_precision": ba.get("precision"),
         "bandit_ucb_separation": ba.get("ucb_separation"),
         "bandit_total_updates": eb.get("total_updates"),
         "bandit_n_universal": eb.get("n_universal_samples", 0),
         "bandit_n_signal": eb.get("n_signal_samples", 0),
         "model_status": model_result.get("status"),
         "model_auc_top20": model_result.get("auc_top20"),
+        "model_evaluation_scope": model_result.get("evaluation_scope"),
+        "model_label_timing": model_result.get("label_timing"),
+        "model_label_encoding_features": model_result.get("label_encoding_features"),
     }
     with PROGRESS_FILE.open("a", encoding="utf-8") as f:
         f.write(json.dumps(record) + "\n")
@@ -603,7 +622,12 @@ async def run_report_only() -> None:
     lines = [f"Bandit Status Report — {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}"]
     lines.append("")
     if ba.get("status") == "ok":
+        lines.append("post-fit diagnostic (IN-SAMPLE; not achievement)")
         lines.append(f"recall@20: {ba['overall_recall_top20']*100:.1f}% ({ba['total_top20_enter']}/{ba['total_top20']})")
+        lines.append(f"ENTER rate: {ba.get('action_rate', 0)*100:.1f}% | "
+                     f"base rate: {ba.get('base_rate', 0)*100:.1f}% | "
+                     f"lift: {ba.get('lift', 0):.2f}x | "
+                     f"precision: {ba.get('precision', 0)*100:.1f}%")
         lines.append(f"UCB separation: {ba['ucb_separation']:+.4f}")
         daily = ba.get("daily", [])
         for d in daily[:7]:

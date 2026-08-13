@@ -366,6 +366,9 @@ def train_and_save(
         "thresholds": {"top5": 0.15, "top10": 0.20, "top20": 0.30, "top50": 0.40},
         "train_samples": split_idx,
         "val_samples": len(X_val),
+        "evaluation_scope": "time_sorted_row_holdout_same_snapshot_label",
+        "label_timing": "same_snapshot_current_24h_leaderboard",
+        "label_encoding_features": ["tg_return_since_open"],
     }
 
     output_path.write_text(json.dumps(combined, indent=2, default=str))
@@ -380,6 +383,9 @@ def train_and_save(
         "auc_top20": m20.get("auc"),
         "recall_at_03_top20": m20.get("recall_at_03"),
         "precision_at_03_top20": m20.get("precision_at_03"),
+        "evaluation_scope": "time_sorted_row_holdout_same_snapshot_label",
+        "label_timing": "same_snapshot_current_24h_leaderboard",
+        "label_encoding_features": ["tg_return_since_open"],
         "metrics": all_metrics,
     }
 
@@ -447,6 +453,9 @@ def main():
         },
         "train_samples": split_idx,
         "val_samples": len(X_val),
+        "evaluation_scope": "time_sorted_row_holdout_same_snapshot_label",
+        "label_timing": "same_snapshot_current_24h_leaderboard",
+        "label_encoding_features": ["tg_return_since_open"],
     }
 
     Path(args.output).write_text(json.dumps(combined, indent=2, default=str))

@@ -51,6 +51,26 @@ Product Spec  ──►  Implementation  ──►  Verification
    2 / 4 / 5 / 7 / 8 / 11 of `CLAUDE.md` (architecture, ML, schedules,
    known issues, rotation, config flags).
 
+## Mandatory Truth Harness
+
+For every audit and every change to trading behaviour, gates, models, training,
+metrics, reports, or the auto-improvement loop, use the project skill
+`skills/crypto-bot-truth-harness/SKILL.md` (`$crypto-bot-truth-harness`).
+
+1. Run `pyembed\python.exe files\truth_harness.py full` before drawing a
+   conclusion from current metrics. A mechanical pass does not replace the
+   skill's judgment checklist.
+2. Name the applicable `TH-01`…`TH-12` invariants in the feature spec.
+3. Stage only intended files, then run
+   `pyembed\python.exe files\truth_harness.py change --staged` before commit.
+4. A trading-policy relaxation additionally requires a time-separated replay
+   on the bot's own candidate population over the maximum available period.
+5. Never turn `unknown`, stale, partial, post-fit or in-sample evidence into a
+   positive conclusion. Repair measurement first or report `UNKNOWN`.
+
+The tracked `.githooks/pre-commit` enforces the staged profile. Configure each
+worktree once with `git config core.hooksPath .githooks`.
+
 ### Version bump rules (semver)
 
 - **patch** (x.y.**Z**): logger fixes, log-line wording, comment-only,

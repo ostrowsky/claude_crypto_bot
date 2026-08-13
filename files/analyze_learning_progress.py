@@ -301,16 +301,28 @@ def analyze(repo: Path, spec_path: Optional[Path]) -> Dict[str, Any]:
     # ── Q2: long-term ML/bandit trends ────────────────────────────────────────
     if lp:
         span = f"{lp[0].get('ts','?')[:10]} -> {lp[-1].get('ts','?')[:10]} ({len(lp)} snapshots)"
-        recall = [_safe(r.get("bandit_recall_top20")) for r in lp]
+        oos_bandit = [r for r in lp
+                      if r.get("bandit_evaluation_scope") == "out_of_sample_time_holdout"]
+        oos_model = [r for r in lp
+                     if r.get("model_evaluation_scope") == "out_of_sample_time_holdout"
+                     and r.get("model_label_timing") == "immutable_later_eod"]
+        recall = [_safe(r.get("bandit_recall_top20")) for r in oos_bandit]
         ucb = [_safe(r.get("bandit_ucb_separation")) for r in lp]
-        auc = [_safe(r.get("model_auc_top20")) for r in lp]
+        auc = [_safe(r.get("model_auc_top20")) for r in oos_model]
         n_signal = [_safe(r.get("bandit_n_signal")) for r in lp]
         updates = [_safe(r.get("bandit_total_updates")) for r in lp]
         out["ml_history"] = {
             "span": span,
-            "recall_at_20": _trend_verdict([v for v in recall if v is not None], eps=0.01),
+            "evidence_status": "out_of_sample_only",
+            "recall_at_20": (
+                _trend_verdict([v for v in recall if v is not None], eps=0.01)
+                if recall else ("UNKNOWN", {"reason": "no OOS temporal holdout"})
+            ),
             "ucb_separation": _trend_verdict([v for v in ucb if v is not None], eps=0.01),
-            "auc_top20": _trend_verdict([v for v in auc if v is not None], eps=0.02),
+            "auc_top20": (
+                _trend_verdict([v for v in auc if v is not None], eps=0.02)
+                if auc else ("UNKNOWN", {"reason": "no immutable later-EOD OOS holdout"})
+            ),
             "n_signal": _trend_verdict([v for v in n_signal if v is not None], eps=1.0),
             "total_updates_first": updates[0] if updates and updates[0] else None,
             "total_updates_last": updates[-1] if updates and updates[-1] else None,
@@ -334,9 +346,14 @@ def analyze(repo: Path, spec_path: Optional[Path]) -> Dict[str, Any]:
             "baseline_7d": ns.get("baseline_7d"),
             "status": ns.get("status"),
         })
+    ns_verified = ns_block.get("status") == "verified"
     if ns_series:
         ns_block["history"] = [{"date": d, "early_capture": round(v, 4)} for d, v in ns_series]
-        ns_block["trend"] = _trend_verdict([v for _, v in ns_series], eps=0.01)
+        ns_block["trend"] = (
+            _trend_verdict([v for _, v in ns_series], eps=0.01)
+            if ns_verified else
+            ("UNKNOWN", {"reason": "North-Star ground truth is provisional"})
+        )
     else:
         ns_block["trend"] = ("INSUFFICIENT", {"note": "metrics_daily has too few NS points"})
     out["north_star"] = ns_block
@@ -365,6 +382,7 @@ def analyze(repo: Path, spec_path: Optional[Path]) -> Dict[str, Any]:
         funnel = last.get("_backtest_top20_coverage_funnel.py", {})
         prec = last.get("_backtest_signal_precision.py", {})
         comp["data_sufficiency"] = {
+            "top20_label_status": ns_block.get("status") or "unknown",
             "top20_winners": funnel.get("n_top20_winners"),
             "coverage_pct_raw": funnel.get("coverage_pct_raw"),
             "silent_miss_pct": funnel.get("silent_miss_pct"),
@@ -410,8 +428,8 @@ def _fmt_trend(name: str, tv: Any) -> str:
     if not isinstance(tv, (list, tuple)) or len(tv) != 2:
         return f"  {name:22s}: n/a"
     verdict, info = tv
-    if verdict == "INSUFFICIENT":
-        return f"  {name:22s}: INSUFFICIENT ({info})"
+    if verdict in ("INSUFFICIENT", "UNKNOWN"):
+        return f"  {name:22s}: {verdict} ({info})"
     return (f"  {name:22s}: {verdict:10s} "
             f"first={info.get('first')} last={info.get('last')} "
             f"delta={info.get('delta'):+}")
@@ -439,8 +457,9 @@ def render(a: Dict[str, Any]) -> str:
 
     # Q2
     ml = a.get("ml_history", {})
-    P("\n[Q2] PROGRESS OR DEGRADATION? (longest available ML/bandit history)")
+    P("\n[Q2] LEARNING DIAGNOSTICS (activity, not objective progress)")
     P(f"  span          : {ml.get('span')}")
+    P(f"  evidence      : {ml.get('evidence_status', 'unknown')}")
     P(_fmt_trend("recall@20", ml.get("recall_at_20")))
     P(_fmt_trend("UCB separation", ml.get("ucb_separation")))
     P(_fmt_trend("AUC top20", ml.get("auc_top20")))
@@ -454,7 +473,8 @@ def render(a: Dict[str, Any]) -> str:
     th = comp.get("training_health", {})
     dh = comp.get("deployment_health", {})
     sh = comp.get("scout_health", {})
-    P(f"  ML/bandit     : recall={th.get('recall_at_20')} auc={th.get('auc')} "
+    P(f"  ML/bandit diag: recall={th.get('recall_at_20')} auc={th.get('auc')} "
+      f"bandit_scope={th.get('evaluation_scope')} model_scope={th.get('model_evaluation_scope')} "
       f"updates={th.get('bandit_total_updates')} (loop fed: "
       f"{'YES' if (comp.get('bandit_updates_growth') or {}).get('last') else 'UNKNOWN'})")
     P(f"  deployment    : {json.dumps(dh, default=str)[:140]}")
@@ -469,6 +489,7 @@ def render(a: Dict[str, Any]) -> str:
     # Q4
     ds = comp.get("data_sufficiency", {})
     P("\n[Q4] IS THERE ENOUGH DATA TO KEEP LEARNING?")
+    P(f"  top20 labels  : {ds.get('top20_label_status', 'unknown')}")
     P(f"  top20 winners : {ds.get('top20_winners')}")
     P(f"  coverage %    : {ds.get('coverage_pct_raw')}")
     P(f"  silent miss % : {ds.get('silent_miss_pct')}")
@@ -519,15 +540,19 @@ def _next_steps(a: Dict[str, Any]) -> List[str]:
 
     if pipe.get("pending_manual_validation"):
         steps.append(
-            f"Unblock pipeline: {pipe['pending_manual_validation']} decisions stuck — "
-            f"RM-1/RM-2 (blocked-event logging) must reach production bot to enable "
-            f"honest Pareto sweeps")
+            f"Unblock pipeline: {pipe['pending_manual_validation']} decisions have no "
+            f"validator verdict — audit validator coverage and required evidence for each; "
+            f"do not infer that already-shipped RM-1/RM-2 are absent")
     pend = rm.get("roadmap_pending", []) if rm.get("available") else []
     if pend:
         nxt = ", ".join(f"{r}" for r, _ in pend[:3])
         steps.append(f"Next roadmap items in priority order: {nxt}")
     nst = ns.get("trend")
-    if isinstance(nst, (list, tuple)) and nst[0] in ("INSUFFICIENT", "DEGRADING"):
+    if isinstance(nst, (list, tuple)) and nst[0] == "UNKNOWN":
+        steps.append(
+            "North Star ground truth is provisional — build immutable later-EOD "
+            "labels and recompute baselines before judging progress")
+    elif isinstance(nst, (list, tuple)) and nst[0] in ("INSUFFICIENT", "DEGRADING"):
         steps.append(
             "North Star has too few/declining measurements — ensure metrics_daily "
             "(EOD job) runs daily; current NS history is the weakest link for Q1/Q2")

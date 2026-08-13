@@ -1,0 +1,10 @@
+#!/bin/sh
+set -eu
+
+PYTHON="pyembed/python.exe"
+if [ ! -x "$PYTHON" ]; then
+    PYTHON="python"
+fi
+
+"$PYTHON" files/truth_harness.py change --staged
+git diff --cached --check

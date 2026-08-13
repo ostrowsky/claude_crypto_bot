@@ -22,6 +22,9 @@ from statistics import median
 
 import pipeline_lib as PL
 
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 # ---------------------------------------------------------------------------
 # Collectors — each returns a small dict ready to drop into the report
 # ---------------------------------------------------------------------------
@@ -43,23 +46,52 @@ def collect_training_health(today: date, n_days_trend: int = 7) -> dict:
         except (KeyError, ValueError):
             continue
         if ts.date() >= cutoff:
+            ratio_context_complete = all(
+                r.get(key) is not None
+                for key in ("bandit_action_rate", "bandit_top20_base_rate",
+                            "bandit_recall_lift", "bandit_precision")
+            )
             trend.append({
                 "date": ts.date().isoformat(),
-                "recall_at_20":     r.get("bandit_recall_top20"),
+                # Legacy progress rows contained a post-fit recall without the
+                # base/action rate. Suppress it rather than laundering it into
+                # evidence through this report.
+                "recall_at_20":     r.get("bandit_recall_top20") if ratio_context_complete else None,
                 "ucb_separation":   r.get("bandit_ucb_separation"),
                 "auc":              r.get("model_auc_top20"),
                 "bandit_n_signal":  r.get("bandit_n_signal"),
+                "evaluation_scope": r.get("bandit_evaluation_scope"),
+                "action_rate":      r.get("bandit_action_rate"),
+                "base_rate":        r.get("bandit_top20_base_rate"),
+                "lift":             r.get("bandit_recall_lift"),
+                "ratio_context_complete": ratio_context_complete,
             })
 
+    latest_ratio_context_complete = all(
+        latest.get(key) is not None
+        for key in ("bandit_action_rate", "bandit_top20_base_rate",
+                    "bandit_recall_lift", "bandit_precision")
+    )
     return {
         "available": True,
         "latest_ts": latest.get("ts"),
-        "recall_at_20":    latest.get("bandit_recall_top20"),
+        "recall_at_20":    latest.get("bandit_recall_top20") if latest_ratio_context_complete else None,
+        "legacy_ratio_suppressed": not latest_ratio_context_complete
+                                   and latest.get("bandit_recall_top20") is not None,
+        "ratio_context_complete": latest_ratio_context_complete,
         "ucb_separation":  latest.get("bandit_ucb_separation"),
         "auc":             latest.get("model_auc_top20"),
         "bandit_total_updates": latest.get("bandit_total_updates"),
         "bandit_n_signal":      latest.get("bandit_n_signal"),
         "n_top20_in_watchlist": latest.get("n_top20_in_watchlist"),
+        "evaluation_scope": latest.get("bandit_evaluation_scope"),
+        "action_rate": latest.get("bandit_action_rate"),
+        "base_rate": latest.get("bandit_top20_base_rate"),
+        "lift": latest.get("bandit_recall_lift"),
+        "precision": latest.get("bandit_precision"),
+        "model_evaluation_scope": latest.get("model_evaluation_scope"),
+        "model_label_timing": latest.get("model_label_timing"),
+        "model_label_encoding_features": latest.get("model_label_encoding_features"),
         "trend": trend,
     }
 
@@ -279,6 +311,13 @@ def collect_scout_gates() -> dict:
 
 
 def compute_training_to_live_gap(training: dict, deploy: dict) -> dict:
+    scope = training.get("evaluation_scope")
+    if scope != "out_of_sample_time_holdout":
+        return {
+            "available": False,
+            "reason": "training_metric_not_out_of_sample",
+            "evaluation_scope": scope or "unknown",
+        }
     tr = training.get("recall_at_20")
     lv = deploy.get("watchlist_top_bought_pct")
     if tr is None or lv is None:
@@ -298,6 +337,157 @@ def compute_training_to_live_gap(training: dict, deploy: dict) -> dict:
     else:
         interp += "Training и live согласованы."
     return {"available": True, "value": gap, "severity": severity, "interpretation": interp}
+
+
+def build_canonical_scorecard(metrics_daily: dict) -> dict:
+    """One current value per canonical business question.
+
+    Units are explicit because the underlying scripts mix ratios, percentages
+    and hours. Unknown canonical evidence remains unknown; a nearby proxy is
+    never substituted.
+    """
+    md = (metrics_daily or {}).get("metrics") or {}
+    ns = md.get("NS_EarlyCapture_top20") or {}
+    precision = md.get("D1_D2_precision_msgrate") or {}
+    tts = md.get("E1_time_to_signal") or {}
+    ex1 = (md.get("EX1_realized_potential") or {}).get("top20") or {}
+    fr = md.get("Q1_Q3_fast_reversal") or {}
+    whipsaw = md.get("Q2_whipsaw_rate") or {}
+    return {
+        "north_star": {
+            "value": ns.get("early_capture"), "target": 0.40,
+            "acceptable_floor": 0.25, "unit": "ratio",
+            "status": "provisional",
+            "provenance": "same_snapshot_rolling_24h_label; not immutable later EOD truth",
+            "n": ns.get("n"), "days_window": ns.get("days_window"),
+            "days_full": ns.get("days_full"),
+            "definition": "mean(coverage * realized_capture * time_lead) on watchlist∩global-top20 winner-days",
+            "source": "NS_EarlyCapture_top20",
+        },
+        "portfolio_alpha": {
+            "value": None, "target": 0.0, "unit": "pct",
+            "status": "unknown",
+            "reason": "fresh aggregate weekly evaluator report not available in health inputs",
+            "source": "signal-efficiency evaluator summary.alpha_vs_buy_and_hold_pct",
+        },
+        "signal_precision": {
+            "value": precision.get("precision_pct"), "target": 35.0,
+            "unit": "pct", "n": precision.get("n_unique_entries"),
+            "hits": precision.get("n_top20_entries"),
+            "status": "provisional",
+            "provenance": "top20 membership uses same-snapshot rolling-24h labels",
+            "source": "D1_D2_precision_msgrate",
+        },
+        "message_rate": {
+            "value": precision.get("unique_entries_per_day"), "target_max": 10.0,
+            "unit": "per_day", "days": precision.get("n_days"),
+            "source": "D1_D2_precision_msgrate",
+        },
+        "time_to_signal": {
+            "value": tts.get("median_h"), "target_max": 0.5,
+            "unit": "hours", "n": tts.get("n"),
+            "status": "provisional",
+            "provenance": "winner set uses same-snapshot rolling-24h labels",
+            "source": "E1_time_to_signal",
+        },
+        "realized_potential": {
+            "value": None, "diagnostic_proxy_value": ex1.get("median"),
+            "target": 0.50,
+            "unit": "ratio", "n": ex1.get("n"),
+            "status": "unknown",
+            "reason": "daily aggregator runs deprecated proxy-mode, not canonical --use-zigzag mode",
+            "source": "EX1_realized_potential.top20",
+        },
+        "fast_reversal": {
+            "value": fr.get("fr_v1_overall_pct"), "target_max": 8.0,
+            "unit": "pct", "n": fr.get("n_total_pairs"),
+            "source": "Q1_Q3_fast_reversal",
+        },
+        "whipsaw": {
+            "value": whipsaw.get("overall_pct"), "target_max": 5.0,
+            "unit": "pct", "n": whipsaw.get("n_total"),
+            "source": "Q2_whipsaw_rate",
+        },
+    }
+
+
+def derive_next_steps(scorecard: dict, training: dict, dnt: dict,
+                      today: date) -> list[dict]:
+    """Evidence-ranked work; never emits an unvalidated production change."""
+    steps: list[dict] = []
+    ns = scorecard.get("north_star") or {}
+    if ns.get("status") != "verified":
+        steps.append({
+            "priority": "P0", "id": "restore_eod_ground_truth",
+            "action": "Создать неизменяемые later-EOD top-20 labels и пересчитать всю историю North Star",
+            "evidence": ns.get("provenance") or "North-Star label provenance is unverified",
+            "gate": "Текущий North Star считать предварительным, а не доказательством прогресса",
+        })
+    if ns.get("days_full") is not None and ns.get("days_window") is not None \
+            and ns["days_full"] < ns["days_window"]:
+        steps.append({
+            "priority": "P0", "id": "restore_measurement_coverage",
+            "action": "Восстановить полные рабочие дни и наполнить сопоставимое 14-дневное окно",
+            "evidence": f"days_full={ns['days_full']}/{ns['days_window']}",
+            "gate": "Не оценивать тренд, пока denominators окон несопоставимы",
+        })
+    if training.get("evaluation_scope") != "out_of_sample_time_holdout":
+        steps.append({
+            "priority": "P0", "id": "repair_training_evaluation",
+            "action": "Построить later-EOD labels и temporal holdout по целым дням; recall/AUC оставить diagnostic-only",
+            "evidence": f"bandit_scope={training.get('evaluation_scope') or 'unknown'}; "
+                        f"model_label_timing={training.get('model_label_timing') or 'unknown'}",
+            "gate": "Не считать training-to-live gap до честного holdout",
+        })
+    verified = dnt.get("last_verified")
+    budget = int(dnt.get("verify_every_days") or 0)
+    if verified and budget:
+        try:
+            age = (today - date.fromisoformat(str(verified))).days
+            if age > budget:
+                steps.append({
+                    "priority": "P0", "id": "refresh_gate_evidence",
+                    "action": "Повторить targeted gate replays на максимальном периоде текущей policy",
+                    "evidence": f"do_not_touch age={age}d > {budget}d budget",
+                    "gate": "Не ослаблять и не объявлять gate доказанным по stale evidence",
+                })
+        except ValueError:
+            pass
+    alpha = scorecard.get("portfolio_alpha") or {}
+    if alpha.get("value") is None:
+        steps.append({
+            "priority": "P0", "id": "restore_portfolio_alpha",
+            "action": "Сформировать агрегированный weekly portfolio alpha vs buy-and-hold",
+            "evidence": "canonical profitability metric is unknown",
+            "gate": "Не называть per-mode P&L прибыльностью бота",
+        })
+    capture = scorecard.get("realized_potential") or {}
+    if capture.get("value") is None:
+        steps.append({
+            "priority": "P0", "id": "restore_canonical_ex1",
+            "action": "Рассчитать и сохранить EX1 в ZigZag-mode с provenance и покрытием текущей policy",
+            "evidence": capture.get("reason") or "canonical EX1 is unknown",
+            "gate": "Не называть legacy proxy-mode EX1 реализованным потенциалом",
+        })
+    elif capture["value"] < capture["target"]:
+        steps.append({
+            "priority": "P1", "id": "exit_monetization_replay",
+            "action": "Проверить tail-hold, partial-exit и re-entry на максимальном периоде",
+            "evidence": f"EX1 median={capture['value']:.3f} < target={capture['target']:.2f}; n={capture.get('n')}",
+            "gate": "Не менять production SELL без положительного multi-objective backtest",
+        })
+    precision = scorecard.get("signal_precision") or {}
+    msg = scorecard.get("message_rate") or {}
+    if ((isinstance(precision.get("value"), (int, float)) and precision["value"] < precision["target"])
+            or (isinstance(msg.get("value"), (int, float)) and msg["value"] > msg["target_max"])):
+        steps.append({
+            "priority": "P1", "id": "honest_alert_budget_ranker",
+            "action": "Проверить time-held-out ranking при фиксированном alert budget до изменения BUY gates",
+            "evidence": f"precision={precision.get('value')}% (target {precision.get('target')}%), "
+                        f"messages={msg.get('value')}/d (max {msg.get('target_max')})",
+            "gate": "Улучшать frontier precision/recall, не покупать recall спамом по большинству символов",
+        })
+    return steps
 
 
 def compute_north_star(deploy: dict, baseline: dict) -> dict:
@@ -323,8 +513,13 @@ def compute_north_star(deploy: dict, baseline: dict) -> dict:
 
 
 def detect_red_flags(deploy: dict, per_mode: dict, gap: dict, scout: dict,
-                     critic_raw: dict, metrics_daily: dict | None = None) -> list[dict]:
+                     critic_raw: dict, metrics_daily: dict | None = None,
+                     training: dict | None = None,
+                     do_not_touch: dict | None = None,
+                     today: date | None = None) -> list[dict]:
     flags = []
+    training = training or {}
+    do_not_touch = do_not_touch or {}
 
     # RF0 — Evidence integrity.  A missing critic used to yield an empty list
     # and therefore the user-facing lie "No red flags".  The expected morning
@@ -365,6 +560,17 @@ def detect_red_flags(deploy: dict, per_mode: dict, gap: dict, scout: dict,
                 "evidence": {"target_date": critic_data.get("_critic_target_date")},
                 "root_cause_hypothesis": "Последний final critic старше последнего завершённого торгового дня.",
             })
+
+    if deploy.get("available") and not deploy.get("watchlist_top_total"):
+        flags.append({
+            "id": "RF_top_mover_denominator_unknown",
+            "metric": "watchlist_top_total",
+            "value": 0.0,
+            "threshold": 1.0,
+            "severity": "critical",
+            "evidence": {"watchlist_top_total": deploy.get("watchlist_top_total")},
+            "root_cause_hypothesis": "Critic denominator отсутствует/нулевой; ratio не вычисляется.",
+        })
 
     # More than one partial/down day cannot be explained solely by today's
     # unfinished UTC day and is an operational-coverage alert.
@@ -440,6 +646,44 @@ def detect_red_flags(deploy: dict, per_mode: dict, gap: dict, scout: dict,
             "evidence": {"interpretation": gap["interpretation"]},
             "root_cause_hypothesis": "Огромный gap = downstream filter problem, не model. Смотреть analyze_blocked_gates over-blocking.",
         })
+    elif training.get("available") and gap.get("reason") == "training_metric_not_out_of_sample":
+        flags.append({
+            "id": "RF_training_evidence_invalid",
+            "metric": "training_evaluation_scope",
+            "value": 0.0,
+            "threshold": 1.0,
+            "severity": "critical",
+            "evidence": {
+                "bandit_scope": training.get("evaluation_scope") or "unknown",
+                "model_scope": training.get("model_evaluation_scope") or "unknown",
+                "model_label_timing": training.get("model_label_timing") or "unknown",
+            },
+            "root_cause_hypothesis": (
+                "Training recall/AUC не являются out-of-sample доказательством; "
+                "training-to-live gap намеренно не вычисляется."
+            ),
+        })
+
+    verified = do_not_touch.get("last_verified")
+    budget = int(do_not_touch.get("verify_every_days") or 0)
+    if verified and budget and today is not None:
+        try:
+            age = (today - date.fromisoformat(str(verified))).days
+        except ValueError:
+            age = None
+        if age is not None and age > budget:
+            flags.append({
+                "id": "RF_gate_evidence_stale",
+                "metric": "do_not_touch_evidence_age_days",
+                "value": float(age),
+                "threshold": float(budget),
+                "severity": "critical",
+                "evidence": {"last_verified": verified, "verify_every_days": budget},
+                "root_cause_hypothesis": (
+                    "Gate evidence старше допустимого бюджета; защиты остаются "
+                    "fail-closed, но их эффект нельзя называть актуально доказанным."
+                ),
+            })
 
     # RF4 — Per-mode losing modes
     if per_mode.get("available"):
@@ -498,18 +742,18 @@ def build_report(today: date) -> dict:
     if critic_raw.get("available"):
         s = critic_raw["data"].get("summary", {})
         bought = s.get("watchlist_top_bought", 0)
-        total = s.get("watchlist_top_count") or 1
+        total = s.get("watchlist_top_count")
         early = s.get("watchlist_top_early_captured", 0)
         fp = s.get("bot_false_positive_buys", 0)
-        buys = s.get("bot_unique_buys") or 1
+        buys = s.get("bot_unique_buys")
         deploy = {
             "available": True,
             "phase": critic_raw["data"].get("_phase_used"),
             "critic_target_date": critic_raw["data"].get("_critic_target_date"),
             "critic_fallback_days": critic_raw["data"].get("_fallback_days"),
-            "watchlist_top_bought_pct":        round(bought / total, 4),
-            "watchlist_top_early_capture_pct": round(early / total, 4),
-            "false_positive_rate":             round(fp / buys, 4),
+            "watchlist_top_bought_pct":        round(bought / total, 4) if total else None,
+            "watchlist_top_early_capture_pct": round(early / total, 4) if total else None,
+            "false_positive_rate":             round(fp / buys, 4) if buys else None,
             "bot_unique_buys":                 buys,
             "watchlist_top_bought":            bought,
             "watchlist_top_early":             early,
@@ -519,18 +763,49 @@ def build_report(today: date) -> dict:
         }
 
     gap = compute_training_to_live_gap(training, deploy) if training.get("available") and deploy.get("available") else {"available": False}
-    north_star = compute_north_star(deploy, baseline)
-    red_flags = detect_red_flags(deploy, per_mode, gap, scout, critic_raw,
-                                 metrics_daily)
+    deployment_diagnostic = compute_north_star(deploy, baseline)
     dnt = PL.load_do_not_touch()
+    scorecard = build_canonical_scorecard(metrics_daily)
+    next_steps = derive_next_steps(scorecard, training, dnt, today)
+    red_flags = detect_red_flags(
+        deploy, per_mode, gap, scout, critic_raw, metrics_daily,
+        training=training, do_not_touch=dnt, today=today,
+    )
+    if scorecard["north_star"].get("status") != "verified":
+        red_flags.append({
+            "id": "RF_north_star_ground_truth_provisional",
+            "metric": "north_star_label_provenance",
+            "value": 0.0,
+            "threshold": 1.0,
+            "severity": "critical",
+            "evidence": {"provenance": scorecard["north_star"].get("provenance")},
+            "root_cause_hypothesis": (
+                "top_gainer_dataset label_top20 создаётся из того же rolling-24h "
+                "snapshot; это не immutable later-EOD outcome."
+            ),
+        })
 
     report = {
         "report_id": f"health-{today.isoformat()}",
-        "schema_version": 1,
+        "schema_version": 2,
         "generated_at": PL.utc_now_iso(),
         "target_date": today.isoformat(),
         "window_days": 1,
-        "north_star": north_star,
+        "north_star": {
+            "metric": "EarlyCapture@top20",
+            "value": scorecard["north_star"].get("value"),
+            "target": scorecard["north_star"].get("target"),
+            "acceptable_floor": scorecard["north_star"].get("acceptable_floor"),
+            "status": scorecard["north_star"].get("status"),
+            "baseline_7d": None,
+            "regression_vs_7d_avg": None,
+            "n": scorecard["north_star"].get("n"),
+            "days_window": scorecard["north_star"].get("days_window"),
+            "days_full": scorecard["north_star"].get("days_full"),
+            "reason": scorecard["north_star"].get("provenance"),
+        },
+        "canonical_scorecard": scorecard,
+        "deployment_critic_diagnostic": deployment_diagnostic,
         "training_health": {k: v for k, v in training.items() if k != "trend"} if training.get("available") else {"available": False},
         "training_health_trend": training.get("trend") if training.get("available") else [],
         "deployment_health": deploy,
@@ -544,6 +819,7 @@ def build_report(today: date) -> dict:
         "metrics_daily_latest": metrics_daily,
         "mode_curtail": collect_mode_curtail(),
         "red_flags": red_flags,
+        "next_steps": next_steps,
         "do_not_touch": dnt,
         "data_sources": {
             "training":         str(PL.LEARNING_PROGRESS),
@@ -582,6 +858,19 @@ def render_markdown(r: dict) -> str:
     add(f"- Status: **{ns['status'].upper()}**")
     add("")
 
+    add("## Canonical Objective Scorecard")
+    add("")
+    add("| Question | Value | Target | Evidence |")
+    add("|---|---:|---:|---|")
+    for key, item in (r.get("canonical_scorecard") or {}).items():
+        value = item.get("value")
+        shown = "unknown" if value is None else str(value)
+        target = item.get("target")
+        if target is None:
+            target = f"≤ {item.get('target_max')}"
+        add(f"| {key} | {shown} | {target} | {item.get('source')} |")
+    add("")
+
     # Training-to-live gap (the most important section)
     gap = r["training_to_live_gap"]
     if gap.get("available"):
@@ -590,30 +879,46 @@ def render_markdown(r: dict) -> str:
         add(f"- Gap: **{gap['value']:+.1%}**")
         add(f"- {gap['interpretation']}")
         add("")
+    elif gap.get("reason"):
+        add("## ❌ Training-to-Live Gap unavailable")
+        add("")
+        add(f"- Reason: `{gap['reason']}`")
+        add(f"- Evaluation scope: `{gap.get('evaluation_scope', 'unknown')}`")
+        add("")
 
     # Deployment health
     dh = r["deployment_health"]
     if dh.get("available"):
+        def _pct_or_unknown(value: float | None) -> str:
+            return "unknown" if value is None else f"{value:.1%}"
+
         add("## Deployment Health (live bot)")
         add("")
         add("| Метрика | Значение | Норма | Статус |")
         add("|---------|----------|-------|--------|")
-        add(f"| watchlist_top_bought | {dh['watchlist_top_bought']}/{dh['watchlist_top_total']} ({dh['watchlist_top_bought_pct']:.1%}) | ≥50% | {PL.status_emoji(PL.classify(dh['watchlist_top_bought_pct'], 'watchlist_top_bought_pct'))} |")
-        add(f"| early_captures | {dh['watchlist_top_early']}/{dh['watchlist_top_total']} ({dh['watchlist_top_early_capture_pct']:.1%}) | ≥25% | {PL.status_emoji(PL.classify(dh['watchlist_top_early_capture_pct'], 'watchlist_top_early_capture_pct'))} |")
-        add(f"| false_positive_rate | {dh['false_positive_buys']}/{dh['bot_unique_buys']} ({dh['false_positive_rate']:.1%}) | <50% | {PL.status_emoji(PL.classify(dh['false_positive_rate'], 'false_positive_rate'))} |")
+        add(f"| watchlist_top_bought | {dh['watchlist_top_bought']}/{dh['watchlist_top_total']} ({_pct_or_unknown(dh['watchlist_top_bought_pct'])}) | ≥50% | {PL.status_emoji(PL.classify(dh['watchlist_top_bought_pct'], 'watchlist_top_bought_pct'))} |")
+        add(f"| early_captures | {dh['watchlist_top_early']}/{dh['watchlist_top_total']} ({_pct_or_unknown(dh['watchlist_top_early_capture_pct'])}) | ≥25% | {PL.status_emoji(PL.classify(dh['watchlist_top_early_capture_pct'], 'watchlist_top_early_capture_pct'))} |")
+        add(f"| false_positive_rate | {dh['false_positive_buys']}/{dh['bot_unique_buys']} ({_pct_or_unknown(dh['false_positive_rate'])}) | <50% | {PL.status_emoji(PL.classify(dh['false_positive_rate'], 'false_positive_rate'))} |")
         add("")
 
     # Training health
     th = r["training_health"]
     if th.get("available"):
-        add("## Training Health (модель)")
+        add("## Training Evidence (diagnostic unless scope is OOS)")
         add("")
-        add("| Метрика | Значение | Норма | Статус |")
-        add("|---------|----------|-------|--------|")
-        add(f"| recall@20 | {th['recall_at_20']:.1%} | ≥80% | {PL.status_emoji(PL.classify(th['recall_at_20'], 'recall_at_20'))} |")
-        add(f"| UCB separation | {th['ucb_separation']:+.4f} | ≥+0.10 | {PL.status_emoji(PL.classify(th['ucb_separation'], 'ucb_separation'))} |")
-        add(f"| AUC top20 | {th['auc']:.3f} | ≥0.90 | {PL.status_emoji(PL.classify(th['auc'], 'model_auc_top20'))} |")
-        add(f"| bandit updates total | {th['bandit_total_updates']:,} | — | — |")
+        add(f"- Bandit scope: `{th.get('evaluation_scope') or 'unknown'}`")
+        add(f"- Model scope: `{th.get('model_evaluation_scope') or 'unknown'}`")
+        add(f"- Label timing: `{th.get('model_label_timing') or 'unknown'}`")
+        if th.get("legacy_ratio_suppressed"):
+            add("- Legacy recall: **suppressed** (missing base rate, action rate, lift, precision)")
+        elif th.get("recall_at_20") is not None:
+            add(f"- Bandit diagnostic: recall={th['recall_at_20']:.1%}; "
+                f"action={th['action_rate']:.1%}; base={th['base_rate']:.1%}; "
+                f"lift={th['lift']:.2f}×; precision={th['precision']:.1%}")
+        if th.get("auc") is not None:
+            add(f"- Model diagnostic AUC: {th['auc']:.3f}")
+        if th.get("bandit_total_updates") is not None:
+            add(f"- Bandit updates total: {th['bandit_total_updates']:,} (activity, not quality)")
         add("")
         if r["training_health_trend"]:
             add("**Trend (последние 7 дней):**")
@@ -690,6 +995,14 @@ def render_markdown(r: dict) -> str:
         add("## ✅ No red flags")
         add("")
 
+    if r.get("next_steps"):
+        add("## Evidence-ranked next steps")
+        add("")
+        for step in r["next_steps"]:
+            add(f"- **{step['priority']} {step['id']}** — {step['action']}; "
+                f"evidence: {step['evidence']}; gate: {step['gate']}")
+        add("")
+
     add("---")
     add("")
     add("## Data sources")
@@ -758,11 +1071,11 @@ def _ns_history_with_meta() -> list[tuple[str, float, int | None]]:
 
 
 def _per100(frac: float) -> int:
-    """0.106 -> 11  (rockets caught per 100)."""
+    """0.106 -> 11  (North-Star points per 100)."""
     return max(0, round(frac * 100))
 
 
-def _progress_verdict() -> tuple[str, str, str]:
+def _progress_verdict(*, ground_truth_verified: bool = False) -> tuple[str, str, str]:
     """Line-1 answer in PLAIN words: developing / flat / worse.
     Judged only on the North Star over the longest history (§0).
 
@@ -772,6 +1085,9 @@ def _progress_verdict() -> tuple[str, str, str]:
     endpoints produced "СТАЛО ХУЖЕ ~11 -> ~7" out of pure window growth. A
     headline verdict built on incomparable samples is worse than none.
     """
+    if not ground_truth_verified:
+        return ("❔", "МЕТРИКА ПРЕДВАРИТЕЛЬНАЯ",
+                "тренд не оценивается до пересчёта на immutable later-EOD labels")
     h = _ns_history_with_meta()
     if len(h) < 2:
         return ("❔", "ПОКА НЕ ЯСНО", "мало истории, чтобы судить")
@@ -782,7 +1098,7 @@ def _progress_verdict() -> tuple[str, str, str]:
                 f"рабочим дням, {d1} — по {f1}. Сравнивать их нельзя")
     delta_pp = (last_v - first_v) * 100
     trend = (f"за сопоставимый период {h[0][0]}–{h[-1][0]}: "
-             f"~{_per100(first_v)} → ~{_per100(last_v)} из 100 ракет")
+             f"North Star ~{_per100(first_v)} → ~{_per100(last_v)} из 100")
     if delta_pp > 1.0:
         return ("📈", "РАЗВИВАЕТСЯ (медленно)", trend)
     if delta_pp < -1.0:
@@ -961,7 +1277,10 @@ def render_telegram(r: dict) -> str:
     funnel = md.get("C1_C2_coverage_funnel") or {}
     rf = r.get("red_flags") or []
 
-    p_emoji, p_head, p_trend = _progress_verdict()
+    score_ns = ((r.get("canonical_scorecard") or {}).get("north_star") or {})
+    p_emoji, p_head, p_trend = _progress_verdict(
+        ground_truth_verified=score_ns.get("status") == "verified",
+    )
     n_act = _action_needed_count()
     if n_act:
         act = f"👉 нужно твоё решение ({n_act})"
@@ -977,24 +1296,27 @@ def render_telegram(r: dict) -> str:
     dh = r.get("deployment_health") or {}
     critic_day = dh.get("critic_target_date")
     if dh.get("available") and critic_day:
-        out.append(f"🧾 final critic: {critic_day}")
+        phase = dh.get("phase") or "unknown"
+        suffix = " (partial)" if phase != "final" else ""
+        out.append(f"🧾 critic: {critic_day} · {phase}{suffix}")
         out.append("")
 
     ec = ns_md.get("early_capture")
     if ec is not None:
-        # All "ракеты" below refer to top-movers OF OUR WATCHLIST only —
-        # the bot can only buy what's in watchlist.json (~105 coins), so
-        # the metric is fairly scoped to watchlist ∩ Binance top-20.
-        out.append(f"<b>Главное:</b> из 100 ракет (из нашего списка) "
-                   f"бот ловит вовремя ~{_per100(ec)} ({p_trend}). Цель — 25+.")
+        out.append(f"<b>Главное:</b> предварительный North Star раннего захвата = {ec:.1%} "
+                   f"({p_trend}). Цель — 40%, минимально приемлемо 25%.")
+        out.append("Это составной score, а не доля пойманных монет: "
+                   "coverage × реализованная часть движения × своевременность.")
+        out.append("⚠️ Ground truth пока provisional: label построен на rolling-24h snapshot, "
+                   "а не на неизменяемом later-EOD top-20.")
         cov = funnel.get("coverage_pct_raw")
         sm = funnel.get("silent_miss_pct")
         capm = ns_md.get("decomp_capture_mean")
         if cov is not None and capm is not None:
             caught = round(cov / 10.0)
             fifth = max(1, round(1 / capm)) if capm > 0 else None
-            out.append(f"<b>Где теряем:</b> из 10 ракет нашего списка "
-                       f"~{caught} поймал, из пойманных взял лишь "
+            out.append(f"<b>Где теряем:</b> из 10 событий watchlist∩global-top20 "
+                       f"~{caught} имели вход, из доступного движения реализовано лишь "
                        f"{'1/' + str(fifth) if fifth else '0%'} их роста.")
         coverage = ns_md.get("decomp_coverage")
         lead = ns_md.get("decomp_time_lead_mean")
@@ -1010,17 +1332,17 @@ def render_telegram(r: dict) -> str:
             value = components[bottleneck]
             if bottleneck == "capture":
                 out.append(f"<b>Главный тормоз:</b> монетизация после входа — "
-                           f"бот сохраняет лишь ~{round(value * 100)}% движения пойманных ракет.")
+                           f"бот реализует лишь ~{round(value * 100)}% доступного движения top-mover событий.")
             elif bottleneck == "coverage":
                 out.append(f"<b>Главный тормоз:</b> покрытие — бот входит лишь "
-                           f"примерно в {round(value * 100)}% ракет списка.")
+                           f"примерно в {round(value * 100)}% событий watchlist∩global-top20.")
             else:
                 out.append(f"<b>Главный тормоз:</b> запаздывание — после входа "
                            f"остаётся около {round(value * 100)}% времени движения.")
         if sm is not None and sm > 0:
             every = max(2, round(100 / sm))
-            out.append(f"<b>Совсем не видит:</b> каждую ~{every}-ю ракету "
-                       f"из нашего списка.")
+            out.append(f"<b>Совсем не видит:</b> примерно каждое {every}-е "
+                       f"top-mover событие в области наблюдения.")
         # Uptime context: the numbers above count only days the bot actually ran.
         # Without this line an outage reads as a performance collapse (2026-07-23:
         # 8 days down -> report said "~2 из 100" while live days were at a record).
@@ -1033,6 +1355,29 @@ def render_telegram(r: dict) -> str:
     else:
         out.append("<b>Главное:</b> результат за сегодня ещё считается.")
     out.append("")
+
+    score = r.get("canonical_scorecard") or {}
+    if score:
+        alpha = score.get("portfolio_alpha") or {}
+        precision = score.get("signal_precision") or {}
+        msg = score.get("message_rate") or {}
+        tts = score.get("time_to_signal") or {}
+        ex1 = score.get("realized_potential") or {}
+        fr = score.get("fast_reversal") or {}
+        wh = score.get("whipsaw") or {}
+
+        def _v(item: dict, suffix: str = "", digits: int = 1) -> str:
+            value = item.get("value")
+            return "неизвестно" if not isinstance(value, (int, float)) else f"{value:.{digits}f}{suffix}"
+
+        out.append("🎯 <b>Канонический scorecard</b>")
+        out.append(f"  прибыль портфеля vs buy-and-hold: {_v(alpha, '%')} (цель &gt; 0%)")
+        out.append(f"  precision сигналов: {_v(precision, '%')} / 35%; "
+                   f"сообщений: {_v(msg, '/д')} / ≤10/д")
+        out.append(f"  время до сигнала: {_v(tts, 'ч', 2)} / ≤0.5ч; "
+                   f"реализованный потенциал: {_v(ex1, '', 3)} / 0.50")
+        out.append(f"  fast reversal: {_v(fr, '%')} / ≤8%; whipsaw: {_v(wh, '%')} / ≤5%")
+        out.append("")
 
     out.append("📋 <b>Прошлые решения</b> (помогли или нет):")
     out.extend(_past_decisions_resume())
@@ -1059,6 +1404,14 @@ def render_telegram(r: dict) -> str:
     else:
         out.append("✅ Тревог нет")
 
+    steps = r.get("next_steps") or []
+    if steps:
+        out.append("")
+        out.append("🧭 <b>Следующие доказуемые шаги</b>")
+        for idx, step in enumerate(steps[:6], 1):
+            out.append(f"  {idx}. [{step.get('priority', '?')}] {step.get('action')} — "
+                       f"{step.get('evidence')}")
+
     learn = _render_learning_block(r)
     if learn:
         out.append("")
@@ -1073,53 +1426,40 @@ def render_telegram(r: dict) -> str:
 
 
 def _render_learning_block(r: dict) -> str | None:
-    """Learning progress — P0 of the project (CLAUDE.md §0), and it was missing
-    from the brief entirely: the operator could not tell whether the bot is
-    still learning anything.
-
-    The interesting part is not the absolute numbers but their relation to the
-    live metric. §0 point 3 calls a training/live divergence the single most
-    important diagnostic, so state it instead of printing four saturated numbers.
-    """
+    """Render training evidence without turning diagnostics into achievements."""
     th = r.get("training_health") or {}
     if not th.get("available"):
         return None
     rec, auc = th.get("recall_at_20"), th.get("auc")
-    ucb, upd = th.get("ucb_separation"), th.get("bandit_total_updates")
-    trend = th.get("trend") or []
+    action_rate, base_rate = th.get("action_rate"), th.get("base_rate")
+    lift, precision = th.get("lift"), th.get("precision")
+    scope = th.get("evaluation_scope") or "unknown"
+    model_scope = th.get("model_evaluation_scope") or "unknown"
+    label_timing = th.get("model_label_timing") or "unknown"
 
-    lines = ["🧠 <b>Обучение</b>"]
-    if isinstance(rec, (int, float)) and isinstance(auc, (int, float)):
-        ceiling = " — упёрлись в потолок" if rec >= 0.99 and auc >= 0.97 else ""
-        lines.append(f"  модель: находит {rec*100:.0f}% ракет на истории, "
-                     f"AUC {auc:.2f}{ceiling}")
-    if isinstance(upd, (int, float)):
-        per_day = None
-        if len(trend) >= 2:
-            first = trend[0].get("bandit_n_signal")
-            u0 = [t for t in trend if t.get("date")]
-            if len(u0) >= 2:
-                per_day = None  # updates/day is derived below from totals only
-        growth = ""
-        if isinstance(ucb, (int, float)):
-            prev_ucb = next((t.get("ucb_separation") for t in trend
-                             if isinstance(t.get("ucb_separation"), (int, float))), None)
-            if prev_ucb is not None:
-                d = ucb - prev_ucb
-                growth = (f", различение {ucb:.3f} "
-                          f"({'растёт' if d > 0.005 else 'почти не растёт'})")
-            else:
-                growth = f", различение {ucb:.3f}"
-        lines.append(f"  бандит: {upd/1e6:.2f} млн обучающих примеров{growth}")
+    lines = ["🧠 <b>Обучение — статус доказательств</b>"]
+    if th.get("legacy_ratio_suppressed"):
+        lines.append("  legacy recall скрыт: в записи нет base rate, action rate и lift")
+    elif isinstance(rec, (int, float)):
+        lines.append(
+            f"  bandit diagnostic: recall={rec:.1%}, ENTER={action_rate:.1%}, "
+            f"base={base_rate:.1%}, lift={lift:.2f}×, precision={precision:.1%}; "
+            f"scope={scope}"
+        )
+    if isinstance(auc, (int, float)):
+        lines.append(
+            f"  model diagnostic: AUC={auc:.3f}; scope={model_scope}; "
+            f"label={label_timing}"
+        )
+    if th.get("model_label_encoding_features"):
+        lines.append("  ⚠️ признаки могут кодировать текущий leaderboard: "
+                     + ", ".join(map(str, th["model_label_encoding_features"])))
 
-    # The gap that matters (§0.3): the report already computes it, so use that
-    # number rather than deriving a second one that could disagree with it.
     gap = r.get("training_to_live_gap") or {}
     if gap.get("available") and isinstance(gap.get("value"), (int, float)):
-        lines.append(f"  ⚠️ <b>разрыв обучение↔бой: {gap['value']*100:.0f}%</b> — "
-                     f"на истории модель находит ракеты, в бою их теряют фильтры "
-                     f"и ранние выходы. Узкое место в исполнении, не в "
-                     f"предсказании — доучивать модель бесполезно.")
+        lines.append(f"  training↔live gap: {gap['value']:.1%} (валидный temporal holdout)")
+    elif gap.get("reason") == "training_metric_not_out_of_sample":
+        lines.append("  ❌ training↔live gap неизвестен: нет out-of-sample temporal holdout")
     return "\n".join(lines)
 
 
@@ -1186,11 +1526,14 @@ def _render_telegram_legacy(r: dict) -> str:
         out.append(f"{PL.status_emoji(gap['severity'])} <b>Training-to-live gap</b>: {gap['value']:+.1%}")
 
     if dh.get("available"):
+        def _legacy_pct(value: float | None) -> str:
+            return "unknown" if value is None else f"{value:.0%}"
+
         out.append("")
         out.append("<b>Deployment:</b>")
-        out.append(f"  • bought: {dh['watchlist_top_bought']}/{dh['watchlist_top_total']} ({dh['watchlist_top_bought_pct']:.0%})")
-        out.append(f"  • early: {dh['watchlist_top_early']}/{dh['watchlist_top_total']} ({dh['watchlist_top_early_capture_pct']:.0%})")
-        out.append(f"  • FPR: {dh['false_positive_buys']}/{dh['bot_unique_buys']} ({dh['false_positive_rate']:.0%})")
+        out.append(f"  • bought: {dh['watchlist_top_bought']}/{dh['watchlist_top_total']} ({_legacy_pct(dh['watchlist_top_bought_pct'])})")
+        out.append(f"  • early: {dh['watchlist_top_early']}/{dh['watchlist_top_total']} ({_legacy_pct(dh['watchlist_top_early_capture_pct'])})")
+        out.append(f"  • FPR: {dh['false_positive_buys']}/{dh['bot_unique_buys']} ({_legacy_pct(dh['false_positive_rate'])})")
 
     # Training — one honest line. recall@20 is omitted on purpose: it has
     # been pinned at 100% (saturated plateau) since ~Apr 10 and carries no
@@ -1198,7 +1541,10 @@ def _render_telegram_legacy(r: dict) -> str:
     # separation is the only training number that still moves.
     if th.get("available"):
         out.append("")
-        out.append(f"<i>Training (учеба, не цель): UCB {th['ucb_separation']:+.3f} | AUC {th['auc']:.3f} | recall@20 saturated</i>")
+        ucb = th.get("ucb_separation")
+        auc = th.get("auc")
+        out.append(f"<i>Training diagnostics (не цель): UCB {ucb if ucb is not None else 'unknown'} | "
+                   f"AUC {auc if auc is not None else 'unknown'} | recall suppressed/OOS required</i>")
 
     out.append("")
     if rf_count:

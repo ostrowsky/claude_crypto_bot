@@ -1,7 +1,7 @@
 # Metrics framework — measurement & optimisation roadmap
 
 - **Slug:** `metrics-framework`
-- **Status:** draft
+- **Status:** implemented provisionally; later-EOD ground-truth repair required
 - **Created:** 2026-04-26
 - **Owner:** core
 - **Related:** все sub-system specs; `docs/reports/2026-04-28-*`.
@@ -40,13 +40,21 @@ EarlyCapture@top20 = mean over EOD top-20 winners of:
 
 where:
   coverage_flag    = 1 if bot emitted entry, else 0
-  capture_ratio    = (eod_high − entry_price) / (eod_high − day_open)  ∈ [0, 1]
+  realized_capture = clamp(realized_trade_pnl_pct / eod_return_pct, 0, 1)
   time_lead_score  = clamp((entry_time_UTC_hours_from_open) / 24, 0, 1)
                      reversed: earlier = higher
                      formula: 1 − (entry_hour_after_open / 24)
 ```
 
 Range: 0–1 per winner; среднее — единое число для всей недели.
+
+**Truth status (2026-08-13): provisional.** Текущая реализация использует
+`label_top20` и `eod_return_pct`, записанные `daily_learning.py` из одного
+rolling-24h snapshot. Это не immutable later-EOD outcome. Число можно
+показывать только с этой оговоркой; исторический baseline и утверждения о
+прогрессе необходимо пересчитать после введения later-EOD labels (TH-02,
+TH-03, TH-04). Старый бинарный critic-показатель
+`watchlist_top_early_capture_pct` не является этой composite-метрикой.
 
 **Текущее baseline (estimate, ещё не измерено):**
 - coverage ≈ 0.80

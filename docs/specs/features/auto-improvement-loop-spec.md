@@ -3,9 +3,9 @@
 - **Slug:** `auto-improvement-loop`
 - **Status:** in-progress — see component matrix below
 - **Created:** 2026-05-12
-- **Last updated:** 2026-05-18 (L0->NS IMPROVING; RM-1/2 live-proven; RM-3 honest-negative; RM-21 discovered: 15% NS scan-coverage cap)
+- **Last updated:** 2026-08-13 (Truth Harness shipped; legacy training scores invalidated; North-Star ground truth marked provisional)
 - **Owner:** Vasiliy Ostrovsky + Claude
-- **North Star:** `watchlist_top_early_capture_pct` (see [PROJECT_CONTEXT.md](../../../PROJECT_CONTEXT.md))
+- **North Star:** composite `EarlyCapture@top20` (target 0.40; provisional until immutable later-EOD labels, see [PROJECT_CONTEXT.md](../../../PROJECT_CONTEXT.md))
 - **Project priority:** P0 (founding principle, see [CLAUDE.md §0](../../../CLAUDE.md))
 
 > **This document is the single source of truth for what's wired up and what
@@ -106,11 +106,13 @@ Legend: ✅ done · 🟡 partial · ❌ not implemented · ⏸ deferred
 | ID | Component | Status | Tests | Notes |
 |----|-----------|--------|-------|-------|
 | L1-a | `bot_health_report.py` daily snapshot | ✅ | `test_bot_health_critic_phase.py` (6) | reads `top_gainer_critic_*_final` preferred over `_midday` |
-| L1-b | Training health (recall@20, UCB sep, AUC) | ✅ | indirect | from `learning_progress.jsonl` |
+| L1-b | Training evidence (recall@20, UCB sep, AUC) | 🟡 | `test_truth_harness.py`, `test_bot_health_report_integrity.py` | legacy recall is post-fit/in-sample; AUC uses same-snapshot target and answer-encoding feature; report now suppresses/labels diagnostics; honest temporal holdout remains P0 |
 | L1-c | Deployment health (early_capture, FPR, …) | ✅ | indirect | from critic final |
 | L1-d | Per-mode signal evaluator | ✅ | — | `_weekly_signal_eval_with_tg.py` writes `evaluation_output/per_mode/<mode>/report.json` |
 | L1-e | Red flag detection (persistent ≥4d) | ✅ | — | `bot_health_report.detect_red_flags()` |
-| L1-f | Training-to-live gap explicit metric | ✅ | — | most important diagnostic per §0 |
+| L1-f | Training-to-live gap explicit metric | 🟡 | `test_bot_health_report_integrity.py` | fail-closed: unavailable until training side is `out_of_sample_time_holdout` |
+| L1-g | Truth Harness (state + staged change profiles) | ✅ | `test_truth_harness.py` (7+) | TH-01…TH-12; tracked pre-commit hook; project skill; blocking findings remain visible rather than passed |
+| L1-h | Strategic learning-progress analyzer truth gating | ✅ | `test_learning_progress_truth.py` | provisional NS and non-OOS recall/AUC render `UNKNOWN`, never improving/degrading |
 
 ### L2 — Hypothesis generator
 
@@ -262,6 +264,7 @@ missing rows = the loop isn't really closing.
 | 2026-05-18 | n/a (infra proven) | n/a | n/a | RM-1/RM-2 honest Pareto sweep **verified on LIVE production data** (7d: ml_zone 994/1063=93.5%, trend_quality 335/335=100%, entry_score 426/852=50% would-be-signals). Confirms blocked-event logging closed the loop. Residual: 740 `<none>` un-wired sites → safe branch-merge of c479a4c + L3-c validator | — |
 | 2026-05-18 | NS-protective (negative result) | n/a | n/a | RM-3 60-day backtest: anti-fast-reversal hard guard **rejected by data** — val AUC ~0.55, recall-safe threshold gives ≤0.9pp FR reduction at ~4% winner cost. Guard stays OFF; loop correctly prevented a NS-degrading change. Next: proba as soft bandit context | — |
 | 2026-05-18 | **−15.1% NS ceiling identified** | n/a | n/a | **RM-21 discovered**: 60-day silent-miss diagnostic — 15.1% of ALL top-20 winners never entered the morning confirmed scan → never monitored → impossible to capture. Largest single measurable NS cap found; new P0, outranks RM-16/17. `_backtest_silent_miss_breakdown.py` added for ongoing tracking | — |
+| 2026-08-13 | **0.070 provisional** (n=26, 10/14 full days) | **unknown** — suppressed until OOS temporal holdout | n/a | **RM-23 Truth Harness shipped:** exposed same-snapshot North-Star/model labels, answer-encoding `tg_return_since_open`, row-level day leakage and post-fit bandit recall; health report now publishes a canonical scorecard, unknowns and evidence-ranked next steps instead of inflated capability claims | — |
 
 Conventions for filling the table:
 - One row per measurable change. Re-measurements every 7/14/30 days get
@@ -282,6 +285,7 @@ something that does. The "Why for North Star" column makes the chain explicit.
 
 | ID | Item | Effort | Why for North Star |
 |----|------|--------|---------------------|
+| **RM-23** | ✅ **Truth Harness shipped 2026-08-13** — TH-01…TH-12 spec, deterministic `full` and staged-change profiles, tracked pre-commit hook, project audit skill, canonical scorecard and fail-closed report semantics. **Open P0 findings:** rebuild top-20 ground truth from immutable later-EOD outcomes; group temporal holdout by complete UTC day; evaluate a frozen pre-fit bandit; restore aggregate portfolio alpha; refresh expired gate evidence. | shipped + follow-ups | Prevents proxy/in-sample/leaked metrics from being reported as objective progress and makes every future metric/behaviour change carry spec + tests + provenance. |
 | ~~RM-1~~ | ~~Extend `bot_events.jsonl` blocked events with full decision state~~ ✅ **DONE 2026-05-12** — `_build_block_context()` helper; wired 8 high-frequency block sites (ml_zone, entry_score, trend_quality, trend_chop, ranker_hard_veto, impulse_guard, mode_range_quality, correlation_guard); full context logged; 6 unit tests in `test_blocked_event_logging.py` | 4-6h | Unblocks universal Pareto-sweep validators (L3-c) so future `relax_gate_*` hypotheses can ACTUALLY measure effect — without this, ~40% of L2 proposals end at `pending_manual_validation` |
 | ~~RM-2~~ | ~~Structured `reason_code` enum in blocked events~~ ✅ **DONE 2026-05-12** — Reason codes (ml_zone, entry_score, trend_quality, etc.) + gate fields in all blocked events; `_backtest_blocked_breakdown.py` for analysis; backwards compatible | 2h | Lets L4 sim filter blocked events generically by gate name — same unblocking as RM-1 |
 | RM-3 | Anti-fast-reversal — label+train+backtest **DONE 2026-05-18** (honest negative): proxy label (`ret_3<=-0.3%`, since spec trail-stop label needs never-logged `entry_context`); val AUC ~0.55; 60-day sweep shows hard guard NOT viable (recall-safe T yields ≤0.9pp FR reduction). `FAST_REVERSAL_GUARD_ENABLED` stays False. Remaining: wire `proba_fast_reversal` as **soft LinUCB context** (not a guard) — see [`anti-fast-reversal-spec.md`](anti-fast-reversal-spec.md) | 2-3 days | 33.9% of takes reverse within 3 bars. Surfaced as a negative result: a naive guard would cost ~4% of winners for ~0 NS gain — loop correctly blocked it |
