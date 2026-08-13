@@ -1059,7 +1059,90 @@ def render_telegram(r: dict) -> str:
     else:
         out.append("✅ Тревог нет")
 
+    learn = _render_learning_block(r)
+    if learn:
+        out.append("")
+        out.append(learn)
+
+    agent = _render_agent_block()
+    if agent:
+        out.append("")
+        out.append(agent)
+
     return "\n".join(out)
+
+
+def _render_learning_block(r: dict) -> str | None:
+    """Learning progress — P0 of the project (CLAUDE.md §0), and it was missing
+    from the brief entirely: the operator could not tell whether the bot is
+    still learning anything.
+
+    The interesting part is not the absolute numbers but their relation to the
+    live metric. §0 point 3 calls a training/live divergence the single most
+    important diagnostic, so state it instead of printing four saturated numbers.
+    """
+    th = r.get("training_health") or {}
+    if not th.get("available"):
+        return None
+    rec, auc = th.get("recall_at_20"), th.get("auc")
+    ucb, upd = th.get("ucb_separation"), th.get("bandit_total_updates")
+    trend = th.get("trend") or []
+
+    lines = ["🧠 <b>Обучение</b>"]
+    if isinstance(rec, (int, float)) and isinstance(auc, (int, float)):
+        ceiling = " — упёрлись в потолок" if rec >= 0.99 and auc >= 0.97 else ""
+        lines.append(f"  модель: находит {rec*100:.0f}% ракет на истории, "
+                     f"AUC {auc:.2f}{ceiling}")
+    if isinstance(upd, (int, float)):
+        per_day = None
+        if len(trend) >= 2:
+            first = trend[0].get("bandit_n_signal")
+            u0 = [t for t in trend if t.get("date")]
+            if len(u0) >= 2:
+                per_day = None  # updates/day is derived below from totals only
+        growth = ""
+        if isinstance(ucb, (int, float)):
+            prev_ucb = next((t.get("ucb_separation") for t in trend
+                             if isinstance(t.get("ucb_separation"), (int, float))), None)
+            if prev_ucb is not None:
+                d = ucb - prev_ucb
+                growth = (f", различение {ucb:.3f} "
+                          f"({'растёт' if d > 0.005 else 'почти не растёт'})")
+            else:
+                growth = f", различение {ucb:.3f}"
+        lines.append(f"  бандит: {upd/1e6:.2f} млн обучающих примеров{growth}")
+
+    # The gap that matters (§0.3): the report already computes it, so use that
+    # number rather than deriving a second one that could disagree with it.
+    gap = r.get("training_to_live_gap") or {}
+    if gap.get("available") and isinstance(gap.get("value"), (int, float)):
+        lines.append(f"  ⚠️ <b>разрыв обучение↔бой: {gap['value']*100:.0f}%</b> — "
+                     f"на истории модель находит ракеты, в бою их теряют фильтры "
+                     f"и ранние выходы. Узкое место в исполнении, не в "
+                     f"предсказании — доучивать модель бесполезно.")
+    return "\n".join(lines)
+
+
+def _render_agent_block() -> str | None:
+    """Is the LLM agent actually being used for hypotheses, and to what effect?
+
+    Without this the operator cannot tell whether "no ideas" means the agent
+    reviewed everything and found nothing, or was never called at all — the
+    latter was true for 11 days in August (the weekly task refused to start on
+    battery)."""
+    calls_path = PL.PIPELINE / "claude_calls.jsonl"
+    calls = [c for c in PL.iter_jsonl(calls_path) if isinstance(c, dict)]
+    if not calls:
+        return None
+    from collections import Counter
+    purposes = Counter(str(c.get("purpose") or "?") for c in calls)
+    last_ts = str(calls[-1].get("ts") or "")[:10]
+    gen = purposes.get("weekly_generation", 0)
+    adv = purposes.get("approval_advice", 0)
+    crit = purposes.get("blind_critique", 0)
+    return ("🤖 <b>Агент (LLM) в контуре гипотез</b>\n"
+            f"  последний вызов {last_ts} · всего {len(calls)}: "
+            f"генерация {gen}, оценка одобрения {adv}, слепая критика {crit}")
 
 
 def _render_telegram_legacy(r: dict) -> str:
