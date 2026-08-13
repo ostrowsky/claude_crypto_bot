@@ -37,7 +37,7 @@ time they are used; P3 is a research programme.
 |----|------|----------|------|--------|
 | G3 | `why_no_signal` — one command answers "где сигналы по X?" | **P0** | hours | shipped 2026-08-13 |
 | G9 | Restart stack: tests first, then verify every worker is up | **P0** | hours | shipped 2026-08-13 |
-| G7 | Daily artifact names its denominator + blocker harm | **P1** | 1 day | planned |
+| G7 | Daily artifact names its denominator + blocker harm | **P1** | 1 day | shipped 2026-08-13 |
 | G1 | SQLite event store with byte-offset incremental sync | **P1** | 2–3 days | planned |
 | G4 | Forward-cohort promotion gate before production | **P1** | 1–2 days | planned |
 | E3 | Freshness SLO per learning artifact | **P1** | hours | shipped 2026-08-13 |
@@ -96,6 +96,15 @@ A name inside the artifact makes that failure impossible.
 
 **Gate:** recompute one historical day both ways and show the two denominators
 produce different numbers — that difference is the whole point.
+
+**Shipped 2026-08-13.** Both `NS_EarlyCapture_top20` and `C1_C2_coverage_funnel`
+now carry `denominator`, the North Star also carries `label_provenance`, and the
+funnel ranks gates by winners lost rather than by how often they fired:
+`trend_quality` 2 winners (7.7%), `ml_proba_zone` 2 (7.7%). Wiring it exposed
+two defects — the harm table had been grouping `critic_dataset` reason codes
+through free-text regexes and so returned `unclassified` for every blocked
+winner, naming no gate at all; and the emitted buckets left 3 of 26 winners
+unaccounted for. Both fixed; the buckets reconcile.
 
 ### G1 — SQLite event store, synced by byte offset
 

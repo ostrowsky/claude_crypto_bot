@@ -228,6 +228,14 @@ def main():
     # METRIC_JSON for daily aggregator (keep top-20 as primary)
     metric = {
         "metric": "NS_EarlyCapture_top20",
+        # Which top-20 `n` counts. The recall denominator changed once already
+        # (April), and PROJECT_CONTEXT records the two methodologies as
+        # "несопоставимы напрямую"; naming it here makes the next silent
+        # redefinition visible in the artifact itself.
+        "denominator": "top20_within_watchlist_from_top_gainer_dataset",
+        # Ground truth still comes from the same rolling-24h snapshot that
+        # produces the features, so this metric stays provisional (CLAUDE.md §1).
+        "label_provenance": "rolling_24h_same_snapshot",
         "days_window": args.days,
         "days_full": len(full_days),
         "days_down_or_partial": args.days - len(full_days),

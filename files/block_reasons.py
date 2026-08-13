@@ -52,13 +52,39 @@ _RULES: list[tuple[str, re.Pattern[str]]] = [
 ]
 
 
+# Two datasets describe the same block differently. `bot_events.jsonl` carries
+# the free-text sentence the rules above match; `critic_dataset.jsonl` carries
+# `decision.reason_code`, already short (22 distinct values). Feeding the latter
+# through the regexes silently produced `unclassified` for every blocked top-20
+# winner, so the harm table read "unclassified: 4" and named no gate at all.
+_CODE_ALIASES: dict[str, str] = {
+    "ml_zone": "ml_proba_zone",
+    "cooldown": "symbol_cooldown",
+    "portfolio": "portfolio_full",
+    "correlation_guard_shadow": "correlation_guard",
+    # not blocks; mapped so they can never be mistaken for one
+    "entry_score_soft_pass": "entry_score_soft_pass",
+    "near_miss": "near_miss",
+    "take": "take",
+    "rule_signal": "rule_signal",
+    "bootstrap_ml_dataset": "bootstrap_ml_dataset",
+}
+
+
 def normalize_block_reason(reason: str = "", signal_type: str = "") -> str:
-    """Map one free-text block reason onto a stable code.
+    """Map one block reason — free text or an existing code — onto a stable code.
 
     Unmatched text returns `unclassified` rather than a guess — see module
     docstring for why that is louder than an "other" bucket.
     """
-    text = f"{str(signal_type or '').strip()} {str(reason or '').strip()}".lower()
+    raw = str(reason or "").strip()
+    token = raw.lower()
+    if token in _CODE_ALIASES:
+        return _CODE_ALIASES[token]
+    if token in {code for code, _ in _RULES}:
+        return token
+
+    text = f"{str(signal_type or '').strip()} {raw}".lower()
     if not text.strip():
         return UNKNOWN
     for code, pattern in _RULES:

@@ -197,6 +197,54 @@ fires on a deliberately stale copy, scaled to the 58-day outage), the boundary
 case, a disabled flag, an unreadable config, and directory artifacts taking
 their newest file.
 
+## Daily artifact names its denominator and ranks gates by harm
+
+**Truth-harness invariants: TH-01** (a ratio without its base is not evidence)
+and **TH-04** (comparable windows).
+
+Two changes to the daily metrics, both report-side; no trading behaviour moves.
+
+**The denominator is written into the artifact.** `NS_EarlyCapture_top20` and
+`C1_C2_coverage_funnel` now carry
+`denominator = "top20_within_watchlist_from_top_gainer_dataset"`, and the North
+Star also carries `label_provenance = "rolling_24h_same_snapshot"`. The recall
+denominator changed once already, in April, and PROJECT_CONTEXT records the two
+methodologies as "несопоставимы напрямую" — a rate whose denominator lives only
+in a script comment can be redefined without anyone noticing.
+
+**Gates are ranked by harm, not by volume.** The funnel groups blocked top-20
+winners through `normalize_block_reason` and reports how many winners each gate
+cost:
+
+```
+Harm per gate — top-20 winners lost, by normalised block reason:
+  trend_quality        2 winners   7.7% of all top-20
+  ml_proba_zone        2 winners   7.7% of all top-20
+```
+
+"How often did this gate fire" is a volume statistic and ranks the noisiest
+gate first; "how many winners did it cost" is the only figure that ranks gates
+against the North Star.
+
+Two defects surfaced while wiring it:
+
+- The funnel grouped by the raw reason string. `bot_events.jsonl` carries free
+  text (310 templates) while `critic_dataset.jsonl` carries `decision.reason_code`
+  (22 short values), so running the codes through the free-text regexes returned
+  `unclassified` for **every** blocked winner — the harm table named no gate at
+  all. `block_reasons` now passes known codes through and maps the legacy
+  spellings (`ml_zone` → `ml_proba_zone`, `cooldown` → `symbol_cooldown`,
+  `portfolio` → `portfolio_full`). `entry_score_soft_pass` is mapped explicitly
+  so it cannot be folded into `entry_score`: it is the opposite of a block.
+- The emitted buckets did not reconcile — `entered + blocked_only + no_event`
+  left 3 of 26 winners unaccounted for, which reads as an arithmetic error to
+  anyone adding them up. `candidate_only`, `other_event` and `buckets_sum` are
+  now emitted too, and 16 + 4 + 0 + 3 + 3 = 26.
+
+Verification: `_backtest_top20_coverage_funnel.py` and `_compute_early_capture.py`
+re-run on the live 14-day window; 4 new taxonomy tests in `test_why_no_signal.py`
+pin the pass-through and the legacy spellings.
+
 ## Fixed along the way
 
 `test_correlation_guard.py` replaced `sys.modules["config"]` with a stub at

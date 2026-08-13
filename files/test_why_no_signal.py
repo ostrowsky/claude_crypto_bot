@@ -82,6 +82,30 @@ class TestBlockReasons(unittest.TestCase):
         codes = BR.known_codes()
         self.assertEqual(len(codes), len(set(codes)))
 
+    def test_existing_reason_codes_pass_through(self):
+        # critic_dataset.jsonl stores decision.reason_code, already short. Sent
+        # through the regexes these all came back `unclassified`, which is how
+        # the coverage funnel's harm table ended up naming no gate at all.
+        for code in ("ml_proba_zone", "trend_quality", "mode_range_quality",
+                     "entry_score", "impulse_guard", "trend_1h_chop",
+                     "ranker_hard_veto", "clone_signal_guard", "open_cluster_cap",
+                     "mtf", "correlation_guard", "late_continuation"):
+            with self.subTest(code=code):
+                self.assertEqual(BR.normalize_block_reason(code), code)
+
+    def test_legacy_code_spellings_map_to_the_current_name(self):
+        self.assertEqual(BR.normalize_block_reason("ml_zone"), "ml_proba_zone")
+        self.assertEqual(BR.normalize_block_reason("cooldown"), "symbol_cooldown")
+        self.assertEqual(BR.normalize_block_reason("portfolio"), "portfolio_full")
+        self.assertEqual(BR.normalize_block_reason("correlation_guard_shadow"),
+                         "correlation_guard")
+
+    def test_soft_pass_is_not_folded_into_a_block(self):
+        # entry_score_soft_pass matches the entry_score regex but is the
+        # opposite of a block: the candidate was let through.
+        self.assertEqual(BR.normalize_block_reason("entry_score_soft_pass"),
+                         "entry_score_soft_pass")
+
 
 class TestWhyNoSignalVerdicts(unittest.TestCase):
     """Silence must not be reported as a monitoring failure on its own."""
