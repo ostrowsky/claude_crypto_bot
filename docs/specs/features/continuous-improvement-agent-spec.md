@@ -444,16 +444,121 @@ version of this component failed at phase 0 and nobody noticed for two months.
 
 ---
 
-## 12. Open questions for the operator
+## 12. Operating point: weekly cadence, minimal budget
+
+Settled by the operator on 2026-08-13: **weekly** cadence, **minimal** budget,
+and the deliverable is a trustworthy weekly answer to "which way did we move".
+
+Minimal budget forces a useful shape rather than a compromise: **the report is
+deterministic, the LLM only interprets it.** All counting, splitting, CI and
+power calculation happen in non-LLM code that runs whether or not an agent is
+enabled. One weekly agent pass reads that finished evidence pack and produces at
+most: a ranked reading of what moved, ≤3 hypotheses, and a recommended next
+step. No per-question retrieval loops, no exploratory tool-calling — the agent
+sees a prepared table, not a database.
+
+That also means the weekly report exists and is trustworthy **before** any agent
+is built, which is the correct order given §0.
+
+---
+
+## 13. Metric fitness — the North Star cannot answer a weekly question
+
+Measured on this repo's own data (60 days, 43 full days, `label_top20`,
+watchlist-filtered):
+
+```
+per-winner NS score:  n = 125    mean = 0.0612    sd = 0.1430
+                      63% of winners score exactly 0      CV = 2.34
+```
+
+Minimum detectable difference between two weeks (80% power, α = 0.05,
+two-sided):
+
+| unit of analysis | n / week | MDE | relative to the metric's own level |
+|---|---:|---:|---|
+| top-20 winners (**current NS**) | ~20 | **0.127** | **2.1×** |
+| movers ≥ +5% | ~83 | 0.062 | 1.0× |
+| two pooled weeks of ≥ +5% | ~160 | 0.045 | 0.7× |
+
+**A weekly NS comparison can only detect the metric tripling or collapsing to
+zero.** Anything a real change would produce is invisible. Three independent
+reasons, any one of which is disqualifying:
+
+1. **Power.** CV = 2.34, because 63% of winners score exactly 0 and the rest are
+   a long tail. A composite that is a product of three factors, one of them a
+   mostly-zero Bernoulli, is the worst possible shape for a small sample.
+2. **Direction is unreadable.** Coverage up and capture down cancels. The
+   decomposition already exists in the artifact and is what should be read.
+3. **Provenance moves with the confound.** Ground truth comes from the same
+   rolling-24h snapshot that produces the features, and which snapshots exist
+   depends on whether the scheduled tasks ran — so the label bias correlates
+   with uptime, the very thing that varies week to week (§0a rules 4 and 5).
+
+### 13.1 Proposed change — three tiers, one inference rule
+
+**Tier A — North Star stays the goal, judged quarterly.** Report it monthly with
+a CI and its MDE. Never draw a weekly arrow on it. It answers "are we building
+the right thing", on a horizon where it has the power to answer.
+
+**Tier B — a weekly steering pair, on immutable kline labels.** Both sides of
+the same event definition, so improving one at the other's expense is visible:
+
+| metric | definition | n / week | MDE (80%) |
+|---|---|---:|---|
+| `Coverage@move5` | of watchlist coins that moved ≥ +5% intraday, the share the bot alerted on **before the move's midpoint** | ~83 | ±22 pp at p=0.5 |
+| `Precision@alert` | of the bot's alerts, the share followed by ≥ +5% within 24h | ~143 | ±17 pp at p=0.5, ±13 pp at p=0.2 |
+
+Ground truth comes from **exchange klines**, not from `top_gainer_dataset`.
+That matters more than the sample size: the weekly metric then does not inherit
+the provisional label's bias, and the work of building immutable kline labels is
+also step one of fixing the North Star itself. One piece of work, two payoffs.
+
+**Tier C — deterministic process counters**, which have no sampling noise and
+are therefore honest at any cadence: gate harm (winners lost per gate), silent
+misses, alerts and entries per day, freshness lapses, harness findings, and loop
+activity (hypotheses proposed / validated / promoted / attributed).
+
+**The inference rule that makes the report trustworthy:**
+
+- every number carries `n`, base rate, CI and MDE;
+- **no arrow is drawn when |Δ| < MDE** — the report prints "рано судить" and the
+  MDE that would have been needed;
+- trend across weeks is judged by a **sequential test (CUSUM) with a yearly
+  false-alarm budget**, not by 52 independent week-vs-week tests. At α = 0.05,
+  52 independent tests manufacture ~2.6 false trends a year even when nothing
+  changes — which is precisely how a report earns distrust;
+- windows are uptime-matched: equal counts of full days, or no comparison.
+
+### 13.2 What the weekly report therefore says
+
+Three sections, in this order:
+
+1. **Did anything move?** Tier B pair with CI and MDE, and the honest verdict —
+   usually "within noise", which is information, not failure.
+2. **What did we do?** Tier C counters and every decision promoted this week with
+   its attribution status.
+3. **What next?** ≤3 ranked proposals, each with its falsifier and its validator.
+
+The quarterly section adds Tier A with its CI, and states plainly whether the
+North Star is still provisional.
+
+---
+
+## 14. Open questions for the operator
 
 1. **Autonomy ceiling.** Should phase 5 ever auto-promote to live behind a flag,
    or is operator approval permanent? The design supports both; the difference
    is one policy setting and a much larger blast-radius budget.
-2. **Budget.** What daily token and validation-compute budget is acceptable? The
-   Allocator needs a number to allocate against.
-3. **Cadence.** Nightly (with the EOD cycle) or weekly? Weekly gives attribution
-   time to mature; nightly finds stalls sooner.
-4. **North Star provenance first?** The metric is still `provisional` because
-   ground truth comes from the same rolling-24h snapshot as the features. A loop
-   optimising a provisional metric will faithfully optimise its bias. Building
-   immutable later-EOD labels first may be the correct phase 0.
+2. ~~Budget~~ — settled: minimal (§12).
+3. ~~Cadence~~ — settled: weekly (§12).
+4. ~~North Star provenance~~ — settled by §13: immutable kline labels move to
+   **phase 0**, because the weekly steering pair needs them anyway and they are
+   also what retires the North Star's `provisional` status.
+5. **Remaining, and it is a real choice:** the weekly pair uses a ≥ +5% intraday
+   move as the event. That threshold buys sample size (~83/week versus ~20 for
+   top-20) at the cost of measuring something slightly broader than the product
+   goal — a +5% mover is not necessarily a day's top-20 rocket. The alternative
+   is ≥ +8% (~33/week, MDE roughly ±35 pp — too weak to steer on). The design
+   takes +5% and reports the top-20 subset alongside it, unpowered but visible.
+   If that trade is wrong, the threshold is one config value.
