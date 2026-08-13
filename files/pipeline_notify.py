@@ -911,24 +911,32 @@ def _latest_metrics_row() -> dict:
         return {}
 
 
-def _days_since_last_idea() -> tuple[int | None, str | None]:
-    """How long the hypothesis generator has been silent, and since when."""
-    newest = None
+def _generator_state() -> tuple[int | None, str | None, int | None]:
+    """(days since the generator last RAN, that date, persistent flags it saw).
+
+    Reading the run summaries rather than the emitted hypotheses matters: a run
+    that finds nothing to propose is a healthy bot, while a generator that has
+    not executed at all is a broken loop. Both leave an empty queue, and the
+    report must not call them the same thing.
+    """
+    newest, flags = None, None
     try:
-        for p in PL.HYPOTHESES.glob("h-*.json"):
+        for p in PL.HYPOTHESES.glob("_summary-*.json"):
             d = PL.read_json(p) or {}
-            ts = str(d.get("generated_at") or "")[:10]
+            ts = str(d.get("until") or d.get("generated_at") or "")[:10]
             if len(ts) == 10 and (newest is None or ts > newest):
                 newest = ts
+                pf = d.get("persistent_flags")
+                flags = len(pf) if isinstance(pf, list) else None
     except Exception:
-        return None, None
+        return None, None, None
     if not newest:
-        return None, None
+        return None, None, None
     try:
         y, m, dd = (int(x) for x in newest.split("-"))
-        return (date.today() - date(y, m, dd)).days, newest
+        return (date.today() - date(y, m, dd)).days, newest, flags
     except ValueError:
-        return None, newest
+        return None, newest, flags
 
 
 def build_progress_block() -> str | None:
@@ -983,12 +991,20 @@ def build_progress_block() -> str | None:
                    f"зарезали фильтры {fn.get('blocked_only', 0)} · "
                    f"не увидели {fn.get('no_event', 0)}.</i>")
 
-    days, since = _days_since_last_idea()
-    if days is not None and days >= 8:
-        out.append(f"⏸ Новых идей нет: <b>генератор молчит {days} дн.</b> "
-                   f"(последняя — {since}). Это не «идей нет», а сбой контура.")
+    days, since, flags = _generator_state()
+    if days is None:
+        out.append("⏸ Идей нет: <b>генератор ни разу не отчитывался</b> — "
+                   "контур не работает.")
+    elif days >= 8:
+        out.append(f"⏸ Идей нет: <b>генератор не запускался {days} дн.</b> "
+                   f"(последний прогон {since}). Это не «идей нет», а сбой "
+                   f"контура — чинить его, а не ждать предложений.")
+    elif flags == 0:
+        out.append(f"✅ Идей нет по делу: генератор отработал {since} и "
+                   f"<b>устойчивых проблем не нашёл</b> — предлагать нечего.")
     else:
-        out.append("⏸ Очередь на одобрение пуста — новых проверенных идей нет.")
+        out.append(f"⏸ Очередь пуста: генератор отработал {since}, нашёл "
+                   f"проблем: {flags}, но ни одна идея не прошла проверку.")
     return "\n".join(out)
 
 

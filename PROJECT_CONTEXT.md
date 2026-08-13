@@ -350,6 +350,13 @@ Grace period backtest (2026-04-20): не помогает — проблема �
 | `CryptoBot_DailyLearning_EOD` | 02:30 local (00:30 UTC) | Полный цикл обучения: snapshot → resolve → train bandit → retrain model → report |
 | `CryptoBot_IntradaySnapshot` | 08:30, 14:30, 20:30 local | Сбор фич для top_gainer_dataset (intraday snapshot) |
 
+**Подвох планировщика (исправлено 2026-08-13):** все задачи CryptoBot были созданы
+с `DisallowStartIfOnBatteries` / `StopIfGoingOnBatteries` = True, поэтому на
+батарее недельный pipeline просто не запускался (`LastTaskResult 2147946720`) —
+генератор гипотез молчал 11 дней, а в утреннем отчёте очередь была пуста без
+объяснения. Оба флага сняты со всех задач. Если код ошибки появится снова —
+сначала проверять настройки питания, а не код.
+
 ---
 
 ## Управление процессами

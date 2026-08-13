@@ -224,6 +224,13 @@ To re-run: `pyembed\python.exe files\analyze_blocked_gates.py` from repo root.
 | `CryptoBot_DailyLearning_EOD` | 02:30 local (00:30 UTC) | Full cycle: snapshot → resolve → train bandit → retrain model → report |
 | `CryptoBot_IntradaySnapshot` | 08:30 / 14:30 / 20:30 local | Feature snapshot → `top_gainer_dataset` |
 
+**Scheduler gotcha (fixed 2026-08-13):** every CryptoBot task was created with
+`DisallowStartIfOnBatteries` / `StopIfGoingOnBatteries` = True, so on battery the
+weekly pipeline simply never ran (`LastTaskResult 2147946720`) — the hypothesis
+generator was silent 11 days and the morning report showed an empty queue with no
+explanation. All tasks now have both flags off. If a task reports that code again,
+check power settings before debugging the code.
+
 ---
 
 ## 6. Process / bot lifecycle
