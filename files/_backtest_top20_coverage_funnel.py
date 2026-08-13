@@ -83,7 +83,12 @@ blocked_examples = []
 day_breakdown = defaultdict(lambda: Counter())
 
 full_days = {d for d, hh in active_hours.items() if len(hh) >= MIN_ACTIVE_HOURS}
-skipped_days = sorted(d for d in top20_by_day if d not in full_days)
+# Count excluded days against the WINDOW, not against the days that happen to
+# have a top-20 winner — otherwise this number disagrees with the one
+# _compute_early_capture prints (it reported 4 vs 5 here for the same period)
+# and a report meant to be trustworthy contradicts itself.
+_window_days = sorted({(NOW - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(DAYS)})
+skipped_days = sorted(d for d in _window_days if d not in full_days)
 for d, syms in sorted(top20_by_day.items()):
     if d not in full_days:
         continue

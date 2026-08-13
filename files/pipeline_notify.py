@@ -903,6 +903,95 @@ def build_hypothesis_review_block(top_n: int = DEFAULT_REVIEW_TOP_N) -> str | No
 # ---------------------------------------------------------------------------
 
 
+def _latest_metrics_row() -> dict:
+    try:
+        rows = [r for r in PL.iter_jsonl(PL.METRICS_DAILY) if isinstance(r, dict)]
+        return rows[-1] if rows else {}
+    except Exception:
+        return {}
+
+
+def _days_since_last_idea() -> tuple[int | None, str | None]:
+    """How long the hypothesis generator has been silent, and since when."""
+    newest = None
+    try:
+        for p in PL.HYPOTHESES.glob("h-*.json"):
+            d = PL.read_json(p) or {}
+            ts = str(d.get("generated_at") or "")[:10]
+            if len(ts) == 10 and (newest is None or ts > newest):
+                newest = ts
+    except Exception:
+        return None, None
+    if not newest:
+        return None, None
+    try:
+        y, m, dd = (int(x) for x in newest.split("-"))
+        return (date.today() - date(y, m, dd)).days, newest
+    except ValueError:
+        return None, newest
+
+
+def build_progress_block() -> str | None:
+    """"What next" when the approve queue is empty.
+
+    build_next_step_block used to return None in that case, so the whole
+    "ЧТО ДАЛЬШЕ" section vanished and the report could no longer answer the two
+    questions it exists for: how far are we from the target, and what is holding
+    us back. An empty queue is also indistinguishable from a broken generator —
+    on 2026-08-13 the queue was empty only because the weekly task had been
+    failing since 08-09 (battery condition) and every earlier idea had been
+    auto-rejected for naming parameters that do not exist.
+
+    So: state the distance to the goal, name the weakest link of the North Star
+    decomposition (coverage x capture x lead), and say plainly when the
+    generator has gone quiet.
+    """
+    md = _latest_metrics_row()
+    ns = md.get("_compute_early_capture.py") or {}
+    fn = md.get("_backtest_top20_coverage_funnel.py") or {}
+    if not ns and not fn:
+        return None
+
+    out = ["🎯 <b>ЧТО ДАЛЬШЕ</b>"]
+
+    ec = ns.get("early_capture")
+    if isinstance(ec, (int, float)):
+        per100 = ec * 100
+        pct_of_goal = min(100.0, per100 / 25.0 * 100)
+        out.append(f"📊 <b>Путь к цели:</b> {per100:.0f} из 100 при цели 25 — "
+                   f"пройдено ~{pct_of_goal:.0f}%.")
+
+    cov = ns.get("decomp_coverage")
+    cap = ns.get("decomp_capture_mean")
+    lead = ns.get("decomp_time_lead_mean")
+    weakest = None
+    if all(isinstance(v, (int, float)) for v in (cov, cap, lead)):
+        weakest = min((cov, "coverage"), (cap, "capture"), (lead, "lead"))[1]
+        if weakest == "capture":
+            out.append(f"🔍 <b>Главная потеря:</b> из пойманных берём лишь "
+                       f"1/{max(2, round(1/cap))} их роста — выходим слишком рано.")
+        elif weakest == "coverage":
+            out.append(f"🔍 <b>Главная потеря:</b> доходим только до "
+                       f"{cov*10:.0f} ракет из 10 — остальные проходят мимо.")
+        else:
+            out.append(f"🔍 <b>Главная потеря:</b> заходим поздно — в среднем "
+                       f"успеваем застать {lead*100:.0f}% движения.")
+
+    n = fn.get("n_top20_winners")
+    if isinstance(n, int) and n:
+        out.append(f"<i>Разбор {n} ракет: вошли {fn.get('entered', 0)} · "
+                   f"зарезали фильтры {fn.get('blocked_only', 0)} · "
+                   f"не увидели {fn.get('no_event', 0)}.</i>")
+
+    days, since = _days_since_last_idea()
+    if days is not None and days >= 8:
+        out.append(f"⏸ Новых идей нет: <b>генератор молчит {days} дн.</b> "
+                   f"(последняя — {since}). Это не «идей нет», а сбой контура.")
+    else:
+        out.append("⏸ Очередь на одобрение пуста — новых проверенных идей нет.")
+    return "\n".join(out)
+
+
 def build_next_step_block(top_n: int = 5) -> str | None:
     """One focused "what to do next" section.
 
@@ -912,7 +1001,8 @@ def build_next_step_block(top_n: int = 5) -> str | None:
     the operator wants the decision, not the essay."""
     cands = collect_review_candidates(top_n)
     if not cands:
-        return None
+        # Empty queue is not "nothing to report" — say where we stand instead.
+        return build_progress_block()
 
     RANK = {"✅": 0, "⚠️": 1, "❌": 2}
     scored = []
