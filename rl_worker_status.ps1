@@ -1,3 +1,9 @@
+param(
+    # Exit non-zero when the worker is not running, so a restart script can
+    # fail loudly instead of reporting success over a dead worker.
+    [switch]$FailIfNotRunning
+)
+
 $ErrorActionPreference = "Stop"
 
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -86,8 +92,10 @@ if (Test-Path $wrapperHeartbeatFile) {
     }
 }
 
+$running = [bool]($worker -or $freshHeartbeat -or $freshWrapperHeartbeat)
+
 [pscustomobject]@{
-    Running = [bool]($worker -or $freshHeartbeat -or $freshWrapperHeartbeat)
+    Running = $running
     PythonPid = if ($worker) { $worker.Id } else { $null }
     Started = if ($worker) { $worker.StartTime } else { $null }
     WrapperPid = if ($pidState) { $pidState.wrapper_pid } else { $null }
@@ -105,5 +113,14 @@ if ($status) {
 if (Test-Path $stderr) {
     Write-Host ""
     Write-Host "stderr tail:"
-    Get-Content $stderr -Tail 20
+    Get-Content $stderr -Tail 20 | ForEach-Object {
+        $_ -replace 'bot\d+:[A-Za-z0-9_\-]+', 'bot<redacted>'
+    }
 }
+
+if ($FailIfNotRunning -and -not $running) {
+    Write-Host ""
+    Write-Host "FAIL: RL worker is not running."
+    exit 1
+}
+exit 0

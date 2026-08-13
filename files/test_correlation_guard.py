@@ -38,9 +38,20 @@ _cfg.CORR_MARGINAL_WEIGHTING = True
 _cfg.CORR_PRUNE_ENABLED = True
 _cfg.CORR_PRUNE_PROFIT_PROTECT_PCT = 2.0
 _cfg.CORR_CACHE_TTL_MIN = 15
-sys.modules["config"] = _cfg
 
-import correlation_guard as cg
+# The stub must be visible only while `correlation_guard` binds its `config`
+# reference. Leaving it in sys.modules poisons every other test module that
+# imports config later: under `unittest discover -p "test_*.py"` that turned
+# 3 errors into 221, all of them `module 'config' has no attribute ...`.
+_prev_config = sys.modules.get("config")
+sys.modules["config"] = _cfg
+try:
+    import correlation_guard as cg  # binds the stub object for its own use
+finally:
+    if _prev_config is not None:
+        sys.modules["config"] = _prev_config
+    else:
+        sys.modules.pop("config", None)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

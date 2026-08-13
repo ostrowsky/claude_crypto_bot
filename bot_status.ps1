@@ -1,3 +1,10 @@
+param(
+    # Exit non-zero when the bot is not running, so a restart script can fail
+    # loudly. Without this the script always returned 0 and a bot that never
+    # came up looked like a successful restart.
+    [switch]$FailIfNotRunning
+)
+
 $ErrorActionPreference = "Stop"
 
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -72,5 +79,17 @@ if (-not $running -and ($stderrFresh -or $launcherFresh)) {
 if (Test-Path $stderr) {
     Write-Host ""
     Write-Host "stderr tail:"
-    Get-Content $stderr -Tail 20
+    # Every httpx line carries the Telegram bot token in the URL. Printing the
+    # tail verbatim leaks it to the console, into scrollback, and into whatever
+    # captures this output (CLAUDE.md §13).
+    Get-Content $stderr -Tail 20 | ForEach-Object {
+        $_ -replace 'bot\d+:[A-Za-z0-9_\-]+', 'bot<redacted>'
+    }
 }
+
+if ($FailIfNotRunning -and -not $running) {
+    Write-Host ""
+    Write-Host "FAIL: bot is not running."
+    exit 1
+}
+exit 0
