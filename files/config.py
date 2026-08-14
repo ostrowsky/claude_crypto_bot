@@ -67,6 +67,18 @@ BANDIT_REBUILD_ON_TRAIN: bool = True         # rollback = False (accumulate)
 # 118_625 lines, freezing the training window at 2026-06-05 for 69 days.
 BANDIT_TG_MAX_RECORDS: int = 50_000
 
+# ── TH-04: day-grouped training split ───────────────────────────────────────
+# train_top_gainer sorts rows chronologically and then cuts by ROW INDEX, so the
+# boundary lands inside a UTC day: part of a day trains the model, the rest
+# validates it. The tier labels are per-day ranks, so knowing part of a day tells
+# you about the rest — the reported AUC is inflated by an unmeasured amount.
+# Default False: top_gainer_model feeds ranker_top_gainer_prob into the hard
+# veto, so retraining on different rows changes live gating indirectly, and a
+# behaviour change ships with the current behaviour as its default.
+# Evidence: files/_backtest_day_grouped_split.py
+TRAIN_DAY_GROUPED_SPLIT_ENABLED: bool = False
+TRAIN_SPLIT_EMBARGO_DAYS: int = 1
+
 ML_CANDIDATE_RANKER_RUNTIME_ENABLED: bool = True
 ML_CANDIDATE_RANKER_MODEL_FILE: str = "ml_candidate_ranker.json"
 ML_CANDIDATE_RANKER_NEUTRAL_PROBA: float = 0.40  # was 0.50 — lowered: most signals score 0.38-0.48, neutral at 0.50 penalised them all

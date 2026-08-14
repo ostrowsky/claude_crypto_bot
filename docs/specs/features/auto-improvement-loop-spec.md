@@ -249,7 +249,7 @@ Legend: ✅ done · 🟡 partial · ❌ not implemented · ⏸ deferred
 
 | ID | Component | Status | Tests | Notes |
 |----|-----------|--------|-------|-------|
-| ML-a | CatBoost top_gainer_model retrain (nightly) | ✅ | — | `daily_learning.py` |
+| ML-a | CatBoost top_gainer_model retrain (nightly) | ✅ | `test_day_grouped_split.py`, `_backtest_day_grouped_split.py` | `daily_learning.py`. **TH-04 split fix wired 2026-08-14 behind `TRAIN_DAY_GROUPED_SPLIT_ENABLED`, default off.** The row-index cut demonstrably straddles a UTC day (day 20654), but max-period evidence shows **no measurable AUC change** (largest delta 0.0001 across tiers) because `tg_return_since_open` encodes the label and saturates AUC near 0.99 — the smaller leak cannot be measured through the bigger one. Flip together with the label replacement so one change is attributable. Spec: [`day-grouped-training-split`](day-grouped-training-split-spec.md) |
 | ML-b | Contextual bandit (entry: 2 arms) | ✅ | `_backtest_bandit_leak_fix.py` | **Training label rebuilt 2026-08-13 (TH-01/TH-03/TH-04)** — reward follows the move remaining AFTER the snapshot (day's top-10 by forward move AND ≥ +3%), not `label_top20`, whose earliest-snapshot rows were the EOD resolution of a day already over. Temporal holdout: old label **lift 0.65×** (below random), new **4.07×**. Also: dataset read as TAIL (window had been frozen at 2026-06-05 for 69 days) and state rebuilt from scratch (37 144 updates vs 8.39M accumulated from ~188× re-ingestion). Rollback: `BANDIT_FORWARD_REWARD_ENABLED=False` + restore `bandit_entry_state.pre_leakfix.json` |
 | ML-c | Contextual bandit (trail: 5 arms) | ✅ | — | existing |
 | ML-d | Bandit context includes `mode, tf, is_bull_day, …` | ✅ | — | |

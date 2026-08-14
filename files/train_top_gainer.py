@@ -344,14 +344,52 @@ def train_and_save(
         labels[key] = labels[key][sort_idx]
     labels["symbol"] = [labels["symbol"][i] for i in sort_idx]
 
-    split_idx = int(len(X) * (1 - val_ratio))
-    X_train, X_val = X[:split_idx], X[split_idx:]
+    # TH-04: cutting by row index lands the boundary INSIDE a UTC day, so part
+    # of a day trains the model and the rest validates it. The tier labels are
+    # per-day ranks, so knowing part of a day tells you about the rest.
+    # Flagged off by default — this model feeds the ranker's hard veto, so
+    # retraining on different rows changes live gating indirectly.
+    day_grouped = False
+    try:
+        import config as _cfg
+        day_grouped = bool(getattr(_cfg, "TRAIN_DAY_GROUPED_SPLIT_ENABLED", False))
+        embargo = int(getattr(_cfg, "TRAIN_SPLIT_EMBARGO_DAYS", 0))
+    except Exception:
+        embargo = 0
+
+    train_idx = val_idx = None
+    if day_grouped:
+        try:
+            from day_split import split_indices_by_day
+            train_idx, val_idx = split_indices_by_day(
+                labels["ts"], train_frac=1 - val_ratio, embargo_days=embargo)
+        except ValueError as exc:
+            # Not enough distinct days to split honestly. Falling back to the
+            # row cut would produce the very number this flag exists to stop
+            # reporting, so the run fails instead.
+            return {"status": "error",
+                    "error": f"day-grouped split impossible: {exc}"}
+
+    if train_idx is None:
+        split_idx = int(len(X) * (1 - val_ratio))
+        X_train, X_val = X[:split_idx], X[split_idx:]
+        n_train, n_val = split_idx, len(X) - split_idx
+    else:
+        X_train, X_val = X[train_idx], X[val_idx]
+        n_train, n_val = len(train_idx), len(val_idx)
+
+    scope = ("day_grouped_holdout_same_snapshot_label" if day_grouped
+             else "time_sorted_row_holdout_same_snapshot_label")
 
     models = {}
     all_metrics = {}
     for tier in ["top5", "top10", "top20", "top50"]:
-        y_train = labels[tier][:split_idx]
-        y_val = labels[tier][split_idx:]
+        if train_idx is None:
+            y_train = labels[tier][:split_idx]
+            y_val = labels[tier][split_idx:]
+        else:
+            y_train = labels[tier][train_idx]
+            y_val = labels[tier][val_idx]
         model_payload, metrics = train_gradient_boosting(
             X_train, y_train, X_val, y_val, tier,
         )
@@ -364,9 +402,9 @@ def train_and_save(
         "tier_models": models,
         "metrics": all_metrics,
         "thresholds": {"top5": 0.15, "top10": 0.20, "top20": 0.30, "top50": 0.40},
-        "train_samples": split_idx,
+        "train_samples": n_train,
         "val_samples": len(X_val),
-        "evaluation_scope": "time_sorted_row_holdout_same_snapshot_label",
+        "evaluation_scope": scope,
         "label_timing": "same_snapshot_current_24h_leaderboard",
         "label_encoding_features": ["tg_return_since_open"],
     }
@@ -378,12 +416,12 @@ def train_and_save(
     return {
         "status": "ok",
         "n_records": len(X),
-        "train_samples": split_idx,
+        "train_samples": n_train,
         "val_samples": len(X_val),
         "auc_top20": m20.get("auc"),
         "recall_at_03_top20": m20.get("recall_at_03"),
         "precision_at_03_top20": m20.get("precision_at_03"),
-        "evaluation_scope": "time_sorted_row_holdout_same_snapshot_label",
+        "evaluation_scope": scope,
         "label_timing": "same_snapshot_current_24h_leaderboard",
         "label_encoding_features": ["tg_return_since_open"],
         "metrics": all_metrics,
@@ -451,9 +489,9 @@ def main():
             "top20": 0.30,
             "top50": 0.40,
         },
-        "train_samples": split_idx,
+        "train_samples": n_train,
         "val_samples": len(X_val),
-        "evaluation_scope": "time_sorted_row_holdout_same_snapshot_label",
+        "evaluation_scope": scope,
         "label_timing": "same_snapshot_current_24h_leaderboard",
         "label_encoding_features": ["tg_return_since_open"],
     }
