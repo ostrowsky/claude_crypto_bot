@@ -319,6 +319,63 @@ def _compute_metrics(y_true: np.ndarray, y_proba: np.ndarray, name: str) -> dict
     }
 
 
+def _utc_days(ts_array) -> list:
+    """`ts` is written in seconds by some snapshot paths and milliseconds by
+    others; both appear in the dataset, so normalise rather than assume."""
+    from datetime import datetime, timezone
+    out = []
+    for t in ts_array:
+        t = float(t)
+        if t > 1e11:
+            t /= 1000.0
+        out.append(datetime.fromtimestamp(t, timezone.utc).strftime("%Y-%m-%d"))
+    return out
+
+
+def _apply_immutable_labels(X, labels):
+    """Replace the snapshot tier labels with immutable later-EOD ones.
+
+    Returns `(X, labels, stats)` unchanged when the flag is off, so the default
+    path is byte-identical to before. `stats` is `None` in that case, and the
+    caller reports the leaky provenance — an artifact that names the wrong
+    label source is worse than one that admits the label is leaky.
+    """
+    try:
+        import config as _cfg
+        enabled = bool(getattr(_cfg, "TRAIN_IMMUTABLE_LABELS_ENABLED", False))
+        floor = float(getattr(_cfg, "TRAIN_IMMUTABLE_LABEL_MIN_PCT", 5.0))
+    except Exception:
+        return X, labels, None
+    if not enabled:
+        return X, labels, None
+
+    import immutable_labels as IL
+    tiers = (5, 10, 20, 50)
+    keep, new_labels, stats = IL.tier_labels(
+        _utc_days(labels["ts"]), labels["symbol"], tiers=tiers, floor=floor)
+    if not keep:
+        return X, {}, stats
+
+    idx = np.asarray(keep, dtype=int)
+    out = {f"top{n}": np.asarray(new_labels[f"top{n}"], dtype=float)
+           for n in tiers}
+    out["return"] = labels["return"][idx]
+    out["ts"] = labels["ts"][idx]
+    out["symbol"] = [labels["symbol"][i] for i in keep]
+    log.info("immutable labels: %d/%d rows kept, base rates %s",
+             stats["n_labelled"], stats["n_rows_in"],
+             {k: round(v, 4) for k, v in stats["base_rate"].items()})
+    return X[idx], out, stats
+
+
+def _evaluation_scope(day_grouped: bool, label_stats) -> str:
+    """Name both defects independently. Fixing the split does not fix the label,
+    and a scope string that implies it did would let one hide behind the other."""
+    split = "day_grouped" if day_grouped else "time_sorted_row"
+    label = "immutable_later_eod_label" if label_stats else "same_snapshot_label"
+    return f"{split}_holdout_{label}"
+
+
 def train_and_save(
     min_samples: int = 100,
     val_ratio: float = 0.2,
@@ -343,6 +400,14 @@ def train_and_save(
     for key in ["top5", "top10", "top20", "top50", "return", "ts"]:
         labels[key] = labels[key][sort_idx]
     labels["symbol"] = [labels["symbol"][i] for i in sort_idx]
+
+    # TH-03: the dataset's own tier labels come from the same rolling-24h
+    # snapshot that produced the features, so `tg_return_since_open` is an input
+    # AND very nearly the answer. Relabelling from the immutable store drops
+    # rows it cannot label rather than calling them negatives.
+    X, labels, label_stats = _apply_immutable_labels(X, labels)
+    if not labels:
+        return {"status": "error", "error": "immutable relabelling left no rows"}
 
     # TH-04: cutting by row index lands the boundary INSIDE a UTC day, so part
     # of a day trains the model and the rest validates it. The tier labels are
@@ -378,8 +443,10 @@ def train_and_save(
         X_train, X_val = X[train_idx], X[val_idx]
         n_train, n_val = len(train_idx), len(val_idx)
 
-    scope = ("day_grouped_holdout_same_snapshot_label" if day_grouped
-             else "time_sorted_row_holdout_same_snapshot_label")
+    scope = _evaluation_scope(day_grouped, label_stats)
+    _timing = ("immutable_later_eod_close" if label_stats
+               else "same_snapshot_current_24h_leaderboard")
+    _encoding = [] if label_stats else ["tg_return_since_open"]
 
     models = {}
     all_metrics = {}
@@ -405,8 +472,10 @@ def train_and_save(
         "train_samples": n_train,
         "val_samples": len(X_val),
         "evaluation_scope": scope,
-        "label_timing": "same_snapshot_current_24h_leaderboard",
-        "label_encoding_features": ["tg_return_since_open"],
+        "label_timing": _timing,
+        "label_encoding_features": _encoding,
+        "label_base_rate": (label_stats or {}).get("base_rate"),
+        "n_records_labelled": (label_stats or {}).get("n_labelled"),
     }
 
     output_path.write_text(json.dumps(combined, indent=2, default=str))
@@ -422,8 +491,13 @@ def train_and_save(
         "recall_at_03_top20": m20.get("recall_at_03"),
         "precision_at_03_top20": m20.get("precision_at_03"),
         "evaluation_scope": scope,
-        "label_timing": "same_snapshot_current_24h_leaderboard",
-        "label_encoding_features": ["tg_return_since_open"],
+        "label_timing": _timing,
+        "label_encoding_features": _encoding,
+        # TH-01: the base rate travels with every ratio above it, because the
+        # two label sets do not share one and AUC alone would not show that.
+        "label_base_rate": (label_stats or {}).get("base_rate"),
+        "n_records_labelled": (label_stats or {}).get("n_labelled"),
+        "label_dropped_unlabelled": (label_stats or {}).get("dropped_unlabelled"),
         "metrics": all_metrics,
     }
 
@@ -443,68 +517,30 @@ def main():
         log.error("Run: python backfill_top_gainer_dataset.py --daily")
         return
 
-    X, labels = load_dataset(DATASET_FILE, min_samples=args.min_samples)
-    if len(X) == 0:
+    # Delegate to train_and_save rather than keeping a second copy of the
+    # pipeline. The duplicate had drifted: it referenced `n_train` and `scope`,
+    # which were never defined here, so this CLI path raised NameError before
+    # writing anything — and it was where the leaky `label_timing` string
+    # survived the relabelling. One path cannot disagree with itself.
+    res = train_and_save(min_samples=args.min_samples,
+                         val_ratio=args.val_ratio, output=args.output)
+    if res.get("status") != "ok":
+        log.error("training failed: %s", res.get("error"))
         return
 
-    # Walk-forward split (time-based, NOT random)
-    timestamps = labels["ts"]
-    sort_idx = np.argsort(timestamps)
-    X = X[sort_idx]
-    for key in ["top5", "top10", "top20", "top50", "return", "ts"]:
-        labels[key] = labels[key][sort_idx]
-    labels["symbol"] = [labels["symbol"][i] for i in sort_idx]
-
-    split_idx = int(len(X) * (1 - args.val_ratio))
-    X_train, X_val = X[:split_idx], X[split_idx:]
-
-    log.info("Dataset: %d total, %d train, %d val", len(X), len(X_train), len(X_val))
-
-    # Train per-tier models
-    models = {}
-    all_metrics = {}
-
-    for tier in ["top5", "top10", "top20", "top50"]:
-        y_train = labels[tier][:split_idx]
-        y_val = labels[tier][split_idx:]
-
-        log.info("\nTraining %s classifier (pos_rate=%.1f%%)...",
-                 tier, y_train.mean() * 100)
-
-        model_payload, metrics = train_gradient_boosting(
-            X_train, y_train, X_val, y_val, tier,
-        )
-        models[tier] = model_payload
-        all_metrics[tier] = metrics
-
-    # Combine into single model file
-    combined = {
-        "model_type": models["top20"].get("model_type", "stump_ensemble"),
-        "feature_names": list(FEATURE_NAMES),
-        "tier_models": models,
-        "metrics": all_metrics,
-        "thresholds": {
-            "top5": 0.15,
-            "top10": 0.20,
-            "top20": 0.30,
-            "top50": 0.40,
-        },
-        "train_samples": n_train,
-        "val_samples": len(X_val),
-        "evaluation_scope": scope,
-        "label_timing": "same_snapshot_current_24h_leaderboard",
-        "label_encoding_features": ["tg_return_since_open"],
-    }
-
-    Path(args.output).write_text(json.dumps(combined, indent=2, default=str))
-    log.info("\nModel saved to %s", args.output)
-
-    # Summary
-    log.info("\n=== TRAINING SUMMARY ===")
-    for tier, m in all_metrics.items():
-        log.info("  %s: AUC=%.3f | P@0.3=%.3f R@0.3=%.3f | P@0.5=%.3f R@0.5=%.3f | pos_rate=%.1f%%",
+    log.info("=== TRAINING SUMMARY ===")
+    log.info("  scope=%s  labels=%s", res.get("evaluation_scope"),
+             res.get("label_timing"))
+    if res.get("n_records_labelled") is not None:
+        log.info("  rows labelled=%s (dropped unlabelled=%s)",
+                 res["n_records_labelled"], res.get("label_dropped_unlabelled"))
+    base = res.get("label_base_rate") or {}
+    for tier, m in (res.get("metrics") or {}).items():
+        # TH-01: the base rate sits beside the ratio, never on its own line.
+        br = base.get(tier, m.get("positive_rate", 0.0))
+        log.info("  %s: AUC=%.3f | P@0.3=%.3f R@0.3=%.3f | base=%.2f%%",
                  tier, m["auc"], m["precision_at_03"], m["recall_at_03"],
-                 m["precision_at_05"], m["recall_at_05"], m["positive_rate"] * 100)
+                 br * 100)
 
 
 if __name__ == "__main__":

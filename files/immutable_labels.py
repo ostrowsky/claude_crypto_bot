@@ -90,6 +90,69 @@ def label_for(symbol: str, utc_day: str, *, top_n: int = DEFAULT_TOP_N,
     return 1 if key in known else 0
 
 
+def tier_labels(days: list, symbols: list, *, tiers=(5, 10, 20, 50),
+                floor: float = 5.0, store: LabelStore | None = None,
+                min_universe: int | None = None) -> tuple[list, dict, dict]:
+    """Immutable tier labels for training rows.
+
+    Returns `(keep, labels, stats)` where `keep` is the indices of rows the
+    store can label, and `labels["topN"]` is aligned to `keep` (not to the input
+    rows). A row the store does not know is **dropped**: labelling it 0 would
+    teach the model that every symbol outside the store failed to move.
+
+    A positive is rank ≤ N by EOD return within the day's store universe **AND**
+    a return of at least `floor`. The floor is load-bearing: a pure rank mints
+    exactly N winners a day whatever the market does, which fixes the base rate
+    by construction and carries no information about whether the day was worth
+    trading. The entry bandit already paid for that — rank-only scored lift
+    1.02×, and only the return floor took it to 4.07×.
+    """
+    store = store or LabelStore()
+    records = [r for r in store.records() if r.get("complete")]
+    per_day = _by_day(records)
+    known = {(r["utc_day"], r["symbol"]) for r in records}
+
+    if min_universe is None:
+        widest = max((len(v) for v in per_day.values()), default=0)
+        min_universe = int(widest * WELL_COVERED_FRACTION)
+
+    # (day -> set of winning symbols) per tier, computed once per day.
+    winners: dict[int, set] = {n: set() for n in tiers}
+    for day, rows in per_day.items():
+        if len(rows) < min_universe:
+            continue                       # thin day: no positives, see TH-05
+        ranked = sorted(rows, key=lambda r: -float(r["eod_return_pct"]))
+        for n in tiers:
+            for rec in ranked[:n]:
+                if float(rec["eod_return_pct"]) >= floor:
+                    winners[n].add((day, rec["symbol"]))
+
+    keep: list[int] = []
+    labels: dict[str, list] = {f"top{n}": [] for n in tiers}
+    for i, (day, sym) in enumerate(zip(days, symbols)):
+        if (day, sym) not in known:
+            continue
+        keep.append(i)
+        for n in tiers:
+            labels[f"top{n}"].append(1.0 if (day, sym) in winners[n] else 0.0)
+
+    n_lab = len(keep)
+    stats = {
+        "label_provenance": "immutable_later_eod_klines",
+        "label_timing": "immutable_later_eod_close",
+        "floor_pct": floor,
+        "n_rows_in": len(days),
+        "n_labelled": n_lab,
+        "dropped_unlabelled": len(days) - n_lab,
+        # TH-01: a positives count is unreadable without the base rate it sits on.
+        "base_rate": {k: (sum(v) / n_lab if n_lab else 0.0)
+                      for k, v in labels.items()},
+        "store_universe_note": "watchlist-scoped: tiers are top-N WITHIN the "
+                               "watchlist, not top-N on the exchange",
+    }
+    return keep, labels, stats
+
+
 def summary(*, top_n: int = DEFAULT_TOP_N,
             watchlist: set[str] | None = None) -> dict[str, Any]:
     winners, eod = winners_by_day(top_n=top_n, watchlist=watchlist)

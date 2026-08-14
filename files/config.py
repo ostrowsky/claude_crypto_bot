@@ -89,6 +89,11 @@ TRAIN_SPLIT_EMBARGO_DAYS: int = 1
 # hard veto, so relabelling it changes live gating indirectly.
 NS_IMMUTABLE_LABELS_ENABLED: bool = True
 TRAIN_IMMUTABLE_LABELS_ENABLED: bool = False
+# The floor is load-bearing, not a tuning knob: a pure rank mints exactly N
+# winners a day whatever the market does, so the base rate is fixed by
+# construction. Measured here: no floor puts top50 at a 52.6% base rate.
+# +5% is the project's existing MoveEvent qualification threshold.
+TRAIN_IMMUTABLE_LABEL_MIN_PCT: float = 5.0
 
 ML_CANDIDATE_RANKER_RUNTIME_ENABLED: bool = True
 ML_CANDIDATE_RANKER_MODEL_FILE: str = "ml_candidate_ranker.json"

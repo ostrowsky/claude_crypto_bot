@@ -322,6 +322,22 @@ Implementation order: label → train → backtest (60d) → wire guard. Do NOT 
 ### Top Gainer Model (CatBoost)
 Tier classifiers: top5 / top10 / top20 / top50. Retrained daily via `daily_learning.py`. Metrics: AUC, recall@0.3.
 
+**The reported AUC of ~0.99 is leakage, not skill.** The tier labels are written
+from the same rolling-24h snapshot that produces the features, so
+`tg_return_since_open` is an input and very nearly the answer (TH-03). Trained on
+immutable later-EOD labels instead, the same features score **0.83** — that is
+the honest level (`files/_backtest_immutable_training_labels.py`, 120 088 rows).
+
+The immutable path is shipped behind `TRAIN_IMMUTABLE_LABELS_ENABLED` (**False**)
+with `TRAIN_IMMUTABLE_LABEL_MIN_PCT = 5.0`. **Do not flip it without first
+deciding what happens to the tiers:** the label store holds only watchlist
+symbols, so tiers become top-N *within the watchlist*, and under the +5% floor
+`top20` and `top50` are byte-identical on the holdout (top10 differs on 0.05% of
+rows). `top_gainer_model.py`'s tier ladder uses fixed thresholds
+(0.3/0.3/0.35/0.4) calibrated for base rates 1.49/3.15/6.31/15.34%; four
+identical heads at ~3% would mis-calibrate every rung at once. Options and
+evidence: `docs/specs/features/top-gainer-immutable-training-labels-spec.md`.
+
 ### Learning progress (rebased 2026-08-13)
 
 Everything before this date was measured against `label_top20` and is **not

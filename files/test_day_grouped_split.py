@@ -106,9 +106,19 @@ class TestTrainerWiring(unittest.TestCase):
 
     def test_scope_string_still_names_the_label_defect(self):
         # Fixing the split does not fix the same-snapshot label. The scope must
-        # not imply it did.
-        src = (HERE / "train_top_gainer.py").read_text(encoding="utf-8")
-        self.assertIn("day_grouped_holdout_same_snapshot_label", src)
+        # not imply it did. Checked through the function rather than as a source
+        # literal: the string is now composed from the two flags independently,
+        # and asserting on a literal would have tested the spelling, not the
+        # property.
+        import train_top_gainer as TT
+        self.assertEqual(TT._evaluation_scope(True, None),
+                         "day_grouped_holdout_same_snapshot_label")
+        self.assertEqual(TT._evaluation_scope(False, None),
+                         "time_sorted_row_holdout_same_snapshot_label")
+        # …and once the labels are immutable, the scope stops claiming they are
+        # not — each defect is named by its own flag.
+        self.assertEqual(TT._evaluation_scope(True, {"n_labelled": 1}),
+                         "day_grouped_holdout_immutable_later_eod_label")
 
 
 if __name__ == "__main__":
