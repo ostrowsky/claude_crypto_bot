@@ -1,6 +1,7 @@
 # Specs index
 
 Spec-first workflow. См. [`../../AGENTS.md`](../../AGENTS.md) для процесса.
+Обзор всей системы — [`../ARCHITECTURE.md`](../ARCHITECTURE.md).
 
 ## Templates
 

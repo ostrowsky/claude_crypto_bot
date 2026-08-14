@@ -2,6 +2,7 @@
 
 Auto-injected into Claude Code's system prompt. Read first, trust it, don't re-discover.
 **Companion:** `PROJECT_CONTEXT.md` — the long-form project dossier. Keep both in sync: when architecture, filters, schedules, or known issues change, update BOTH files.
+**Map:** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — one page covering all four planes, what is built vs designed vs broken, and the spec index.
 
 ---
 
