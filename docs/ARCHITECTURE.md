@@ -1,6 +1,6 @@
 # claude_crypto_bot — architecture
 
-- **Updated:** 2026-08-14
+- **Updated:** 2026-08-14 · `as_of 2026-08-14T10:02Z` @ `09bc633`
 - **Companions:** [`CLAUDE.md`](../CLAUDE.md) (working brief),
   [`PROJECT_CONTEXT.md`](../PROJECT_CONTEXT.md) (dossier),
   [`docs/specs/README.md`](specs/README.md) (per-feature specs)
@@ -36,12 +36,14 @@ time_lead)` over winner-days in `watchlist ∩ top-20`; goal 0.40, floor 0.25.
 
 ## 2. Status at a glance
 
-> **Evidence provenance.** Everything below is `as_of 2026-08-14T09:12Z`,
-> commit `419c8b7`, measured against the runtime root
-> `D:\Projects\claude_crypto_bot`. These counts move: a harness run inside a
-> git worktree sees different runtime artifacts and reports different numbers,
-> and freshness findings appear and clear on their own. A "current status"
-> without `as_of`, commit and root is not a status.
+> **Evidence provenance.** Everything below is `as_of 2026-08-14T10:02Z`,
+> commit `09bc633`, measured against the runtime root
+> `D:\Projects\claude_crypto_bot`. These counts move, and this document has
+> now watched them move: at 09:12Z the harness reported **7** blocking
+> findings, at 10:02Z it reports **6** — the seventh was a stale ranker
+> artifact that cleared when the RL worker retrained. A harness run inside a git
+> worktree sees different runtime artifacts again. A "current status" without
+> `as_of`, commit and root is not a status.
 
 | Plane | State |
 |---|---|
@@ -49,7 +51,7 @@ time_lead)` over winner-days in `watchlist ∩ top-20`; goal 0.40, floor 0.25.
 | Learning (bandit, models, nightly cycle) | **operational**, training label rebuilt 2026-08-13 |
 | Evidence & observability | **mostly new**, shipped 2026-08-13/14 |
 | Improvement loop (hypotheses → validation → promotion) | **dead**; redesigned, not built |
-| Measurement integrity | **7 blocking harness findings** (one transient); NS provisional |
+| Measurement integrity | **6 blocking harness findings**; NS provisional |
 | Dataset write path | **broken** — whole-file rewrite fails while the bot runs |
 
 ---
@@ -245,6 +247,8 @@ labels to 99.9–100%. Fixing this is the open half of roadmap item G1.
 | `truth_harness.py` | TH-01…TH-12, full and staged-change profiles, pre-commit hook |
 | `run_test_suite.py` | regression gate — fails only on NEW failures against a recorded baseline |
 | `restart_full_stack.bat` | tests → stop → start → **verify**, non-zero exit if a worker did not come up |
+| `_NEVER_OVERRIDABLE` + WARNING on override | which constants a file on disk is changing away from `config.py`, on every start |
+| `_verify_event_store_parity.py` | that the SQLite mirror answers identically to the journal |
 
 Two of these exist because of specific silent failures: a backfill lock held
 **58 days** (11 908 rows unlabelled, nothing in any report), and a restart that
@@ -254,8 +258,8 @@ reported success while `bot.py` never started.
 
 ## 7. Measurement, and why it is not yet trustworthy
 
-`truth_harness full`, `as_of 2026-08-14T09:12Z` @ `419c8b7`:
-**7 blocking findings, 1 warning.**
+`truth_harness full`, `as_of 2026-08-14T10:02Z` @ `09bc633`:
+**6 blocking findings, 1 warning.**
 
 | Finding | What it means |
 |---|---|
@@ -263,12 +267,12 @@ reported success while `bot.py` never started.
 | TH-04 | model validation can split one UTC day across train and holdout |
 | TH-11 ×2 | no canonical portfolio alpha, no canonical ZigZag EX1 |
 | TH-10 | gate evidence 77 days old against a 30-day budget |
-| TH-05 | `ml_candidate_ranker` stale at 6.7h against a 6h limit |
 | TH-08 (warn) | 47 legacy backtests with no durable verdict |
 
-The TH-05 finding is **transient by design** — it clears when the RL worker
-retrains — which is exactly why a count without a timestamp is not a fact. An
-earlier draft of this document said "6 blocking" without one.
+A seventh finding, `TH-05` on a stale `ml_candidate_ranker`, was present at
+09:12Z and gone by 10:02Z when the RL worker retrained. It is **transient by
+design**, and watching it appear and clear inside one morning is the clearest
+argument for why a count without a timestamp is not a fact.
 
 **A globally green harness is not a reachable gate for this product.** TH-11
 demands canonical portfolio alpha; this bot has no position sizing. Requiring
@@ -313,15 +317,42 @@ pipeline since 2026-06-17**. Every change since came from manual analysis.
 
 The replacement is designed in
 [`continuous-improvement-agent-spec.md`](specs/features/continuous-improvement-agent-spec.md)
-(v2). Its shape: an LLM proposes, deterministic code disposes; four separate
-stores so no agent can reach the execution channel; a validation service with a
-sealed holdout, purge/embargo and placebo runs; judges that are advisory only;
-and a promotion path of shadow twin → time-switchback canary → flagged live with
+(**v2.1**, after three rounds of external review). Its shape: an LLM proposes,
+deterministic code disposes; four separate stores so no agent can reach the
+execution channel; a validation service with rolling-origin cross-fitting,
+one-use forward cohorts and placebo runs; judges that are advisory only; and a
+promotion path of shadow twin → time-switchback canary → flagged live with
 permanent operator approval.
 
+Three properties of v2.1 are load-bearing enough to belong in the map:
+
+**It starts with a walking skeleton, not a platform.** Phase −1 builds one
+seeded non-trading hypothesis over a synthetic fixture and requires that a
+single command carry it from `OBSERVED` to a verified terminal result in under
+ten minutes — and that a deliberately malformed result land in `INVALID_RESULT`
+rather than at the governor. No registry or label work starts until the pipe is
+proven to conduct an experiment. This exists because the previous loop failed at
+exactly that point and nobody noticed for two months.
+
+**It names the programme's clock.** ≤1 primary validation admission per week,
+2–4 weeks of forward maturity per hypothesis version, **≤12 decision-grade
+forward versions per year**, ≤3 waiting simultaneously. At that capacity the
+weekly report must never imply weekly self-improvement, and throughput — not
+hypothesis quality — is the binding constraint. `UNDERPOWERED` is the expected
+outcome, so the spec carries a power-expansion track with seven pre-declared
+moves chosen from the pre-result power report, plus `ACCEPTED_UNKNOWN` when none
+of them preserves the causal question.
+
+**It can fail on outcome, not only on structure.** Within 30 days of Phase 1
+completing, one real hypothesis must reach a terminal validator result;
+otherwise the implementation is a liveness failure *even if every structural
+test passes*, and the mandated response is to simplify or return to manual
+research.
+
 **Phase 0 is repairing measurement, not launching agents** — immutable
-later-EOD labels, day-grouped splits, provenance fields, until the harness is
-green.
+later-EOD labels, day-grouped splits, provenance fields — and its exit gate is
+zero blocking findings **in the product-scoped profiles**, not a globally green
+harness, which TH-11 makes unreachable for a product with no position sizing.
 
 ---
 
@@ -409,22 +440,38 @@ their `config.py` values — `ENTRY_SCORE_MIN_15M` back to 40.0 and the
 high-momentum bypass back to off — which is a live gating change and therefore
 the operator's call, not a silent one.
 
-Hardened in the meantime, without changing live behaviour: the switch itself,
-the watchlist and the token are now in `_NEVER_OVERRIDABLE`, because a kill
-switch reachable by the thing it kills is not a kill switch; and an active
-override now logs at WARNING naming each constant and the value `config.py`
-actually declares.
+**Hardened 2026-08-14, without changing live behaviour:**
+
+- `AUTO_APPLY_OVERRIDES_ENABLED`, `DEFAULT_WATCHLIST` and the bot token are in
+  `_NEVER_OVERRIDABLE` — a kill switch reachable by the thing it kills is not a
+  kill switch. Refusals are recorded in the audit snapshot.
+- An active override logs at **WARNING** on every start, naming each constant
+  and the value `config.py` actually declares:
+
+  ```
+  WARNING runtime config overrides ACTIVE (source: decisions.jsonl):
+    ENTRY_SCORE_MIN_15M=35.0 (config.py says 40.0),
+    IMPULSE_SPEED_15M_HIGH_MOMENTUM_BYPASS_ENABLED=True (config.py says False)
+    — disable with AUTO_APPLY_OVERRIDES_ENABLED=False
+  ```
+
+- Seven focused tests (`test_config_runtime_overrides.py`) pin both, including
+  that the message names the real switch rather than a neighbouring flag.
+
+**Still open:** the channel exists. Hardening makes it visible and harder to
+subvert; it does not separate memory from execution. That is the four-store
+split, and until it lands the LLM plane is `NO-GO`.
 
 ### 11.1 Ranked
 
 | # | Defect | Consequence |
 |---|---|---|
-| 0 | **Executable decision memory** (above) | research path reaches live gating |
+| 0 | **Executable decision memory** (above) — hardened, not separated | research path reaches live gating |
 | 1 | Whole-file dataset rewrites | label backfill needs a stopped bot; failure leaves GB of orphans |
 | 2 | North Star labels are same-snapshot | the objective partly measures itself; unfit for weekly steering |
 | 3 | Improvement loop dead | every change is manual; no compounding |
 | 4 | Bandit semantics overstated (§4.1) | `4.07×` read as online-policy quality when it is proxy-label holdout lift |
-| 5 | Test suite red at baseline | 40 of ~790 failing; new breakage is caught, old debt persists |
+| 5 | Test suite red at baseline | 40 of 794 failing; new breakage is caught, old debt persists |
 | 6 | Model validation splits by row index | one UTC day can straddle the split |
 | 7 | No profitability evidence | TH-11 open; a product waiver is needed, not silence |
 | 8 | Event store covers one journal only | `top_gainer/critic/ml` datasets have no integrity layer |
@@ -433,7 +480,31 @@ actually declares.
 
 ---
 
-## 12. Map — spec to component
+## 12. What changed, and why it is written down
+
+This map has been corrected three times in two days, each time by an external
+review checking it against the code rather than against itself. The corrections
+are listed because the pattern matters more than any single fix: **every one of
+them was a place where the document read better than the system behaved.**
+
+| Corrected | Was | Now |
+|---|---|---|
+| Executable decision memory | listed among *invariants* | defect #0, with live evidence and a real switch |
+| Interim mitigation | `PIPELINE_AUTO_APPLY=0` | wrong flag — it only stops the restart; the real one is `AUTO_APPLY_OVERRIDES_ENABLED` |
+| The bandit | "the online decision", lift 4.07× | full-information cost-sensitive policy; 4.07× is proxy-label holdout lift |
+| Status counts | bare numbers | `as_of` + commit + runtime root, after two runs disagreed |
+| Canary | symbol subset | shadow twin, then time-switchback — the subset shares slots, caps and budget |
+| `MoveEvent` | midpoint = half the amplitude | fixed +2.5% deadline on a strict UTC day; the old form put the deadline before the anchor |
+| Improvement rollout | started with registries | starts with a walking skeleton and a negative test |
+
+Three of these were defects I had demanded another design fix and had not fixed
+here. That asymmetry — sharp about someone else's missing gate, blind to the
+same gate missing in your own — is the most reusable finding of the whole
+exercise, and it is why this section exists rather than a silent edit.
+
+---
+
+## 13. Map — spec to component
 
 | Area | Spec |
 |---|---|
