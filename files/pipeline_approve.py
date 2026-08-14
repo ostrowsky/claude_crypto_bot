@@ -609,41 +609,40 @@ def cmd_approve(hyp_path: Path, non_interactive: bool, force: bool, reason: str 
 
 
 def _maybe_auto_restart(hyp: dict, to_val) -> bool:
-    """Auto-apply path: trigger restart_bot.bat so the override takes effect.
-    Returns True if auto-apply was attempted (success or printed instructions).
-    Stays opt-out-safe via PIPELINE_AUTO_APPLY env var."""
-    import os, subprocess, sys
-    if os.environ.get("PIPELINE_AUTO_APPLY", "1") == "0":
-        print("[auto-apply] disabled via PIPELINE_AUTO_APPLY=0 — manual steps follow")
-        return False
+    """The auto-apply path is severed. Say so loudly instead of pretending.
+
+    This used to append an approved record and spawn `restart_bot.bat`, relying
+    on `_config_runtime_overrides` reading `decisions.jsonl` at import time.
+    That shared file was research memory *and* an execution channel — anything
+    able to append an approved record could change live gating, and an LLM had
+    already written to it. The four-store split removed the read
+    (docs/specs/features/four-store-split-spec.md).
+
+    So a restart here would now change nothing, and printing "the bot will load
+    the new override" would be false. A silent no-op with a confident message is
+    worse than an error, so this refuses and prints the real path forward.
+    """
     rk = resolve_config_keys(hyp)
     keys = rk.get("keys") or []
-    print("\n" + "=" * 70)
-    print("AUTO-APPLY (RM-4 runtime override + restart)")
+    print(chr(10) + "=" * 70)
+    print("AUTO-APPLY IS DISABLED BY ARCHITECTURE (four-store split)")
     print("=" * 70)
-    print(f"  override: {', '.join(keys)} -> {to_val}")
-    print(f"  source  : .runtime/pipeline/decisions/decisions.jsonl")
-    print(f"  audit   : .runtime/config_overrides_applied.json")
-    bat = PL.REPO_ROOT / "restart_bot.bat"
-    if not bat.exists():
-        print(f"[auto-apply] restart_bot.bat missing at {bat} — manual restart needed")
-        return False
-    print(f"  restart : spawning {bat.name} (detached)")
-    try:
-        # Detach so this approve command returns immediately
-        flags = 0x00000008  # DETACHED_PROCESS on Windows
-        subprocess.Popen(
-            ["cmd", "/c", "start", "", "/min", str(bat), "--run"],
-            cwd=str(PL.REPO_ROOT),
-            creationflags=flags if sys.platform == "win32" else 0,
-            close_fds=True,
-        )
-        print("[auto-apply] restart launched — bot will load the new override")
-    except OSError as e:
-        print(f"[auto-apply] restart spawn failed: {e} — run restart_bot.bat manually")
-        return False
+    print(f"  requested: {', '.join(keys) or '(no resolved key)'} -> {to_val}")
+    print("  A decision record no longer changes live gating. config.py reads")
+    print("  only .runtime/release/runtime_overrides.json, which is written")
+    print("  exclusively by release_overrides.py from a SIGNED approval.")
+    print()
+    print("  To apply this deliberately:")
+    print("    1. create the operator key once, outside git:")
+    print("       .runtime/release/operator.key")
+    print("    2. append a signed approval for the key/value above")
+    print(r"    3. pyembed\python.exe files\release_overrides.py --apply")
+    print("    4. restart the bot (restart_full_stack.bat)")
+    print()
+    print("  Status of what is in force:")
+    print(r"    pyembed\python.exe files\release_overrides.py --status")
     print("=" * 70)
-    return True
+    return False
 
 
 def cmd_reject(hyp_path: Path, reason: str) -> None:

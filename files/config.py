@@ -960,7 +960,7 @@ PORTFOLIO_REPLACE_POSITION_FINAL_MAX: float = 0.00
 PORTFOLIO_REPLACE_POSITION_TOP_GAINER_MAX: float = 0.20
 WEAK_REENTRY_COOLDOWN_BARS: int = 24  # was 8 — увеличено чтобы пресечь flip-flop после WEAK
 ENTRY_SCORE_MIN_ENABLED: bool = True
-ENTRY_SCORE_MIN_15M: float = 40.0  # DEFAULT — active runtime override may bring this to 35.0 (see decisions.jsonl + .runtime/config_overrides_applied.json). Was 45.0 -> 40.0 in 2026-04-18 Pareto sweep.
+ENTRY_SCORE_MIN_15M: float = 40.0  # DEFAULT — an active runtime override may bring this to 35.0 (see .runtime/release/runtime_overrides.json + .runtime/config_overrides_applied.json). Was 45.0 -> 40.0 in 2026-04-18 Pareto sweep.
 ENTRY_SCORE_MIN_1H: float = 56.0
 ENTRY_SCORE_BORDERLINE_BYPASS_ENABLED: bool = True
 ENTRY_SCORE_BORDERLINE_ALLOW_1H: bool = False
@@ -1402,10 +1402,12 @@ FAST_REVERSAL_GUARD_ENABLED: bool = False  # master switch — keep False until 
 FAST_REVERSAL_PROBA_MAX: float = 0.55      # block if proba_fast_reversal > this
 FAST_REVERSAL_SHADOW: bool = True          # log proba but never block (telemetry)
 
-# ── RM-4: Auto-apply approved decisions via runtime override ────────────────
-# Everything above is the DEFAULT. Active approved decisions in
-# decisions.jsonl override the relevant constants in-memory at import time,
-# so `pipeline_approve.py` no longer needs the operator to hand-edit config.
+# ── Runtime overrides from the release store ────────────────────────────────
+# Everything above is the DEFAULT. Entries in
+# .runtime/release/runtime_overrides.json override the relevant constants
+# in-memory at import time. That store is written ONLY by release_overrides.py,
+# from signed approvals or explicitly-labelled legacy entries — research memory
+# is never read here (docs/specs/features/four-store-split-spec.md).
 # Failure here NEVER blocks startup — falls back to defaults silently.
 # Audit trail: .runtime/config_overrides_applied.json
 AUTO_APPLY_OVERRIDES_ENABLED: bool = True

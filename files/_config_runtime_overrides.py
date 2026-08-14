@@ -1,19 +1,18 @@
-"""Runtime config overrides — RM-4 auto-apply.
+"""Runtime config overrides — applier for the release store.
 
-Reads `.runtime/pipeline/decisions/decisions.jsonl` and applies APPROVED
-decisions that target real config.py constants. Skips:
-  - decisions superseded by a later deferred/rolled_back record
-    (same logic as pipeline_attribution sticky defer)
-  - non-concrete diffs ("current", "+10% looser", strings) — only literal
-    numeric/bool diff.to values are auto-applied. Directive diffs require
-    operator-supplied concrete values; surface them in the log.
+Reads **only** `.runtime/release/runtime_overrides.json`, which
+`release_overrides.py` writes from signed approvals (or explicitly-labelled
+legacy entries). It no longer reads `decisions.jsonl`.
 
-Called at the END of files/config.py so every `import config` in the bot
-sees the active overrides. Failure here never blocks startup — log and
-continue with defaults.
+That change is the point. The decisions log was research memory *and* an
+execution channel: appending an approved record changed live gating at the next
+`import config`, and the newest approved record in it had been written by an
+LLM. Severing the read is what makes research memory inert
+(docs/specs/features/four-store-split-spec.md).
 
-Snapshot of applied overrides written to .runtime/config_overrides_applied.json
-for transparency and post-mortem.
+Called at the END of files/config.py so every `import config` sees the active
+overrides. Failure never blocks startup — log and continue with defaults.
+Snapshot written to .runtime/config_overrides_applied.json for post-mortem.
 """
 
 from __future__ import annotations
@@ -26,80 +25,41 @@ from typing import Any
 
 LOG = logging.getLogger("config_runtime_overrides")
 _ROOT = Path(__file__).resolve().parent.parent
-DECISIONS_LOG = _ROOT / ".runtime" / "pipeline" / "decisions" / "decisions.jsonl"
+# The ONLY file this module reads. It is written exclusively by
+# release_overrides.py from signed approvals (or explicitly-labelled legacy
+# entries). Research memory -- decisions.jsonl, the research ledger -- is never
+# consulted here: that shared file was the confused-deputy path this split
+# exists to sever (docs/specs/features/four-store-split-spec.md).
+OVERRIDE_STORE = _ROOT / ".runtime" / "release" / "runtime_overrides.json"
 APPLIED_SNAPSHOT = _ROOT / ".runtime" / "config_overrides_applied.json"
 
 
-def _iter_jsonl(path: Path):
-    if not path.exists():
-        return
-    try:
-        with path.open(encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    yield json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-    except OSError:
-        return
-
-
-def _superseded_hyps() -> set[str]:
-    """Hypothesis-ids and decision-ids superseded by a later defer/rollback.
-    Same sticky logic as pipeline_attribution.attribute()."""
-    s: set[str] = set()
-    for r in _iter_jsonl(DECISIONS_LOG):
-        if r.get("stage") in ("deferred", "rolled_back"):
-            hid = r.get("hypothesis_id")
-            if hid:
-                s.add(hid)
-            tgt = r.get("defers") or r.get("rolling_back")
-            if tgt:
-                s.add(tgt)
-    return s
-
-
-def _is_concrete(v: Any) -> bool:
-    """Auto-apply only literal values — never directive strings."""
-    if isinstance(v, bool):
-        return True
-    if isinstance(v, (int, float)):
-        return True
-    return False
-
-
 def load_active_overrides() -> dict[str, Any]:
-    """Resolve {config_key: value} from active approved decisions.
+    """Read {config_key: value} from the release store.
 
-    Last-writer-wins per config_key (the most recent active approve for a
-    given key takes effect; older approves of the same key are shadowed)."""
-    superseded = _superseded_hyps()
-    overrides: dict[str, Any] = {}
-    skipped: list[dict] = []
-    for r in _iter_jsonl(DECISIONS_LOG):
-        if r.get("stage") != "approved":
+    No superseding logic lives here any more: the release tool resolved that
+    when it materialised the store, so this module has exactly one job and one
+    input. Failure is silent-and-empty by design -- a missing or unreadable
+    store must never block bot startup, it just means "no overrides".
+    """
+    if not OVERRIDE_STORE.exists():
+        return {}
+    try:
+        data = json.loads(OVERRIDE_STORE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        LOG.warning("release store unreadable (%s) -- running on config.py defaults", exc)
+        return {}
+    out: dict[str, Any] = {}
+    unsigned: list[str] = []
+    for key, entry in (data.get("overrides") or {}).items():
+        if not isinstance(entry, dict):
             continue
-        if r.get("hypothesis_id") in superseded:
-            continue
-        if r.get("decision_id") in superseded:
-            continue
-        key = r.get("config_key")
-        diff = r.get("diff") or {}
-        to_val = diff.get("to")
-        if not key:
-            continue
-        if not _is_concrete(to_val):
-            skipped.append({"decision_id": r.get("decision_id"),
-                            "config_key": key, "to": to_val,
-                            "reason": "non-concrete diff (directive)"})
-            continue
-        overrides[key] = to_val  # last-writer-wins
-    if skipped:
-        overrides.setdefault("__skipped__", skipped)
-    return overrides
+        out[key] = entry.get("value")
+        if entry.get("source") == "legacy_decisions_jsonl":
+            unsigned.append(key)
+    if unsigned:
+        out["__unsigned__"] = unsigned
+    return out
 
 
 # Keys this mechanism may never set. `AUTO_APPLY_OVERRIDES_ENABLED` is the
@@ -124,6 +84,7 @@ def apply_overrides(module_globals: dict) -> dict:
         return {"error": str(e)}
 
     skipped = loaded.pop("__skipped__", [])
+    unsigned = loaded.pop("__unsigned__", [])
     applied: dict[str, dict] = {}
     not_in_config: list[str] = []
     refused: list[str] = []
@@ -145,6 +106,8 @@ def apply_overrides(module_globals: dict) -> dict:
         "skipped_non_concrete": skipped,
         "config_key_not_present": not_in_config,
         "refused_protected_key": refused,
+        "unsigned_legacy_keys": unsigned,
+        "source": str(OVERRIDE_STORE),
     }
     try:
         APPLIED_SNAPSHOT.parent.mkdir(parents=True, exist_ok=True)
@@ -161,7 +124,14 @@ def apply_overrides(module_globals: dict) -> dict:
         # constants away from what config.py reads. That is never routine.
         LOG.warning("runtime config overrides ACTIVE (source: %s): %s — "
                     "disable with AUTO_APPLY_OVERRIDES_ENABLED=False",
-                    DECISIONS_LOG.name,
+                    OVERRIDE_STORE.name,
                     ", ".join(f"{k}={v['to']} (config.py says {v['from']})"
                               for k, v in applied.items()))
+    if unsigned:
+        # Visible on every start until re-approved or lapsed: these are in force
+        # without an operator signature, carried over from the old executable
+        # decisions log so the split did not move live gating.
+        LOG.warning("%d override(s) in force UNSIGNED (legacy): %s — "
+                    "re-approve or let them lapse (release_overrides.py --status)",
+                    len(unsigned), ", ".join(sorted(unsigned)))
     return record
