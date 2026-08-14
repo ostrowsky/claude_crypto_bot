@@ -316,7 +316,7 @@ The replacement is designed in
 (v2). Its shape: an LLM proposes, deterministic code disposes; four separate
 stores so no agent can reach the execution channel; a validation service with a
 sealed holdout, purge/embargo and placebo runs; judges that are advisory only;
-and a promotion path of shadow → symbol-subset canary → flagged live with
+and a promotion path of shadow twin → time-switchback canary → flagged live with
 permanent operator approval.
 
 **Phase 0 is repairing measurement, not launching agents** — immutable
@@ -396,7 +396,24 @@ live gating and trigger a restart.*
 Until the four stores are physically separated
 ([spec §6.1](specs/features/continuous-improvement-agent-spec.md)), **no LLM
 component may hold write access to this file**, and any autonomous promotion is
-`NO-GO`. Interim mitigation available today: set `PIPELINE_AUTO_APPLY=0`.
+`NO-GO`.
+
+**Correction (2026-08-14):** an earlier version of this section named
+`PIPELINE_AUTO_APPLY=0` as the interim mitigation. That is wrong and would have
+given false comfort — it only suppresses the auto-restart in
+`pipeline_approve.py`. The override itself is applied by
+`_config_runtime_overrides.apply_overrides`, called unconditionally at the end
+of `config.py`. **The real switch is `AUTO_APPLY_OVERRIDES_ENABLED` (config.py,
+currently `True`).** Flipping it to `False` reverts the two live overrides to
+their `config.py` values — `ENTRY_SCORE_MIN_15M` back to 40.0 and the
+high-momentum bypass back to off — which is a live gating change and therefore
+the operator's call, not a silent one.
+
+Hardened in the meantime, without changing live behaviour: the switch itself,
+the watchlist and the token are now in `_NEVER_OVERRIDABLE`, because a kill
+switch reachable by the thing it kills is not a kill switch; and an active
+override now logs at WARNING naming each constant and the value `config.py`
+actually declares.
 
 ### 11.1 Ranked
 

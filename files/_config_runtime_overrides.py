@@ -102,6 +102,18 @@ def load_active_overrides() -> dict[str, Any]:
     return overrides
 
 
+# Keys this mechanism may never set. `AUTO_APPLY_OVERRIDES_ENABLED` is the
+# switch that gates this very call: a decision record targeting it could turn
+# the mechanism back on — or make the audit snapshot disagree with the value the
+# rest of the process reads. A kill switch reachable by the thing it kills is
+# not a kill switch.
+_NEVER_OVERRIDABLE = frozenset({
+    "AUTO_APPLY_OVERRIDES_ENABLED",
+    "DEFAULT_WATCHLIST",          # watchlist is immutable (CLAUDE.md §14)
+    "TELEGRAM_BOT_TOKEN",
+})
+
+
 def apply_overrides(module_globals: dict) -> dict:
     """Apply active overrides onto the given config module globals.
     Returns a record of what was applied (for transparency)."""
@@ -114,7 +126,11 @@ def apply_overrides(module_globals: dict) -> dict:
     skipped = loaded.pop("__skipped__", [])
     applied: dict[str, dict] = {}
     not_in_config: list[str] = []
+    refused: list[str] = []
     for k, v in loaded.items():
+        if k in _NEVER_OVERRIDABLE:
+            refused.append(k)
+            continue
         if k not in module_globals:
             not_in_config.append(k)
             continue
@@ -128,6 +144,7 @@ def apply_overrides(module_globals: dict) -> dict:
         "applied": applied,
         "skipped_non_concrete": skipped,
         "config_key_not_present": not_in_config,
+        "refused_protected_key": refused,
     }
     try:
         APPLIED_SNAPSHOT.parent.mkdir(parents=True, exist_ok=True)
@@ -136,8 +153,15 @@ def apply_overrides(module_globals: dict) -> dict:
     except OSError:
         pass
 
+    if refused:
+        LOG.warning("runtime override REFUSED for protected key(s): %s",
+                    ", ".join(refused))
     if applied:
-        LOG.info("runtime config overrides applied: %s",
-                 ", ".join(f"{k}={v['to']} (was {v['from']})"
-                           for k, v in applied.items()))
+        # WARNING, not INFO: a file on disk is silently changing live gating
+        # constants away from what config.py reads. That is never routine.
+        LOG.warning("runtime config overrides ACTIVE (source: %s): %s — "
+                    "disable with AUTO_APPLY_OVERRIDES_ENABLED=False",
+                    DECISIONS_LOG.name,
+                    ", ".join(f"{k}={v['to']} (config.py says {v['from']})"
+                              for k, v in applied.items()))
     return record

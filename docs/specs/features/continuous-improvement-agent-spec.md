@@ -9,6 +9,17 @@
   independent validator, and decides what happens next — without being able to
   fool itself, the operator, or the runtime.
 
+## Revision note — v2.1, and an uncomfortable pattern
+
+**A third review found that six of the defects I had demanded the competing
+design fix were absent from this one.** Walking skeleton before platform, a
+power-expansion branch, a defined `policy_epoch`, an operational contract with
+one owner and an acknowledgement SLO, migration of existing negative results,
+and outcome-based acceptance — I required all six of them elsewhere and shipped
+none of them here. That asymmetry is itself a finding: a reviewer is far better
+at seeing a missing gate than at noticing its absence in their own design.
+Corrected in §5.6, §3.7, §6.4, §7, §9 and §13.
+
 ## Revision note — what v1 got wrong
 
 Two reviews (one from a GPT-authored competing design, one a direct critique of
@@ -18,7 +29,7 @@ same failure mode as a report that quietly absorbs a bad week.
 
 | v1 claim | Why it was wrong | v2 |
 |---|---|---|
-| "The agent has no tool that writes config" **and** the Historian writes `decisions.jsonl` | Confirmed live on 2026-08-14: `_config_runtime_overrides.py` applies `diff.to` at every `import config`, `pipeline_approve._maybe_auto_restart` spawns a detached restart, and `PIPELINE_AUTO_APPLY` **defaults to on**. Two gating constants are overridden right now, and the newest approved record in the file was written by an LLM | §4.6, §6.1 — four separate stores; interim mitigation `PIPELINE_AUTO_APPLY=0` |
+| "The agent has no tool that writes config" **and** the Historian writes `decisions.jsonl` | Confirmed live on 2026-08-14: `_config_runtime_overrides.py` applies `diff.to` at every `import config`, `pipeline_approve._maybe_auto_restart` spawns a detached restart, and `PIPELINE_AUTO_APPLY` **defaults to on**. Two gating constants are overridden right now, and the newest approved record in the file was written by an LLM | §4.6, §6.1 — four separate stores. The real switch is `AUTO_APPLY_OVERRIDES_ENABLED` (config.py); `PIPELINE_AUTO_APPLY=0` only suppresses the auto-restart and was named wrongly in an earlier draft |
 | `(source_file, byte_offset, row_count)` is a content address | An offset identifies a position, not content. This repo demonstrably rewrites these files — 1.09 GB of orphaned `.tmp` from failed whole-file rewrites was cleared on 2026-08-13 | §3.1 — hash chain over prefixes; offsets keep only their real job, incremental reading |
 | "No arrow when \|Δ\| < MDE" | MDE is a design-time power parameter, not a decision rule on observed data | §13.3 — CI versus a pre-registered practical-significance threshold |
 | MDE figures (±22 pp, ±17 pp) | Computed assuming independent coin-days. Crypto moves inside a day are strongly correlated, so effective n is materially lower and **those figures are optimistic** | §13.2 — day-clustered bootstrap, numbers restated as upper bounds on power |
@@ -200,6 +211,29 @@ Retrieved content is **data, not instruction**. Numeric tables and candles never
 enter the vector index; a deterministic SQL layer aggregates them and the agent
 receives values with source id, hash, cutoff and coverage.
 
+### 3.4b `policy_epoch` — the identity of decision behaviour
+
+Used as a retrieval and comparability filter throughout this document, and left
+undefined in v2. It is the **semantic identity of production decision
+behaviour**, not the identity of every commit.
+
+A new epoch begins when a change can alter candidate eligibility, scoring,
+routing, gate order or action selection; entry/exit/re-entry behaviour;
+decision-time feature or label semantics used by a live model; active-universe
+eligibility or capacity; **or an effective runtime override that changes any of
+those** — which is why the override channel in §6.1 is an epoch-level concern,
+not a footnote.
+
+Documentation, tests, logging-only fields, performance refactors and repairs
+with demonstrated decision-trace equivalence do **not** open a new epoch; their
+code and config hashes still enter the manifest.
+
+An epoch transition does not delete prior evidence. Each earlier result becomes
+`directly_comparable`, `transportable_with_bridge` (requires a registered
+overlap analysis on the same candidate population) or `historical_only`.
+**Market regime is recorded separately** — a regime change does not rewrite
+policy identity, and vice versa.
+
 ### 3.5 ObjectiveContract — versioned, human-only
 
 The single place the goal is defined; the agent can read it and propose a change
@@ -313,6 +347,46 @@ slices · sensitivity to costs where costs apply · **placebo / negative-control
 **multiple-testing ledger** with alpha spending across all registered
 experiments.
 
+### 5.2b Power expansion — what happens when the answer is "not enough data"
+
+At ~20 winners a week, purge/embargo, holdout reservation, regime slices and a
+multiple-testing ledger together make `UNDERPOWERED` the most likely outcome of
+any given cycle. Declaring that a valid verdict is honest; leaving it as the
+loop's steady state is not. When a primary population is infeasible, the
+orchestrator registers exactly **one** pre-declared expansion action before any
+further hypothesis version may consume validation budget:
+
+1. extend the calendar window while preserving `policy_epoch` comparability;
+2. pool exchangeable symbols with a day-clustered partial-pooling model instead
+   of pretending symbol-days are independent;
+3. replace a sparse binary response with a continuous one — remaining return,
+   captured fraction — keeping the canonical binary objective as a guardrail;
+4. lower the event threshold, but only after registering and measuring its
+   transfer relationship to the canonical objective;
+5. widen the real candidate population, or pick a mechanism with a larger
+   eligible one;
+6. repair missing observation/outcome logging where the limit is data loss
+   rather than market rarity;
+7. terminate as `ACCEPTED_UNKNOWN` when none of the above preserves the causal
+   question.
+
+The choice is made **from the pre-result power report**, never after inspecting
+a favourable slice. Changing the outcome, threshold, population or pooling model
+creates a new hypothesis version and cannot retroactively rescue the old result.
+
+### 5.2c Holdout that does not eat the newest data
+
+A permanently sealed holdout is wrong at this event rate: it consumes exactly
+the most recent and most relevant evidence, forever. Instead:
+
+- **one-use forward cohorts** are the final evidence for a hypothesis version;
+  once revealed they become historical prior, and retuning requires a new
+  version and a new future cohort;
+- historical evaluation uses **rolling-origin walk-forward with cross-fitting**,
+  so no window is permanently withheld;
+- purge/embargo is applied **only where feature/label overlap requires it**,
+  sized to label maturity, rather than as a blanket cost.
+
 ### 5.3 Signed result bundle
 Manifest (§3.1), baseline and candidate metrics, paired deltas with CIs,
 denominator, coverage, regime stability, guardrail outcomes, artifacts, full
@@ -381,6 +455,21 @@ baseline because a candidate failed.
 toggle. Bounded auto-promotion, if ever enabled, is limited to a pre-approved
 envelope: risk-reducing rollbacks and disabling a degrading feature.
 
+### 6.2b Rollback triggers — pre-registered, not declarative
+
+Every promotion manifest fixes these **before** the candidate goes live, and the
+monitor's only action is `candidate_flag = OFF` followed by restoration of the
+frozen baseline. It never stops the baseline because a candidate failed.
+
+| Class | Trigger | Latency |
+|---|---|---|
+| Data integrity | candle/feature age past the timeframe limit, consecutive scan failures, active-universe coverage below floor, snapshot/policy provenance mismatch | immediate |
+| Message safety | any duplicate production alert on the same dedup key; unique alerts/day above the hard cap; candidate message rate above baseline × 1.25; Telegram delivery failures above threshold | immediate |
+| Quality | guardrail non-inferiority breached on the pre-registered sequential rule, over a pre-declared window and a minimum mature sample | only **after** the maturity rule — never on an early adverse streak |
+
+A quality rollback that fires before its maturity rule is a false alarm by
+construction, which is why the three classes have different latencies.
+
 ### 6.3 Attribution
 Realised effect with day-clustered bootstrap CI and market-drift normalisation,
 written back to the Planner's priors and the negative register.
@@ -398,6 +487,19 @@ written back to the Planner's priors and the negative register.
    that later proved harmful), research precision (share of promoted changes
    surviving attribution), attributed improvement, and **share of correct
    `NO_CHANGE`**. Not decisions per month, which rewards churn.
+4. **Mandatory baseline comparison.** The agent is scored against a
+   deterministic opportunity-priority baseline — rank incidents by measured
+   opportunity cost, propose the top one — on proposal validity, supported-
+   hypothesis precision, harmful validations avoided, cost and latency. An agent
+   that does not beat that baseline stays a summariser and **may not select the
+   primary hypothesis**. Where the operator's historical proposals are not
+   recoverable in comparable form, that is recorded as a limitation and the
+   deterministic baseline stands alone; the comparison is not quietly skipped.
+5. **Outcome SLO, not just structure.** Within **30 days of Phase 1 completing,
+   at least one real admitted hypothesis must reach a terminal validator
+   result.** Otherwise the implementation is a liveness failure *even if every
+   structural test passes*, and the mandated response is to simplify the loop or
+   return to manual research — not to extend the deadline.
 
 ---
 
@@ -434,9 +536,24 @@ guarantees will fail identically and be discovered by accident.
 Durable state machine with persisted transitions · idempotent steps keyed by
 hypothesis version · leases with expiry so a crashed worker's work is reclaimed
 (the stale-lock lesson, generalised) · bounded retries with a dead-letter queue ·
-reconciliation on start · and a **watchdog alarm when no state transition has
-occurred in N days**, wired into the same freshness reporting that already
-exists.
+reconciliation on start.
+
+**Operational contract — concrete, because a placeholder is not a contract.**
+
+| Item | Value |
+|---|---|
+| Accountable owner | `repository maintainer` — one person. Finding categories route a queue; they do not imply staffed teams |
+| Finding states | `OPEN → ACKNOWLEDGED → REPAIRING → VERIFIED`, or `ACCEPTED_DEBT(review_at=…)`, or `SUPERSEDED` |
+| SLO | on **acknowledgement at the next weekly triage**, not on repair time. Repair dates are estimates recorded at triage |
+| `ACCEPTED_DEBT` | an honest triage outcome, **not a waiver** — the dependent claim stays blocked until repair or a separately approved, expiring waiver |
+| Watchdog | alarm when **no state transition in 10 days**, or no evidence pack at the weekly slot |
+| Capacity | ≤1 primary validation admission/week; ≤3 simultaneous `FORWARD_WAITING` versions, each with a fixed wake-up condition; **≤12 decision-grade forward versions/year** until measured throughput says otherwise |
+| Forward maturity | 2–4 weeks per hypothesis version — this, not the report cadence, is the programme's clock |
+
+**The weekly report must never imply weekly self-improvement.** At ~12 forward
+versions a year, throughput is the binding constraint, and it is raised by
+removing operational stalls and choosing powered populations (§5.2b) — never by
+weakening maturity rules.
 
 ---
 
@@ -585,13 +702,14 @@ is also the correct order given §0.
 
 | Phase | Builds | Exit gate |
 |---|---|---|
+| **-1** | **Walking skeleton.** One seeded non-trading hypothesis over a frozen synthetic fixture, one existing validator adapter, minimal snapshot/contract/attempt record, independent result verification, one terminal state in the ledger. LLM, RAG, promotion and the broad registries all stubbed | One command carries a fresh attempt from `OBSERVED` to a verified terminal result in under ten minutes; it is repeatable and restart-safe; it cannot reach a release store; and a deliberately malformed result lands in `INVALID_RESULT` instead of at the governor. **No registry or label work starts until the pipe is proven to conduct an experiment** |
 | **0a** | Repair measurement: immutable later-EOD labels, day-grouped splits, provenance fields, product-scoped harness profiles | zero blocking findings **in the `discovery/alert` and `exit` profiles**; `execution/portfolio` carries a signed waiver. A globally green harness is not a reachable gate — TH-11 demands portfolio alpha this product does not have, so requiring it builds a permanent freeze |
-| **0b** | ObjectiveContract, capability registry, contracts, negative register, four-store split | The 16 dead hypotheses are rejected mechanically; no LLM path reaches a runtime override |
+| **0b** | ObjectiveContract, capability registry, contracts, four-store split, **and migration of existing negative results** — the casebook, rejected hypotheses, decision records and the 47 verdict-less backtests, each tagged `CONFIRMED_NEGATIVE` / `LEGACY_UNVERIFIED` / `DUPLICATE` / `MIGRATION_ERROR`. Migration never invents a missing denominator, and an unverified item raises a similarity warning rather than a rejection. **The first real cycle is blocked until this inventory is complete**; the Phase -1 skeleton is not | The 16 dead hypotheses are rejected mechanically; no LLM path reaches a runtime override |
 | 1 | Deterministic weekly report on `MoveEvent` | Two consecutive weeks published with CI, verdicts and no unsupported arrow |
 | 2 | Validation service: snapshot manifests, purge/embargo, sealed holdout, placebo, ledger | Reproduces three historical decisions within CI; A/A returns no effect |
 | 3 | Analyst + Author, propose-only, via MCP | ≥10 contract-valid hypotheses; ≥3 judged worth testing by the operator |
 | 4 | Adversary + Planner + Referee + auditor | Adversary false-kill rate < 15% on the calibration set |
-| 5 | Shadow, then symbol-subset canary, operator-approved | One change completes shadow → canary → live and survives attribution; agent backtest published |
+| 5 | Shadow twin, then time-switchback canary, operator-approved | One change completes shadow → canary → live and survives attribution; agent backtest published |
 
 Phases 0a–2 contain no autonomous action and no LLM decisions. The previous
 version of this component failed at phase 0 and nobody noticed for two months.
