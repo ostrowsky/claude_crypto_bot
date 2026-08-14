@@ -1,564 +1,556 @@
-# Continuous-improvement agent — architecture design
+# Continuous-improvement agent — architecture design (v2)
 
 - **Slug:** `continuous-improvement-agent`
 - **Status:** design (no implementation)
-- **Created:** 2026-08-13
+- **Created:** 2026-08-13 · **Revised:** 2026-08-14 after external review
 - **Owner:** Vasiliy Ostrovsky + Claude
 - **Objective:** a closed loop in which an LLM agent reads the bot's own data,
-  proposes changes to raise `NS_EarlyCapture@top20`, hands them to an
-  independent validator, and decides what happens next — without ever being able
-  to fool itself or the operator.
+  proposes changes that raise early capture of top movers, hands them to an
+  independent validator, and decides what happens next — without being able to
+  fool itself, the operator, or the runtime.
+
+## Revision note — what v1 got wrong
+
+Two reviews (one from a GPT-authored competing design, one a direct critique of
+v1) found defects that v1's own claims contradicted. They are corrected here and
+listed openly, because a design document that quietly absorbs its errors is the
+same failure mode as a report that quietly absorbs a bad week.
+
+| v1 claim | Why it was wrong | v2 |
+|---|---|---|
+| "The agent has no tool that writes config" **and** the Historian writes `decisions.jsonl` | `decisions.jsonl` is executable: `_config_runtime_overrides.py` applies `diff.to` as a live override. That is a confused-deputy path from an LLM straight into trading behaviour | §4.6, §6.1 — four separate stores; the LLM writes only to the research ledger |
+| `(source_file, byte_offset, row_count)` is a content address | An offset identifies a position, not content. This repo demonstrably rewrites these files — 1.09 GB of orphaned `.tmp` from failed whole-file rewrites was cleared on 2026-08-13 | §3.1 — hash chain over prefixes; offsets keep only their real job, incremental reading |
+| "No arrow when \|Δ\| < MDE" | MDE is a design-time power parameter, not a decision rule on observed data | §13.3 — CI versus a pre-registered practical-significance threshold |
+| MDE figures (±22 pp, ±17 pp) | Computed assuming independent coin-days. Crypto moves inside a day are strongly correlated, so effective n is materially lower and **those figures are optimistic** | §13.2 — day-clustered bootstrap, numbers restated as upper bounds on power |
+| `Coverage@move5` and `Precision@alert` are "two sides of the same event" | They used different anchors and horizons (intraday to midpoint vs +5% within 24h) | §13.2 — one `MoveEvent` definition serves both |
+| Thompson sampling over hypothesis families | Delayed outcomes, few experiments and shifting policy epochs make it fit the validator, not the market | §4.5 — expected impact × information gain ÷ cost, with a fixed exploration quota |
+| Self-consistency over k generations | Conflicts with a minimal budget, and agreement among samples of one model is not evidence | §4.2 — dropped |
+| "MCP enforces least privilege" | MCP is a protocol. Enforcement is server-side ACL and capability tokens | §8 |
+| Loop utility measured as decisions/month | Rewards churn | §7 — avoided harm, research precision, share of correct `NO_CHANGE` |
+
+Also adopted from the competing design: purge/embargo, a sealed holdout the
+generator never sees, a multiple-testing ledger, placebo/negative-control runs,
+immutable versioned contracts, retry invariance, retrieved content treated as
+untrusted data, and `NO_CHANGE` as a normal successful outcome.
 
 ---
 
 ## 0. The honest starting point
 
-This component already exists and is dead. Any design that ignores that will
-rebuild the corpse.
+This component already exists and is dead. Any design that ignores that rebuilds
+the corpse.
 
-`pipeline_hypothesis.py → pipeline_validator.py → pipeline_shadow.py →
-pipeline_blind_critic.py → pipeline_approve.py → pipeline_monitor.py →
-pipeline_attribution.py` are all present, wired, and scheduled. And:
+`pipeline_hypothesis.py → … → pipeline_attribution.py` are present, wired and
+scheduled. And: all 16 pending hypotheses referenced `config_key`s that **do not
+exist**; none had a registered validator; **no decision has come through the
+pipeline since 2026-06-17.** Every change since — the bandit leak fix, the
+curtail fallback, the soft gate, the monitored-set change — came from manual
+analysis.
 
-- all 16 pending L2 hypotheses referenced `config_key`s **that do not exist** in
-  `config.py` (`MAX_LATENESS_PCT_IMPULSE_SPEED`, `ML_PROBA_MIN_IMPULSE_SPEED`,
-  `ENTRY_SCORE_MIN_5M`, …), and two proposed position sizing, which this bot
-  does not have;
-- none had a registered validator, so L3 could not check them either;
-- **no decision has come through the pipeline since 2026-06-17.** Every change
-  since — the bandit leak fix, the curtail fallback, the soft gate, the
-  monitored-set change — came from manual analysis.
+The measurement layer is also not currently trustworthy. `truth_harness full`
+today: **6 blocking findings and 1 warning** — leaky North-Star and top-gainer
+targets (TH-03 ×2), a row-index split that can put one UTC day on both sides
+(TH-04), no canonical portfolio alpha and no canonical ZigZag EX1 (TH-11 ×2),
+gate evidence expired 77 days past a 30-day budget (TH-10), and 47 legacy
+backtests without a durable verdict (TH-08, warning).
 
-Four root causes, and each becomes a structural constraint below:
+**Therefore the first phase is repairing measurement and provenance, not
+launching agents.** The loop starts in `RESEARCH_ONLY` and stays there until the
+harness is green.
 
-| Root cause | Constraint it forces |
+Four root causes of the previous death, each now a structural constraint:
+
+| Root cause | Constraint |
 |---|---|
-| The generator wrote free text; nothing checked the proposal was even *expressible* | **Typed hypothesis contract validated against a machine-derived capability registry** (§3.2, §4.1) |
-| Dedup was exact-key, so semantically identical retries were never caught | **Semantic dedup against a negative-results register** (§3.6) |
-| A hypothesis with no registered validator still entered the queue | **No validator ⇒ no queue entry**; validators are a registry, not an afterthought (§4.2) |
-| Nothing measured whether the generator was any good | **Meta-evaluation of the agent itself, on a temporal holdout** (§7) |
-
-The founding principle (CLAUDE.md §0) is unchanged: continuous learning is P0.
-This design is what makes it survive contact with an LLM.
+| Free text; nothing checked the proposal was expressible | Typed contract against a capability registry derived from source (§3.2, §4.2) |
+| Exact-key dedup never fired | Semantic similarity **warning**, not an automatic ban (§3.6) |
+| A hypothesis with no validator still entered the queue | No validator ⇒ no registration (§5.1) |
+| Nothing measured whether the generator was any good | Meta-evaluation on a frozen-world holdout (§7) |
 
 ---
 
 ## 1. Design principles
 
-1. **The agent proposes; deterministic code disposes.** No LLM output ever
-   reaches `config.py`, a dataset, or a live gate without passing a
-   non-LLM validator and a recorded decision.
-2. **Integrity boundary around the scorer.** The component that measures a
-   hypothesis is a separate process the agent has no write access to. An agent
-   that can edit its own grader is not being evaluated.
-3. **The metric is immutable to the agent.** Changing a metric, its denominator
-   or its label provenance is a human-approved path (§3.5). Otherwise the loop
-   optimises the ruler.
-4. **Every number carries its provenance.** Data snapshot hash, split, base
-   rate, lift, uptime adjustment — all machine-checked by the Truth Harness
-   (TH-01…TH-12) at every boundary, not by the agent's good intentions.
-5. **"Underpowered" is a first-class verdict.** "Рано судить" must be a state
-   the machine can be in, or the loop will manufacture conclusions (§0a rule 10).
-6. **Falsifiability is required at authoring time.** A hypothesis that cannot
-   state what result would kill it is not admitted.
-7. **Budgets are hard.** Tokens, validation compute, operator attention, and
-   live blast radius are all capped; exceeding a cap stops the loop rather than
-   degrading quietly.
+1. **The agent proposes; deterministic code disposes.** No LLM output reaches
+   `config.py`, a dataset, a runtime override or a live gate without a non-LLM
+   validation report and a signed approval.
+2. **The execution channel is not writable by any agent.** This is the v1 defect
+   worth stating as a principle rather than a footnote (§6.1).
+3. **Integrity boundary around the scorer.** The validator is a separate process
+   with its own identity, a read-only frozen snapshot, and a sealed holdout the
+   proposing agent never sees.
+4. **The objective is immutable to the agent.** Metric, denominator, label
+   provenance and guardrails are a human-approved contract (§3.5).
+5. **Provenance is cryptographic, not positional.** Hashes of data prefix,
+   schema, universe, code and config — not byte offsets (§3.1).
+6. **`NO_CHANGE`, `UNDERPOWERED`, `INVALID` and `REJECTED` are successful
+   outcomes.** A cycle that correctly changes nothing has done its job.
+7. **Falsifiability at authoring time**, and the contract is immutable once
+   registered; revision means a new version.
+8. **Budgets are hard.** Tokens, validation compute, operator attention and live
+   blast radius are capped; exceeding a cap halts the loop.
+9. **Retrieved content is data, never instruction.**
 
 ---
 
-## 2. Architecture — six planes
+## 2. Architecture — planes and the flow between them
 
 ```
-┌─ CONTROL PLANE ──────────────────────────────────────────────────────────┐
-│  Truth Harness (TH-01..12) · policy engine (do_not_touch, budgets)        │
-│  lifecycle hooks · circuit breaker · audit log                            │
-└──────────────┬───────────────────────────────────────────────────────────┘
-               │ every arrow below crosses a hook
-┌─ EVIDENCE PLANE ─────────────┐        ┌─ AGENT PLANE (LLM) ──────────────┐
-│ event_store.sqlite (offsets) │  MCP   │ Analyst   → incidents            │
-│ feature/label stores         │◄──────►│ Author    → hypotheses           │
-│ metric registry (canonical)  │ (read) │ Adversary → kill-or-pass (judge) │
-│ capability registry (AST)    │        │ Referee   → blind verdict (judge)│
-│ RAG index: specs, decisions, │        │ Allocator → what to spend on     │
-│   reports, negative register │        │ Historian → memory writes        │
-└──────────────┬───────────────┘        └──────────────┬───────────────────┘
-               │                                        │ propose() only
-               │                          ┌─────────────▼───────────────────┐
-               │                          │ VALIDATION PLANE (no LLM)       │
-               │                          │ validator registry · replay     │
-               └─────────────────────────►│ temporal split · anchors        │
-                                          │ leakage checks · power analysis │
-                                          └─────────────┬───────────────────┘
-                                                        │ validation report
-                                          ┌─────────────▼───────────────────┐
-                                          │ PROMOTION PLANE                 │
-                                          │ shadow → forward cohort → live  │
-                                          │ flag + rollback + attribution   │
-                                          └─────────────┬───────────────────┘
-                                                        │ outcome
-                                          ┌─────────────▼───────────────────┐
-                                          │ MEMORY PLANE                    │
-                                          │ decisions · already_tried ·     │
-                                          │ negative register · agent trace │
-                                          └─────────────────────────────────┘
+┌─ CONTROL PLANE ────────────────────────────────────────────────────────────┐
+│ Truth Harness (TH-01..12 + agent invariants) · policy engine · budgets      │
+│ durable orchestrator (state machine, leases, retries, dead-letter)          │
+│ liveness watchdog · circuit breaker · audit log                             │
+└───────────────┬────────────────────────────────────────────────────────────┘
+                │ every transition below crosses a hook
+┌─ EVIDENCE ────────────────┐         ┌─ AGENT PLANE (LLM) ──────────────────┐
+│ event store (hash-chained)│  MCP    │ Analyst    → incidents               │
+│ point-in-time feature/    │ read-   │ Author     → hypothesis contract     │
+│   label store             │ only    │ Adversary  → kill-before-compute     │
+│ ObjectiveContract (v)     │◄───────►│ Referee    → blind verdict (advisory)│
+│ capability registry (AST) │         │ Planner    → what to spend on        │
+│ RAG (time-aware, untrusted│         │ Historian  → research ledger only    │
+│   content)                │         └──────────────┬───────────────────────┘
+└───────────────┬───────────┘                        │ PromotionRequest
+                │                     ┌──────────────▼───────────────────────┐
+                │                     │ VALIDATION (no LLM, own identity)    │
+                │                     │ frozen snapshot · sealed holdout     │
+                └────────────────────►│ purge/embargo · bounded Strategy DSL │
+                                      │ placebo runs · multiple-testing ledger│
+                                      └──────────────┬───────────────────────┘
+                                                     │ signed ResultBundle
+                                      ┌──────────────▼───────────────────────┐
+                                      │ STATISTICAL AUDITOR (no LLM)         │
+                                      │ independent recompute · CI · guards  │
+                                      └──────────────┬───────────────────────┘
+                                                     │
+                                      ┌──────────────▼───────────────────────┐
+                                      │ PROMOTION GOVERNOR (deterministic)   │
+                                      │ + SignedApproval (operator)          │
+                                      │ shadow → canary → flagged live       │
+                                      └──────────────┬───────────────────────┘
+                                                     │ outcome
+                                      ┌──────────────▼───────────────────────┐
+                                      │ MEMORY: research ledger · negatives · │
+                                      │ experiment registry · agent trace     │
+                                      └──────────────────────────────────────┘
 ```
 
-The loop is a cycle, but **information is asymmetric on purpose**: the Referee
-never sees the hypothesis author's predicted effect, and the Validation plane
-never sees the agent's rationale. Both are anti-confirmation-bias measures.
+Information is asymmetric on purpose: the Referee never sees the persuasive
+rationale, the validator never sees it either, and the Author never sees the
+sealed holdout.
 
 ---
 
 ## 3. Evidence plane
 
-### 3.1 Structured evidence — the event store
+### 3.1 Provenance — hashes, not offsets
 
-`files/event_store.py` (shipped): the JSONL journal stays authoritative and a
-SQLite mirror is synced by byte offset. Two properties this design leans on:
+`files/event_store.py` (shipped) syncs the JSONL journal into SQLite from the
+last byte offset. **Byte offsets are for incremental reading only.** They do not
+prove immutability: a file can be rewritten, rotated or restored with different
+bytes at the same offsets — and this repo does rewrite its datasets, which is
+exactly how 1.09 GB of orphaned `.tmp` files accumulated.
 
-- **Queryable diagnosis.** The Analyst asks SQL questions ("which gate blocked
-  top-20 winners in the last 14 uptime-adjusted days") instead of re-parsing
-  98 MB per question.
-- **Byte offsets are content addresses.** For an append-only journal,
-  `(source_file, byte_offset, row_count)` uniquely identifies a prefix of
-  history. Every validation pins that triple as its **data snapshot hash**, so a
-  result is reproducible and two results are comparable only when their
-  snapshots are (TH-04). This falls out of the store for free and is the
-  cleanest provenance mechanism available here.
+A snapshot manifest therefore carries:
 
-### 3.2 Capability registry — the fix for invented config keys
+| field | why |
+|---|---|
+| `prefix_hash` (BLAKE3 of bytes 0..offset), maintained as a **rolling hash chain** per append batch | proves the prefix never changed; cheap because the journal is append-only |
+| `schema_hash` | field meanings changed silently once already (`trend_chop` vs `trend/1h chop:`) |
+| `universe_hash` | the watchlist defines the denominator |
+| `code_commit`, `config_hash` | the same data under different gates is a different experiment |
+| `label_maturity_cutoff` | rows whose T+10 label is not yet real must not enter |
 
-Derived mechanically from source, never hand-maintained:
+Two results are comparable only when their manifests match on data, schema,
+universe and objective version.
 
-- every `config.py` constant: name, type, current value, permitted range,
-  the module that reads it, whether it is in `do_not_touch.json`;
-- every registered gate (`trend_scout_rules.BlockRule`), entry mode, exit
-  policy, reward term, bandit context feature;
-- every canonical metric and its computing script.
+### 3.2 Capability registry
 
-The Author agent may only propose changes whose `target` resolves here. The 16
-dead hypotheses become **unrepresentable**, not merely rejected.
+Derived mechanically from source: every `config.py` constant with type, range,
+reader module and `do_not_touch` status; every `BlockRule`, entry mode, exit
+policy, reward term, bandit feature; every canonical metric and its script. A
+hypothesis whose target does not resolve here is **unrepresentable**, which is
+what makes the 16 dead hypotheses impossible rather than merely rejected.
 
-### 3.3 RAG over project knowledge
+### 3.3 Point-in-time feature/label store
 
-Hybrid retrieval (BM25 + embeddings) over: `docs/specs/**`, `docs/reports/**`,
-`CLAUDE.md`, `PROJECT_CONTEXT.md`, `decisions.jsonl`, `already_tried.jsonl`, the
-negative-results register, and backtest docstring verdicts.
+Every row carries `available_at` (when the bot could have known it) and
+`label_mature_at` (when the outcome became real). Retrieval and validation
+filter on both. Without this, a "temporal" split still leaks through labels that
+matured after the cut.
 
-Two non-obvious requirements:
+### 3.4 RAG, time-aware and untrusted
 
-- **Chunk on semantic units** (one spec section, one decision record, one
-  verdict block), because a retrieved half-verdict is worse than none.
-- **Recency and expiry are ranking features.** TH-10 already expires evidence;
-  retrieval must prefer live evidence and mark stale evidence as stale in the
-  context window, or the agent will confidently cite a refuted 77-day-old claim.
+Hybrid BM25 + embeddings over specs, reports, decisions, negative register.
+Filtered by `policy_epoch`, `available_at`, `label_mature_at`, `universe_hash`,
+action layer and evidence-expiry status; stale evidence is labelled stale in
+context (TH-10 currently flags 77-day-old gate evidence, and an agent will cite
+it confidently otherwise).
 
-### 3.4 Feature/label stores
+Retrieved content is **data, not instruction**. Numeric tables and candles never
+enter the vector index; a deterministic SQL layer aggregates them and the agent
+receives values with source id, hash, cutoff and coverage.
 
-`top_gainer_dataset.jsonl`, `critic_dataset.jsonl`, `ml_dataset.jsonl`, klines.
-Read-only to the agent. The **label provenance** of each is a first-class field
-(`rolling_24h_same_snapshot` today) so any hypothesis resting on a leaky label
-is flagged before compute is spent — this is exactly how "recall@20 = 100%"
-survived for months.
+### 3.5 ObjectiveContract — versioned, human-only
 
-### 3.5 Metric registry — immutable to the agent
+The single place the goal is defined; the agent can read it and propose a change
+through a separate human path, never edit it.
 
-One canonical metric per business question (the existing
-`metrics-canonical-spec`), each with: definition, denominator name, label
-provenance, uptime policy, owner, version. The agent can *read* it and *propose*
-a change through a separate human path, but the loop's scoring always uses the
-registered version. Without this, the cheapest way to raise a metric is to
-redefine it — and this repo has already had one silent denominator change.
+```
+ObjectiveContract v1
+  mission_kpi        early_capture over canonical mature eligible top movers
+  target             >= 0.25 (floor), 0.40 (goal)
+  provenance         later-EOD immutable labels          # phase 0 dependency
+  guardrails (non-inferiority margins, all must hold)
+      alert_precision        not worse than baseline by > 3 pp
+      alerts_per_day         not more than baseline × 1.25
+      fast_reversal_rate     not worse by > 2 pp
+      silent_miss_rate       not worse
+      per-gate harm          no gate's winners-lost increases
+  data requirements  full numerator/denominator, coverage, downtime,
+                     label maturity, universe snapshot
+  incomplete days    UNKNOWN — never success, never miss
+```
+
+**On the economic gate.** The review asks for canonical portfolio alpha after
+fees and slippage as a promotion gate, and the harness does report TH-11 FAIL
+for its absence. The concern is right — early capture must not be bought by
+alerting on more junk — but the specific metric does not fit this product: this
+bot has **no position sizing**; it emits alerts. So the guardrails above are the
+product-appropriate expression of the same requirement, and whether to build a
+simulated-portfolio economic gate at all is left as an explicit operator
+question (§14), not silently skipped.
 
 ### 3.6 Negative-results register
 
-Every refuted hypothesis with the numbers that killed it, plus the nine already
-in the repo and the four inherited from the sibling bot (static threshold exits,
-early RSI-WEAK profiles, impulse-expansion tails, pure-rank labels). Dedup
-against it is **semantic** (embedding similarity + mechanism-class match), not
-exact-key: the historical dedup compared config keys and therefore never fired.
+Every refuted hypothesis with the numbers that killed it, including the nine in
+this repo and four inherited from the sibling bot. Similarity search produces a
+**warning that demands a statement of what new evidence justifies the retry** —
+not an automatic ban. A regime-conditional variant of a refuted idea is a
+legitimately new hypothesis, and v1's automatic dedup would have blocked it.
 
 ---
 
-## 4. Agent plane — roles and why they are separate
-
-One model, several roles, each with its own skill, tool subset, context budget
-and success metric. Separation is not aesthetic: it is how information asymmetry
-is enforced.
+## 4. Agent plane
 
 ### 4.1 Analyst → incidents
+Ranks concrete historical cases by opportunity cost; emits structured incidents
+with case ids. Forbidden from proposing remedies, so the diagnosis is not
+written backwards from a favoured fix.
 
-Runs the **Failure Casebook** pattern on a schedule: rank concrete historical
-cases by opportunity cost (blocked winners, late entries, giveback), emit
-*structured incidents* with case ids and source rows — never prose.
-Explicitly forbidden from proposing solutions; that separation stops the
-diagnosis from being written backwards from a favoured fix.
+### 4.2 Author → hypothesis contract
+Consumes incidents, RAG and the capability registry; emits an **immutable,
+versioned** contract: intent (metric from the ObjectiveContract, direction,
+minimum practically significant effect), mechanism (target resolved in the
+registry, change), affected layer, allowed decision-time features, candidate
+strategy **within a bounded Strategy DSL** (never arbitrary code), competing
+explanation, falsifier, frozen baseline, guardrails, population and power
+requirement, split plan with purge/embargo, robustness/regime slices, cost
+assumptions, shadow/canary plan, rollback.
 
-**Success metric:** fraction of incidents that later appear in a supported
-hypothesis.
+Once registered it cannot be edited; revision creates a child version with a
+parent link. Self-consistency sampling is dropped — it costs budget and
+agreement among samples of one model is not evidence.
 
-### 4.2 Author → hypotheses
+### 4.3 Adversary → kill before compute
+Attacks with a fixed rubric from §0a: leaky target, population the bot never
+samples, base-rate illusion, tautological causal story, retry without new
+evidence. Measured by **false-kill rate**, estimated by letting a random 10%
+through regardless. A 0% false-kill rate means it is too permissive.
 
-Consumes incidents + RAG + capability registry. Emits the typed contract:
+### 4.4 Referee → blind, advisory
+Sees the signed result bundle, the **pre-registered** metric, acceptance
+criteria, guardrails and scope — but not the persuasive rationale, not the
+author's predicted effect, and with candidate/baseline randomly presented as
+A/B. Verdict is `PASS | FAIL | INCONCLUSIVE` with evidence ids.
 
-```
-hypothesis {
-  id, created_at, generation, incident_refs[]
-  intent      { metric: <registry id>, direction, predicted_delta, confidence }
-  mechanism   { kind: gate_threshold | reward_shape | feature_add | exit_policy
-                      | routing | data_collection,
-                target: <capability registry id>, change: {from, to} }
-  population  { which rows this affects, expected n/day, base rate }
-  rationale   { evidence_refs[]: (query_hash | report_id | case_id), causal_story }
-  falsifier   { the result that kills this }          # required
-  validator   { registered_validator_id, params }      # must exist
-  risk        { blast_radius, rollback, do_not_touch_ok }
-  th_rules[]  { which harness invariants this must satisfy }
-}
-```
+**Advisory only.** No judge verdict can overturn a deterministic failure from
+the auditor or the harness; the Governor decides. Judges are calibrated against
+an expert-labelled set and their calibration score is printed beside every
+verdict.
 
-Rejected at authoring time, before any compute: unresolvable target, missing
-validator, missing falsifier, `do_not_touch` violation, semantic duplicate of a
-refuted hypothesis, or a predicted effect on a metric the mechanism cannot
-plausibly touch.
+Known limitation, stated rather than hidden: Author, Adversary and Referee share
+a model class, so their errors correlate. Mitigation is measurement — judge
+agreement on the calibration set is itself reported — and, when budget allows, a
+different model for the Referee.
 
-**Self-consistency:** k independent generations at temperature; only hypotheses
-that survive de-duplication *and* the Adversary proceed. Divergence across
-samples is itself a signal — a hypothesis only one sample produced is ranked
-lower.
+### 4.5 Planner → allocation
+Ranks by **expected impact × information gain ÷ cost**, with a fixed exploration
+quota. Thompson sampling is deferred: with few experiments, delayed outcomes and
+shifting policy epochs it would learn which families the validator likes.
 
-### 4.3 Adversary → kill before compute (LLM-as-judge #1)
-
-Cheap, runs before validation. Attacks the hypothesis with a fixed rubric drawn
-from §0a: is the target leaky, is the population one the bot actually samples
-(rule 6), is the claimed effect a base-rate illusion (rule 1), is this the
-tenth retry of a refuted idea, is the causal story tautological (the
-"lateness = near-peak = low upside" failure)?
-
-**Success metric — and this is measurable:** of the hypotheses it killed, how
-many would have validated positive (false-kill rate), estimated by periodically
-letting a random 10% through regardless. An adversary with a 0% false-kill rate
-is too permissive; one above ~15% is destroying value.
-
-### 4.4 Referee → blind verdict (LLM-as-judge #2)
-
-Sees the **validation report only**: numbers, splits, anchors, power — with the
-hypothesis text, the predicted effect and the author's rationale stripped. Judges
-whether the evidence supports a change, and writes the recommendation the
-operator reads.
-
-Blindness is the point: the existing `pipeline_blind_critic.py` already encodes
-this idea, and it is the single cheapest defence against a persuasive rationale
-carrying a weak result.
-
-### 4.5 Allocator → spend the scarce resource
-
-Validation compute and operator attention are the binding constraints, not
-ideas. The Allocator runs **Thompson sampling over hypothesis families**
-(gate relaxation, reward shaping, exit policy, feature addition, data
-collection), with per-family priors updated from `decisions.jsonl` outcomes.
-
-There is a pleasing symmetry here: the bot uses a bandit to decide which
-candidates to enter; the improvement loop uses a bandit to decide which
-hypotheses to test. Both must publish base rate and lift.
-
-### 4.6 Historian → memory writes
-
-The only agent with write tools, and they write **only** to memory artifacts
-(decisions, already_tried, negative register, agent trace) — never to config,
-never to datasets. Every write is append-only and hashed.
+### 4.6 Historian → research ledger only
+Writes to `ResearchExperimentLedger` (append-only) and the negative register.
+**It has no write path to `decisions.jsonl`, runtime overrides or config.**
 
 ---
 
 ## 5. Validation plane — the integrity boundary
 
-**No LLM anywhere in this plane.** It runs as a separate process with its own
-MCP endpoint; the agent submits a hypothesis id and polls for a report.
+No LLM. Separate process, own service identity, network disabled, read-only
+frozen snapshot.
 
-### 5.1 Validator registry
+### 5.1 Registry and admission
+Each `mechanism.kind` maps to registered validators. No validator ⇒ no
+registration. Hypotheses execute only within the bounded Strategy DSL; arbitrary
+Python from a hypothesis is never run.
 
-Each `mechanism.kind` maps to registered validators with fixed contracts:
+### 5.2 Method requirements
+Maximum available period · chronological walk-forward · **purge and embargo**
+around split boundaries sized to label maturity · **sealed final holdout** the
+Author cannot read · day/regime **block bootstrap** for CIs · pre-declared regime
+slices · sensitivity to costs where costs apply · **placebo / negative-control
+(A/A) runs** proving the validator reports no effect when there is none ·
+**multiple-testing ledger** with alpha spending across all registered
+experiments.
 
-| kind | validator | anchors it must report |
-|---|---|---|
-| `gate_threshold` | Pareto sweep on the bot's **own** entries | current policy, relax-all, block-all |
-| `reward_shape` | offline bandit refit + temporal holdout | old label, random policy |
-| `feature_add` | ablation with and without, same split | leaky-feature ablation |
-| `exit_policy` | forward-path replay from real entries | base exit, hold-to-EOD |
-| `routing` | counterfactual mode reassignment | as-is |
-| `data_collection` | coverage/power estimate only | — |
+### 5.3 Signed result bundle
+Manifest (§3.1), baseline and candidate metrics, paired deltas with CIs,
+denominator, coverage, regime stability, guardrail outcomes, artifacts, full
+error status, seeds, and a verdict of
+`supported | refuted | underpowered | invalid`.
 
-### 5.2 Mandatory report contract
+### 5.4 Independent recompute
+The statistical auditor recomputes the primary metric and guardrails from the
+artifacts, independently of the validator's own summary. Disagreement is
+`invalid`, not a rounding note.
 
-```
-validation_report {
-  hypothesis_id, validator_id, started_at, elapsed
-  data_snapshot { sources[], byte_offsets[], row_counts[], window, hash }
-  split         { kind: temporal, train_window, holdout_window, days_full,
-                  days_excluded_down }
-  population    { n, base_rate, is_bot_own_entries: bool }
-  result        { primary, value, ci, lift_vs_base, action_rate,
-                  estimated_NS_delta }
-  anchors       { … }                       # per §5.1
-  leakage       { same_snapshot_label, answer_encoding_features[], verdict }
-  power         { min_detectable_effect, achieved_n, verdict }
-  verdict       supported | refuted | underpowered | invalid
-  reproduce     { seed, cmd, code_commit }
-}
-```
-
-`invalid` means the validator itself could not run honestly (stale data, failed
-freshness SLO, snapshot mismatch). A failed harness is never a pass.
-
-### 5.3 Preconditions
-
-Before any validation runs: artifact freshness SLO green (shipped,
-`TH05_ARTIFACT_FRESHNESS`), data snapshot resolvable, code commit clean. A loop
-that trains on a stalled input produces confident nonsense — this repo lost
-58 days of labels to exactly that.
+### 5.5 Preconditions
+Freshness SLO green (`TH05_ARTIFACT_FRESHNESS`, shipped), manifest resolvable,
+clean commit, labels mature. A loop that trains on a stalled input produces
+confident nonsense — this repo lost 58 days of labels to exactly that.
 
 ---
 
 ## 6. Promotion plane
 
-Three gates, none skippable, each with a stated rollback:
+### 6.1 Four stores, one execution channel
 
-1. **Shadow.** Behaviour logged, not applied. Required whenever the shadow can
-   answer the question (§0a rule 7).
-2. **Independent forward cohort.** Rows strictly after the decision timestamp,
-   maturity rule (both T+5 and T+10 present), minimum sample **and** minimum
-   days, then numeric thresholds. Borrowed from the sibling bot's
-   `forward-shadow-promotion-gates`; the cost of not having it is documented —
-   the 8% trail widen backtested positive over 35 days and lost 54.9% cumulative
-   in 5 live days.
-3. **Live behind a flag,** default = current behaviour, rollback = flip the flag,
-   decision recorded in `decisions.jsonl` (which auto-applies as a runtime
-   override — so a rollback needs a superseding record, not a config edit).
+The v1 defect, fixed structurally:
 
-**Attribution** (L7, exists) measures the realised effect with bootstrap CI and
-market-drift normalisation, and writes the outcome back to the Allocator's
-priors and the negative register. This is the only arrow that makes the loop
-*learn* rather than merely *act*.
+| Store | Writer | Readable by agent | Executable |
+|---|---|---|---|
+| `ResearchExperimentLedger` | Historian (LLM) | yes | **no** |
+| `PromotionRequest` | Governor, from a signed bundle | yes | no |
+| `SignedApproval` | Governor + operator key | yes | yes — the only one |
+| `RuntimeOverrideStore` | release process, from SignedApproval only | **no** | yes |
 
----
+Production reads only signed release records. Today `decisions.jsonl` is both
+memory and execution channel; splitting it is a prerequisite, not a later
+refinement.
 
-## 7. Meta-evaluation — how we know the agent is worth its tokens
+### 6.2 Stages
 
-Without this the loop is theatre. Three measurements, all on temporal holdouts:
+`SHADOW` (logged, not applied) → `CANARY` → `LIVE behind a flag`.
 
-1. **Agent backtest.** Freeze the entire corpus as of date T (trivial with byte
-   offsets), run the loop, and compare its proposals against what actually
-   happened after T. Did it find the changes that worked? Did it avoid the nine
-   refuted ones? Scored as recall of known-good and rejection rate of
-   known-bad — **with base rates published**, since a generator that proposes
-   everything trivially "finds" every win.
-2. **Judge calibration.** A labelled set of past hypotheses with known outcomes;
-   both judges are scored on it, and the score is reported alongside their
-   verdicts. An uncalibrated judge is a random number generator with prose.
-3. **Loop yield.** Decisions per month that reached live and survived
-   attribution, versus the manual baseline. If the loop is below the human
-   baseline it is a research project, not a component, and should be labelled as
-   such in the morning report.
+**Canary, defined** — v1 left this vague and a vague stage never gets used. For
+an alert product the blast radius is bounded by **symbol subset**: the change
+applies to a pre-registered, randomly chosen fraction of the watchlist for a
+fixed period, with the remainder as a concurrent control. Stop conditions:
+guardrail breach, alert-rate excursion, or any harness blocking finding →
+automatic rollback. Expansion is stepwise, never straight to full.
+
+**Operator approval is a permanent rule for behaviour-affecting changes**, not a
+toggle. Bounded auto-promotion, if ever enabled, is limited to a pre-approved
+envelope: risk-reducing rollbacks and disabling a degrading feature.
+
+### 6.3 Attribution
+Realised effect with day-clustered bootstrap CI and market-drift normalisation,
+written back to the Planner's priors and the negative register.
 
 ---
 
-## 8. Cross-cutting mechanisms
+## 7. Meta-evaluation
 
-**MCP as the tool boundary.** Two servers: `evidence` (read-only: query events,
-get metric, search knowledge, resolve capability, read decisions) and
-`validation` (submit, poll, fetch report). Least privilege is enforced by the
-protocol, not by prompt instructions — the agent has no tool that writes config
-or datasets, so no jailbreak or confused-deputy path leads there. Every call is
-logged with arguments and result hash for the audit trail.
-
-**Hooks** at fixed lifecycle points:
-
-| Hook | Enforces |
-|---|---|
-| `pre_tool_use` | budget, do_not_touch, argument schema |
-| `post_generation` | hypothesis contract + harness checks |
-| `pre_validation` | freshness SLO, snapshot resolvable |
-| `post_validation` | report contract completeness, ratio context present |
-| `pre_promotion` | forward-cohort gate, rollback stated |
-| `post_attribution` | memory write, prior update |
-| `pre_commit` | existing `truth_harness change --staged` |
-
-**Skills** as versioned procedures in `.claude/skills/` and `skills/`: truth
-harness audit (exists), failure casebook, hypothesis authoring, promotion gate,
-MD compliance (exists). Skills are how a role's method is reviewed and changed
-deliberately, rather than drifting inside a prompt.
-
-**Circuit breaker.** The loop halts and notifies when: two consecutive
-promotions regress in attribution, the harness reports a blocking finding, a
-freshness SLO lapses, or a budget is exhausted. Halting is a normal outcome, not
-an error.
+1. **Agent backtest with a frozen world.** Freeze at date T not only the data
+   but the MD corpus, prompts, skills, capability registry, tool schemas and
+   model snapshot; run the loop; compare proposals against what actually
+   happened after T. Freezing data alone leaks — v1's version did.
+2. **Judge calibration** on a labelled set, reported beside every verdict.
+3. **Loop utility**, measured as: avoided harm (correct rejections of changes
+   that later proved harmful), research precision (share of promoted changes
+   surviving attribution), attributed improvement, and **share of correct
+   `NO_CHANGE`**. Not decisions per month, which rewards churn.
 
 ---
 
-## 9. Failure modes this design is built against
+## 8. Interfaces, hooks, skills
 
-Each maps to something that actually happened here.
+**MCP is the interface; the boundary is server-side ACL plus capability
+tokens.** Read tools for evidence; `experiments.register`, `backtest.submit`,
+`backtest.status`, `backtest.get_signed_result` for the loop. Snapshot freezing
+belongs to the orchestrator, not the agent. `harness.verify` is rate-limited and
+every call is ledgered, or an agent will verify until it passes.
 
-| Failure | Historical instance | Structural defence |
-|---|---|---|
-| Proposals reference nothing real | 16 invented `config_key`s | Capability registry; unresolvable target is unrepresentable |
-| Refuted ideas re-tested | exact-key dedup never fired | Semantic dedup vs negative register |
-| Leaky label taken as skill | "recall@20 = 100%", AUC 0.99 | Label provenance field + mandatory leakage section |
-| Base-rate illusion | ENTER on 73% of everything | Ratio context enforced by TH-01 in the report contract |
-| In-sample reported as achievement | bandit post-fit recall | Temporal split enforced by the validator, not the agent |
-| Metric redefined instead of improved | April denominator change | Metric registry immutable to the agent |
-| Backtest→live gap | 8% trail widen, −54.9% in 5 days | Forward-cohort gate |
-| Silent input stall | 58-day backfill lock | Freshness SLO as a validation precondition |
-| Agent grades itself | — | Validation plane is a separate process, no write tools |
-| Confident prose over weak numbers | — | Blind Referee sees numbers only |
-| Cost blowup | — | Hard budgets + circuit breaker |
+Hooks: `before_hypothesis_register` (objective alignment, provenance, similarity
+warning) · `before_backtest_submit` (frozen snapshot, leakage scan, purge sizing,
+power requirement) · `after_backtest_complete` (independent recompute, artifact
+hashing) · `before_judge` (harness, A/B masking) · `before_shadow` (rollback,
+guardrails, sample requirement) · `before_canary` (full harness, judge quorum,
+operator approval) · `after_promotion` (drift monitor, automatic rollback) ·
+`pre_commit` (existing).
+
+Skills: `crypto-bot-truth-harness` and `md-compliance` (exist),
+`objective-metric-auditor`, `causal-hypothesis-author`,
+`experiment-spec-designer`, `time-series-backtest-reviewer`,
+`promotion-evidence-reviewer`.
 
 ---
 
-## 10. Rollout phases, each with an exit gate
+## 9. Liveness — so the new loop cannot die quietly
+
+The strongest evidence for this section is this repo's own history: a bot dead
+8 days unnoticed, a scheduler silent 11 days on battery, a backfill lock stale
+58 days, a pipeline with no decision for two months. A loop without liveness
+guarantees will fail identically and be discovered by accident.
+
+Durable state machine with persisted transitions · idempotent steps keyed by
+hypothesis version · leases with expiry so a crashed worker's work is reclaimed
+(the stale-lock lesson, generalised) · bounded retries with a dead-letter queue ·
+reconciliation on start · and a **watchdog alarm when no state transition has
+occurred in N days**, wired into the same freshness reporting that already
+exists.
+
+---
+
+## 10. Agent invariants added to the Truth Harness
+
+The agent cannot modify the ObjectiveContract · the Author never sees the sealed
+holdout · validation contains no LLM and runs no arbitrary code · every
+hypothesis and every run is registered, including failures · the evaluation
+window cannot be chosen after seeing a result · a retry cannot silently change
+seed, population or parameters · a judge cannot overturn a deterministic fail ·
+missing / stale / partial always yields `UNKNOWN` · promotion without rollback
+and forward evidence is impossible · retrieved content is untrusted data ·
+`NO_CHANGE` is a successful terminal state.
+
+---
+
+## 11. Statistics: what this data can actually support
+
+### 11.1 The North Star cannot answer a weekly question
+
+Measured here (60 days, 43 full days, watchlist-filtered `label_top20`):
+
+```
+per-winner score:  n = 125   mean = 0.0612   sd = 0.1430
+                   63% of winners score exactly 0        CV = 2.34
+```
+
+Minimum detectable difference between two weeks, 80% power, α = 0.05:
+
+| unit | n / week | MDE | vs the metric's own level |
+|---|---:|---:|---|
+| top-20 winners (**current NS**) | ~20 | 0.127 | **2.1×** |
+| move events ≥ +5% | ~83 | 0.062 | 1.0× |
+| two pooled weeks | ~160 | 0.045 | 0.7× |
+
+Three independent disqualifiers: power (a product of three factors, one a
+mostly-zero Bernoulli, is the worst shape for a small sample); unreadable
+direction (coverage up and capture down cancel); and provenance that moves with
+the confound (labels come from the same rolling-24h snapshot as the features,
+and which snapshots exist depends on uptime).
+
+**These MDE figures assume independent coin-days and are therefore optimistic.**
+Moves within a day share market beta, so the effective sample is smaller than n
+suggests. All CIs are computed with a **day-clustered block bootstrap**, and the
+table above is an upper bound on achievable power, not an estimate of it.
+
+### 11.2 One `MoveEvent`, two metrics
+
+v1 defined coverage and precision on different anchors and horizons, so they
+were not two sides of one event. Corrected — a single event definition:
+
+```
+MoveEvent
+  universe_snapshot   watchlist hash
+  anchor              first bar where price rises >= THRESHOLD from the day's open
+  threshold           +5%          # proxy for weekly steering
+  horizon             to the day's close, Europe/Budapest cutoff
+  midpoint            first bar where half the move's amplitude is realised
+  dedup               one event per (symbol, day); alerts within the event window
+                      collapse to the earliest
+  label_mature_at     day close + settlement
+```
+
+| metric | definition on `MoveEvent` | n / week |
+|---|---|---:|
+| `Coverage@move` | share of MoveEvents with an alert at or before `midpoint` | ~83 |
+| `Precision@alert` | share of alerts that fall inside some MoveEvent window | ~143 |
+
+Recall and precision on the same event, so trading one for the other is visible.
+Ground truth comes from **exchange klines**, not `top_gainer_dataset`, so the
+weekly metric does not inherit the provisional label's bias — and that work is
+also step one of retiring `provisional` on the North Star.
+
+`move5` is an explicitly labelled **proxy for weekly steering**. It never
+replaces the top-20 mission metric, which is reported alongside it, unpowered
+and marked so.
+
+### 11.3 The inference rule
+
+- Every number carries `n`, base rate, day-clustered CI, and the power the
+  design had.
+- **Decisions use the observed CI against a pre-registered practical-significance
+  threshold and non-inferiority margin** — not MDE, which is a design parameter
+  and cannot serve as a threshold on observed data (v1 error).
+- Trend across weeks uses a **confidence sequence / CUSUM with a yearly
+  false-alarm budget**, not 52 independent tests, which manufacture ~2.6 false
+  trends a year at α = 0.05.
+- Windows are uptime-matched, or there is no comparison.
+- Where the interval spans the threshold: `UNDERPOWERED`, printed as such.
+
+### 11.4 The weekly report
+
+1. **Did anything move?** The `MoveEvent` pair with CIs and the honest verdict —
+   usually "within noise", which is information.
+2. **What did we do?** Deterministic counters: gate harm, silent misses, alert
+   and entry rates, freshness lapses, harness findings, and every promotion with
+   its attribution state.
+3. **What next?** ≤3 ranked proposals, each with falsifier and validator.
+
+Quarterly adds the North Star with its CI and states whether it is still
+provisional.
+
+---
+
+## 12. Operating point
+
+Weekly cadence, minimal budget. The report is **deterministic**; the LLM only
+interprets a finished evidence pack — a prepared table, not a database — and
+emits at most a reading, ≤3 hypotheses and a recommended next step. The weekly
+report therefore exists and is trustworthy **before** any agent is built, which
+is also the correct order given §0.
+
+---
+
+## 13. Rollout
 
 | Phase | Builds | Exit gate |
 |---|---|---|
-| 0 | Capability registry, metric registry, contracts, negative register | Registry reproduces every existing config key and gate; the 16 dead hypotheses are rejected mechanically |
-| 1 | Analyst + Author in **propose-only** mode; MCP evidence server | ≥10 hypotheses, 100% contract-valid, ≥3 judged worth testing by the operator |
-| 2 | Validation plane + validator registry | Re-validates three historical decisions and reproduces their published numbers within CI |
-| 3 | Adversary + Allocator | Adversary false-kill rate measurable and <15% on the calibration set |
-| 4 | Blind Referee + shadow promotion | One hypothesis reaches shadow through the loop end-to-end with no manual step |
-| 5 | Forward-cohort gate + operator-approved live promotion | One live promotion survives attribution; agent backtest published |
+| **0a** | Repair measurement: immutable later-EOD labels, day-grouped splits, provenance fields | `truth_harness full` blocking findings → 0 |
+| **0b** | ObjectiveContract, capability registry, contracts, negative register, four-store split | The 16 dead hypotheses are rejected mechanically; no LLM path reaches a runtime override |
+| 1 | Deterministic weekly report on `MoveEvent` | Two consecutive weeks published with CI, verdicts and no unsupported arrow |
+| 2 | Validation service: snapshot manifests, purge/embargo, sealed holdout, placebo, ledger | Reproduces three historical decisions within CI; A/A returns no effect |
+| 3 | Analyst + Author, propose-only, via MCP | ≥10 contract-valid hypotheses; ≥3 judged worth testing by the operator |
+| 4 | Adversary + Planner + Referee + auditor | Adversary false-kill rate < 15% on the calibration set |
+| 5 | Shadow, then symbol-subset canary, operator-approved | One change completes shadow → canary → live and survives attribution; agent backtest published |
 
-Phases 0–2 contain no autonomous action at all. That is deliberate: the previous
+Phases 0a–2 contain no autonomous action and no LLM decisions. The previous
 version of this component failed at phase 0 and nobody noticed for two months.
-
----
-
-## 11. Explicitly out of scope
-
-- **No LLM in the live trading path.** Latency, non-determinism and
-  auditability all forbid it; the bandit stays the online decision-maker.
-- **No agent-initiated threshold tuning** without a validation report.
-- **No metric or denominator changes by the agent.**
-- **No watchlist changes** (immutable, CLAUDE.md §14).
-- **No new long-running worker** until phase 4, and then only with a launcher, a
-  status check and integration into `restart_full_stack.bat`.
-
----
-
-## 12. Operating point: weekly cadence, minimal budget
-
-Settled by the operator on 2026-08-13: **weekly** cadence, **minimal** budget,
-and the deliverable is a trustworthy weekly answer to "which way did we move".
-
-Minimal budget forces a useful shape rather than a compromise: **the report is
-deterministic, the LLM only interprets it.** All counting, splitting, CI and
-power calculation happen in non-LLM code that runs whether or not an agent is
-enabled. One weekly agent pass reads that finished evidence pack and produces at
-most: a ranked reading of what moved, ≤3 hypotheses, and a recommended next
-step. No per-question retrieval loops, no exploratory tool-calling — the agent
-sees a prepared table, not a database.
-
-That also means the weekly report exists and is trustworthy **before** any agent
-is built, which is the correct order given §0.
-
----
-
-## 13. Metric fitness — the North Star cannot answer a weekly question
-
-Measured on this repo's own data (60 days, 43 full days, `label_top20`,
-watchlist-filtered):
-
-```
-per-winner NS score:  n = 125    mean = 0.0612    sd = 0.1430
-                      63% of winners score exactly 0      CV = 2.34
-```
-
-Minimum detectable difference between two weeks (80% power, α = 0.05,
-two-sided):
-
-| unit of analysis | n / week | MDE | relative to the metric's own level |
-|---|---:|---:|---|
-| top-20 winners (**current NS**) | ~20 | **0.127** | **2.1×** |
-| movers ≥ +5% | ~83 | 0.062 | 1.0× |
-| two pooled weeks of ≥ +5% | ~160 | 0.045 | 0.7× |
-
-**A weekly NS comparison can only detect the metric tripling or collapsing to
-zero.** Anything a real change would produce is invisible. Three independent
-reasons, any one of which is disqualifying:
-
-1. **Power.** CV = 2.34, because 63% of winners score exactly 0 and the rest are
-   a long tail. A composite that is a product of three factors, one of them a
-   mostly-zero Bernoulli, is the worst possible shape for a small sample.
-2. **Direction is unreadable.** Coverage up and capture down cancels. The
-   decomposition already exists in the artifact and is what should be read.
-3. **Provenance moves with the confound.** Ground truth comes from the same
-   rolling-24h snapshot that produces the features, and which snapshots exist
-   depends on whether the scheduled tasks ran — so the label bias correlates
-   with uptime, the very thing that varies week to week (§0a rules 4 and 5).
-
-### 13.1 Proposed change — three tiers, one inference rule
-
-**Tier A — North Star stays the goal, judged quarterly.** Report it monthly with
-a CI and its MDE. Never draw a weekly arrow on it. It answers "are we building
-the right thing", on a horizon where it has the power to answer.
-
-**Tier B — a weekly steering pair, on immutable kline labels.** Both sides of
-the same event definition, so improving one at the other's expense is visible:
-
-| metric | definition | n / week | MDE (80%) |
-|---|---|---:|---|
-| `Coverage@move5` | of watchlist coins that moved ≥ +5% intraday, the share the bot alerted on **before the move's midpoint** | ~83 | ±22 pp at p=0.5 |
-| `Precision@alert` | of the bot's alerts, the share followed by ≥ +5% within 24h | ~143 | ±17 pp at p=0.5, ±13 pp at p=0.2 |
-
-Ground truth comes from **exchange klines**, not from `top_gainer_dataset`.
-That matters more than the sample size: the weekly metric then does not inherit
-the provisional label's bias, and the work of building immutable kline labels is
-also step one of fixing the North Star itself. One piece of work, two payoffs.
-
-**Tier C — deterministic process counters**, which have no sampling noise and
-are therefore honest at any cadence: gate harm (winners lost per gate), silent
-misses, alerts and entries per day, freshness lapses, harness findings, and loop
-activity (hypotheses proposed / validated / promoted / attributed).
-
-**The inference rule that makes the report trustworthy:**
-
-- every number carries `n`, base rate, CI and MDE;
-- **no arrow is drawn when |Δ| < MDE** — the report prints "рано судить" and the
-  MDE that would have been needed;
-- trend across weeks is judged by a **sequential test (CUSUM) with a yearly
-  false-alarm budget**, not by 52 independent week-vs-week tests. At α = 0.05,
-  52 independent tests manufacture ~2.6 false trends a year even when nothing
-  changes — which is precisely how a report earns distrust;
-- windows are uptime-matched: equal counts of full days, or no comparison.
-
-### 13.2 What the weekly report therefore says
-
-Three sections, in this order:
-
-1. **Did anything move?** Tier B pair with CI and MDE, and the honest verdict —
-   usually "within noise", which is information, not failure.
-2. **What did we do?** Tier C counters and every decision promoted this week with
-   its attribution status.
-3. **What next?** ≤3 ranked proposals, each with its falsifier and its validator.
-
-The quarterly section adds Tier A with its CI, and states plainly whether the
-North Star is still provisional.
 
 ---
 
 ## 14. Open questions for the operator
 
-1. **Autonomy ceiling.** Should phase 5 ever auto-promote to live behind a flag,
-   or is operator approval permanent? The design supports both; the difference
-   is one policy setting and a much larger blast-radius budget.
-2. ~~Budget~~ — settled: minimal (§12).
-3. ~~Cadence~~ — settled: weekly (§12).
-4. ~~North Star provenance~~ — settled by §13: immutable kline labels move to
-   **phase 0**, because the weekly steering pair needs them anyway and they are
-   also what retires the North Star's `provisional` status.
-5. **Remaining, and it is a real choice:** the weekly pair uses a ≥ +5% intraday
-   move as the event. That threshold buys sample size (~83/week versus ~20 for
-   top-20) at the cost of measuring something slightly broader than the product
-   goal — a +5% mover is not necessarily a day's top-20 rocket. The alternative
-   is ≥ +8% (~33/week, MDE roughly ±35 pp — too weak to steer on). The design
-   takes +5% and reports the top-20 subset alongside it, unpowered but visible.
-   If that trade is wrong, the threshold is one config value.
+1. **Economic gate.** This bot has no position sizing, so canonical portfolio
+   alpha is not a natural gate; the guardrails in §3.5 are the product-appropriate
+   substitute. But TH-11 will keep reporting FAIL until *some* profitability
+   evidence exists. Build a simulated 10-slot portfolio purely as a guardrail, or
+   formally record that this product is judged on detection and accept the
+   finding as a known, documented exception?
+2. **Autonomy ceiling.** Operator approval is permanent in this design. The only
+   candidate for bounded automation is risk-reducing rollback. Agreed?
+3. **Move threshold.** `+5%` buys ~83 events/week against ~20 for top-20, at the
+   cost of measuring something broader than the mission. `+8%` gives ~33/week —
+   too weak to steer on. Accept +5% as the labelled proxy?
