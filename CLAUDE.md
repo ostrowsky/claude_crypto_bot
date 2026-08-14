@@ -125,6 +125,17 @@ is a separate deployment diagnostic, not the North Star. Until immutable
 later-EOD labels replace the current rolling-24h same-snapshot labels, the
 computed North Star must be marked **provisional** and cannot prove progress.
 
+Since 2026-08-14 the metric is also published on immutable later-EOD labels from
+exchange klines (`NS_IMMUTABLE_LABELS_ENABLED`, `files/immutable_labels.py`) —
+**beside** the old value, never instead of it, and carrying
+`immutable_comparable_to_primary = False`: the two use different denominators
+(global top-20 ∩ watchlist vs top-20 within watchlist), so differencing them
+measures the denominator. The same-rule comparison is
+`files/_backtest_immutable_ns.py`: over 117 days the winner sets disagree on 38%
+of day-symbol pairs while EC moves 0.0243 → 0.0236. Provenance changed; the
+number did not. `provisional` lifts only when `train_top_gainer` also stops using
+the snapshot label (`TRAIN_IMMUTABLE_LABELS_ENABLED`, currently **False**).
+
 - Project root: `D:\Projects\claude_crypto_bot\`
 - **DO NOT TOUCH** `D:\Projects\gpt_crypto_bot\` — separate bot, separate Telegram token, independent process. Always check cmdline before killing any python PID.
 

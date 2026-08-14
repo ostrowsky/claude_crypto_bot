@@ -79,6 +79,17 @@ BANDIT_TG_MAX_RECORDS: int = 50_000
 TRAIN_DAY_GROUPED_SPLIT_ENABLED: bool = False
 TRAIN_SPLIT_EMBARGO_DAYS: int = 1
 
+# ── TH-03: immutable later-EOD labels ───────────────────────────────────────
+# `label_top20` marks a winner using the same rolling-24h snapshot that produced
+# the features, so a coin already up 14% is a winner because it is up 14%. The
+# immutable store ranks a finished UTC day by close/open from exchange klines.
+# Metric flag defaults ON: recomputing the North Star changes no behaviour, and
+# both values are published side by side so the change is visible.
+# Model flag defaults OFF: top_gainer_model feeds ranker_top_gainer_prob into the
+# hard veto, so relabelling it changes live gating indirectly.
+NS_IMMUTABLE_LABELS_ENABLED: bool = True
+TRAIN_IMMUTABLE_LABELS_ENABLED: bool = False
+
 ML_CANDIDATE_RANKER_RUNTIME_ENABLED: bool = True
 ML_CANDIDATE_RANKER_MODEL_FILE: str = "ml_candidate_ranker.json"
 ML_CANDIDATE_RANKER_NEUTRAL_PROBA: float = 0.40  # was 0.50 — lowered: most signals score 0.38-0.48, neutral at 0.50 penalised them all

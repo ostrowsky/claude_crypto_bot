@@ -18,6 +18,12 @@ from datetime import datetime, timezone, timedelta
 
 sys.stdout.reconfigure(encoding="utf-8")
 ROOT = Path(__file__).resolve().parent.parent
+if str(Path(__file__).resolve().parent) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+try:
+    import config
+except Exception:                                  # reporting must not need it
+    config = None
 NOW = datetime.now(timezone.utc)
 
 
@@ -185,6 +191,23 @@ def main():
     res_top20 = compute_north_star(top20, eod_ret, first_entry, pnl_pairs, "top20")
     res_raw = compute_north_star(top20_all, eod_ret, first_entry, pnl_pairs, "top20_raw")
 
+    # Immutable later-EOD ground truth (TH-03). Published BESIDE the old value,
+    # never in place of it: the historical series was computed on the snapshot
+    # label, and substituting the loader would turn a change of provenance into
+    # what looks like a change in the bot (TH-04).
+    res_imm = None
+    if getattr(config, "NS_IMMUTABLE_LABELS_ENABLED", False):
+        try:
+            import immutable_labels as IL
+            imm_all, imm_eod = IL.winners_by_day(top_n=20, watchlist=watchlist)
+            imm_all = {k for k in imm_all if k[0] >= cut_dt.strftime("%Y-%m-%d")}
+            imm = {k for k in imm_all if k[0] in full_days}
+            if imm:
+                res_imm = compute_north_star(imm, imm_eod, first_entry,
+                                             pnl_pairs, "top20_immutable")
+        except Exception as exc:                      # never break the daily run
+            print(f"[immutable labels unavailable: {exc}]")
+
     # Sustained (P1.1 — try v2 dataset, fall back if absent)
     res_sustained = None
     v2_path = ROOT/"files"/"top_gainer_dataset_v2.jsonl"
@@ -208,12 +231,24 @@ def main():
               f"EC={res_raw['early_capture']:.3f} cov={res_raw['decomp_coverage']:.2f} "
               f"(n={res_raw['n']}) — DO NOT read as performance")
     print()
-    for r in [res_top20, res_sustained]:
+    for r in [res_top20, res_imm, res_sustained]:
         if r is None: continue
-        print(f"EarlyCapture@{r['label']:<10}  {r['early_capture']:.3f}  "
+        print(f"EarlyCapture@{r['label']:<16}  {r['early_capture']:.3f}  "
               f"(n={r['n']}, cov={r['decomp_coverage']:.2f}, "
               f"cap={r['decomp_capture_mean']:.2f}, "
               f"lead={r['decomp_time_lead_mean']:.2f})")
+    if res_imm:
+        # The two lines above use DIFFERENT denominators and subtracting them
+        # measures mostly that. `label_top20` is the global top-20 intersected
+        # with the watchlist (~2 winners/day); the immutable set is the top-20
+        # *within* the watchlist (20/day), because the store holds no symbols
+        # outside it. A harder denominator scores lower on the same behaviour.
+        print(f"\n  ! the two lines are NOT comparable: {res_top20['n']} vs "
+              f"{res_imm['n']} winners over the same {len(full_days)} days.")
+        print("    top20           = global top-20 INTERSECT watchlist "
+              "(snapshot returns)")
+        print("    top20_immutable = top-20 WITHIN watchlist (exchange klines)")
+        print("    Same-rule comparison: files/_backtest_immutable_ns.py")
     if res_sustained is None:
         print("\nEarlyCapture@sustained: dataset_v2 not found — run "
               "files/_backfill_sustained_uptrend.py first")
@@ -246,6 +281,22 @@ def main():
         "decomp_capture_mean": res_top20["decomp_capture_mean"],
         "decomp_time_lead_mean": res_top20["decomp_time_lead_mean"],
     }
+    if res_imm:
+        # A second value, not a replacement. The two are computed on the same
+        # rule (day's top-20 by EOD return) and differ only in where the return
+        # comes from, so a gap between them is a labelling gap and nothing else.
+        metric["immutable_label_provenance"] = "immutable_later_eod_klines"
+        metric["immutable_n"] = res_imm["n"]
+        metric["immutable_early_capture"] = res_imm["early_capture"]
+        metric["immutable_coverage"] = res_imm["decomp_coverage"]
+        metric["immutable_capture_mean"] = res_imm["decomp_capture_mean"]
+        metric["immutable_time_lead_mean"] = res_imm["decomp_time_lead_mean"]
+        # The store covers ~98 of the watchlist's 105 symbols and starts
+        # 2026-01-26; a reader comparing the two needs that in the artifact.
+        metric["immutable_universe_note"] = "label store universe != watchlist"
+        # Carried so a downstream reader cannot difference the two by accident.
+        metric["immutable_denominator"] = "top20_within_watchlist_from_label_store"
+        metric["immutable_comparable_to_primary"] = False
     if res_sustained:
         metric["sustained_n"] = res_sustained["n"]
         metric["sustained_early_capture"] = res_sustained["early_capture"]
