@@ -37,7 +37,24 @@ North Star обязан называться **предварительным** 
 3. **Разрыв между training-метриками и deployment-метриками — самый важный диагностический сигнал.** Не сводим в одну цифру, не прячем.
 4. **Память обязательна.** Что пробовали, что approved, что rolled back — пишется в `decisions.jsonl` и `already_tried.jsonl`. Пропуск записи — регрессия.
 
-Полное состояние auto-improvement loop (что реализовано, что нет, метрики North Star за всю историю) — в [`docs/specs/features/auto-improvement-loop-spec.md`](docs/specs/features/auto-improvement-loop-spec.md). **Это живой документ.** Каждый PR, затрагивающий компонент loop'а, должен обновить строку статуса и таблицу North Star progress.
+Два документа описывают контур улучшения, и роли у них разные:
+
+- **Как построено (legacy):** [`docs/specs/features/auto-improvement-loop-spec.md`](docs/specs/features/auto-improvement-loop-spec.md)
+  — что реально подключено и как каждая часть валидировалась. Остаётся живым:
+  каждый PR по компоненту loop'а обновляет строку статуса и таблицу North Star.
+  Пункты RM-4/RM-5/RM-18 (автоисполнение и канарейка по сделкам) **отозваны**.
+- **Целевая архитектура:** [`docs/specs/features/continuous-improvement-agent-spec.md`](docs/specs/features/continuous-improvement-agent-spec.md)
+  — то, к чему строим. **При расхождении побеждает целевая.**
+
+Одностраничная карта системы: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
+**Канал рантайм-оверрайдов (2026-08-14).** `decisions.jsonl` — одновременно
+память и исполняемый канал: `_config_runtime_overrides.apply_overrides`
+применяет `diff.to` при каждом `import config`. Выключатель —
+`AUTO_APPLY_OVERRIDES_ENABLED` (сейчас `True`), и **не** `PIPELINE_AUTO_APPLY`,
+который гасит лишь авторестарт. Сам выключатель, вотчлист и токен внесены в
+`_NEVER_OVERRIDABLE`; активные оверрайды логируются на WARNING при каждом старте.
+Пока четыре хранилища не разделены физически, LLM-плоскость — `NO-GO`.
 
 ---
 

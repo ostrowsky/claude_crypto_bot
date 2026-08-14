@@ -1,15 +1,40 @@
 # Auto-Improvement Loop — full spec, living document
 
 - **Slug:** `auto-improvement-loop`
-- **Status:** in-progress — see component matrix below
+- **Status:** **LEGACY / AS-BUILT** (2026-08-14) — describes what exists and how
+  it got here. It is **no longer the normative target**; that is
+  [`continuous-improvement-agent-spec.md`](continuous-improvement-agent-spec.md).
 - **Created:** 2026-05-12
 - **Last updated:** 2026-08-13 (Truth Harness shipped; legacy training scores invalidated; North-Star ground truth marked provisional)
 - **Owner:** Vasiliy Ostrovsky + Claude
 - **North Star:** composite `EarlyCapture@top20` (target 0.40; provisional until immutable later-EOD labels, see [PROJECT_CONTEXT.md](../../../PROJECT_CONTEXT.md))
 - **Project priority:** P0 (founding principle, see [CLAUDE.md §0](../../../CLAUDE.md))
 
-> **This document is the single source of truth for what's wired up and what
-> isn't.** Every PR that touches a loop component must update:
+> **Normative status changed on 2026-08-14.** This document remains the record
+> of what is *wired up* and how each piece was validated, and PRs touching a
+> loop component must still update it. It is **not** the design to build toward.
+> Where it disagrees with
+> [`continuous-improvement-agent-spec.md`](continuous-improvement-agent-spec.md),
+> that spec wins.
+>
+> **Retired from this document, as directly contradicting the target
+> architecture:**
+>
+> - **RM-4 as an auto-execution enabler.** The runtime-override channel it
+>   describes is real and live, but it is now classified as defect #0 in
+>   [`docs/ARCHITECTURE.md`](../../ARCHITECTURE.md): `decisions.jsonl` is both
+>   research memory and an execution channel, and no LLM component may write to
+>   it until the four-store split lands. RM-4 stays here as as-built history,
+>   not as a goal.
+> - **RM-5 auto-rollback** — same channel, same block.
+> - **RM-18 canary "5% → 25% → 100% by trades-per-day"** — incoherent for this
+>   product twice over: the bot has no position sizing, so "trades per day" is
+>   not an exposure dial; and splitting traffic by symbol or trade is invalid
+>   here because slots, rotation, cluster caps, cooldowns and the alert budget
+>   are shared, so treatment changes what control could have done. The target
+>   design uses a shadow twin with independent state, then time-switchback.
+>
+> Every PR that touches a loop component must update:
 >
 > 1. The component's status row in §3.
 > 2. The North Star progress table in §4 (one new row per measurable change).

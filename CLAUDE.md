@@ -37,11 +37,16 @@ Concrete consequences:
    rolled back — these go in `decisions.jsonl` and `already_tried.jsonl`.
    Skipping the write is a regression.
 
-The full state of the auto-improvement loop — what's implemented, what's not,
-what the North Star metric is doing — lives in
-[`docs/specs/features/auto-improvement-loop-spec.md`](docs/specs/features/auto-improvement-loop-spec.md).
-**That spec is a living document. Every PR that touches a loop component
-must update its status row and the North Star progress table.**
+Two documents cover the improvement loop, and they have different jobs:
+
+- **As-built / legacy:** [`auto-improvement-loop-spec.md`](docs/specs/features/auto-improvement-loop-spec.md)
+  — what is wired up today and how each piece was validated. Still living: every
+  PR touching a loop component updates its status row and the North Star table.
+  Its RM-4/RM-5/RM-18 auto-execution and canary items are **retired**.
+- **Target architecture:** [`continuous-improvement-agent-spec.md`](docs/specs/features/continuous-improvement-agent-spec.md)
+  — what to build toward. **Where the two disagree, the target wins.**
+
+One-page map of the whole system: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ---
 

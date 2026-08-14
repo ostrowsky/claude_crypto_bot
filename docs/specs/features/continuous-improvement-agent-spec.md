@@ -298,8 +298,20 @@ agreement among samples of one model is not evidence.
 ### 4.3 Adversary → kill before compute
 Attacks with a fixed rubric from §0a: leaky target, population the bot never
 samples, base-rate illusion, tautological causal story, retry without new
-evidence. Measured by **false-kill rate**, estimated by letting a random 10%
-through regardless. A 0% false-kill rate means it is too permissive.
+evidence.
+
+**Measured by false-kill rate — but not the way v2 proposed it.** Estimating it
+by letting a random 10% of killed hypotheses through assumed a stream of
+experiments. At ≤12 decision-grade versions a year that is roughly **one control
+per year**, from which no rate can be estimated. Corrected:
+
+- **Primary: a fixed historical calibration corpus** — past hypotheses whose
+  outcomes are known, including the nine refuted here and the four inherited.
+  Scored offline, so it costs no live capacity and has an n worth quoting.
+- **Secondary: a rare live pass-through**, once or twice a year, as a check that
+  the corpus has not drifted from the live population — never the estimator.
+
+A 0% false-kill rate on the corpus still means the adversary is too permissive.
 
 ### 4.4 Referee → blind, advisory
 Sees the signed result bundle, the **pre-registered** metric, acceptance
@@ -393,10 +405,26 @@ denominator, coverage, regime stability, guardrail outcomes, artifacts, full
 error status, seeds, and a verdict of
 `supported | refuted | underpowered | invalid`.
 
-### 5.4 Independent recompute
-The statistical auditor recomputes the primary metric and guardrails from the
-artifacts, independently of the validator's own summary. Disagreement is
-`invalid`, not a rounding note.
+### 5.4 Independent recompute — from raw, not from artifacts
+
+Recomputing "from the artifacts" is not independence: if the validator dropped
+rows or built the eligible population wrongly, its artifacts inherit the error
+and the recompute cheerfully confirms it.
+
+The auditor therefore:
+
+- reads the **orchestrator-frozen raw snapshot**, not the validator's outputs;
+- builds eligibility and the denominator with its **own** implementation, from
+  the registered metric contract — a second implementation is the point;
+- reconstructs the candidate decision trace from the registered policy, then
+  recomputes the primary metric, guardrails, interval and manifest hashes;
+- **must not import the validator's aggregation code**, or the two share a bug;
+- treats the validator's own trace and metrics as *comparison evidence*, never
+  as input.
+
+A mismatch, a missing raw input, or an inability to reproduce yields `invalid`,
+records both payloads, and cannot be overridden by any judge, the operator
+canary or the governor.
 
 ### 5.5 Preconditions
 Freshness SLO green (`TH05_ARTIFACT_FRESHNESS`, shipped), manifest resolvable,
@@ -702,7 +730,8 @@ is also the correct order given §0.
 
 | Phase | Builds | Exit gate |
 |---|---|---|
-| **-1** | **Walking skeleton.** One seeded non-trading hypothesis over a frozen synthetic fixture, one existing validator adapter, minimal snapshot/contract/attempt record, independent result verification, one terminal state in the ledger. LLM, RAG, promotion and the broad registries all stubbed | One command carries a fresh attempt from `OBSERVED` to a verified terminal result in under ten minutes; it is repeatable and restart-safe; it cannot reach a release store; and a deliberately malformed result lands in `INVALID_RESULT` instead of at the governor. **No registry or label work starts until the pipe is proven to conduct an experiment** |
+| **-1** | **Walking skeleton — named, not abstract.** `files/improvement_fixture_validator.py` (`FixtureDeltaValidatorAdapter`): stdlib only, no network, no production state, **must not import `replay_backtest.py`, `monitor.py` or any trading module**, computes one fixed baseline/candidate delta over ≤64 rows of the checked-in fixture `files/testdata/control_plane_smoke_fixture.json`, and carries a test-only corruption mode. Plus a minimal snapshot/contract/attempt record, the §5.4 verifier, and one terminal state in the ledger. LLM, RAG, promotion and the registries are stubbed | `pyembed\python.exe files
+un_control_plane_smoke.py` carries a fresh attempt from `OBSERVED` to a verified terminal result **in under ten seconds**; it is repeatable and restart-safe; it cannot reach any release store; and the corrupted bundle lands in `INVALID_RESULT` instead of at the governor. **No registry or label work starts until this passes** — it proves the pipe conducts an experiment, and it is explicitly not market evidence |
 | **0a** | Repair measurement: immutable later-EOD labels, day-grouped splits, provenance fields, product-scoped harness profiles | zero blocking findings **in the `discovery/alert` and `exit` profiles**; `execution/portfolio` carries a signed waiver. A globally green harness is not a reachable gate — TH-11 demands portfolio alpha this product does not have, so requiring it builds a permanent freeze |
 | **0b** | ObjectiveContract, capability registry, contracts, four-store split, **and migration of existing negative results** — the casebook, rejected hypotheses, decision records and the 47 verdict-less backtests, each tagged `CONFIRMED_NEGATIVE` / `LEGACY_UNVERIFIED` / `DUPLICATE` / `MIGRATION_ERROR`. Migration never invents a missing denominator, and an unverified item raises a similarity warning rather than a rejection. **The first real cycle is blocked until this inventory is complete**; the Phase -1 skeleton is not | The 16 dead hypotheses are rejected mechanically; no LLM path reaches a runtime override |
 | 1 | Deterministic weekly report on `MoveEvent` | Two consecutive weeks published with CI, verdicts and no unsupported arrow |
