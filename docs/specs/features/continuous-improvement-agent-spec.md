@@ -18,7 +18,7 @@ same failure mode as a report that quietly absorbs a bad week.
 
 | v1 claim | Why it was wrong | v2 |
 |---|---|---|
-| "The agent has no tool that writes config" **and** the Historian writes `decisions.jsonl` | `decisions.jsonl` is executable: `_config_runtime_overrides.py` applies `diff.to` as a live override. That is a confused-deputy path from an LLM straight into trading behaviour | §4.6, §6.1 — four separate stores; the LLM writes only to the research ledger |
+| "The agent has no tool that writes config" **and** the Historian writes `decisions.jsonl` | Confirmed live on 2026-08-14: `_config_runtime_overrides.py` applies `diff.to` at every `import config`, `pipeline_approve._maybe_auto_restart` spawns a detached restart, and `PIPELINE_AUTO_APPLY` **defaults to on**. Two gating constants are overridden right now, and the newest approved record in the file was written by an LLM | §4.6, §6.1 — four separate stores; interim mitigation `PIPELINE_AUTO_APPLY=0` |
 | `(source_file, byte_offset, row_count)` is a content address | An offset identifies a position, not content. This repo demonstrably rewrites these files — 1.09 GB of orphaned `.tmp` from failed whole-file rewrites was cleared on 2026-08-13 | §3.1 — hash chain over prefixes; offsets keep only their real job, incremental reading |
 | "No arrow when \|Δ\| < MDE" | MDE is a design-time power parameter, not a decision rule on observed data | §13.3 — CI versus a pre-registered practical-significance threshold |
 | MDE figures (±22 pp, ±17 pp) | Computed assuming independent coin-days. Crypto moves inside a day are strongly correlated, so effective n is materially lower and **those figures are optimistic** | §13.2 — day-clustered bootstrap, numbers restated as upper bounds on power |
@@ -47,16 +47,25 @@ pipeline since 2026-06-17.** Every change since — the bandit leak fix, the
 curtail fallback, the soft gate, the monitored-set change — came from manual
 analysis.
 
-The measurement layer is also not currently trustworthy. `truth_harness full`
-today: **6 blocking findings and 1 warning** — leaky North-Star and top-gainer
-targets (TH-03 ×2), a row-index split that can put one UTC day on both sides
-(TH-04), no canonical portfolio alpha and no canonical ZigZag EX1 (TH-11 ×2),
-gate evidence expired 77 days past a 30-day budget (TH-10), and 47 legacy
-backtests without a durable verdict (TH-08, warning).
+The measurement layer is also not currently trustworthy. `truth_harness full`,
+`as_of 2026-08-14T09:12Z` @ `419c8b7`: **7 blocking findings and 1 warning** —
+leaky North-Star and top-gainer targets (TH-03 ×2), a row-index split that can
+put one UTC day on both sides (TH-04), no canonical portfolio alpha and no
+canonical ZigZag EX1 (TH-11 ×2), gate evidence 77 days past a 30-day budget
+(TH-10), a stale ranker artifact (TH-05, transient), and 47 legacy backtests
+without a durable verdict (TH-08, warning).
+
+The count carries a timestamp because it moves: freshness findings clear on
+their own, and a harness run inside a git worktree sees different runtime
+artifacts than one at the runtime root.
 
 **Therefore the first phase is repairing measurement and provenance, not
-launching agents.** The loop starts in `RESEARCH_ONLY` and stays there until the
-harness is green.
+launching agents.** The loop starts in `RESEARCH_ONLY` — but the exit condition
+is **zero blocking findings in the product-scoped profiles**
+(`discovery/alert`, `exit`), not a globally green harness. TH-11 demands
+canonical portfolio alpha for a product with no position sizing, so "green
+everywhere" is not a condition this system can ever satisfy, and writing it as
+the gate would build a permanent freeze.
 
 Four root causes of the previous death, each now a structural constraint:
 
@@ -343,12 +352,30 @@ refinement.
 
 `SHADOW` (logged, not applied) → `CANARY` → `LIVE behind a flag`.
 
-**Canary, defined** — v1 left this vague and a vague stage never gets used. For
-an alert product the blast radius is bounded by **symbol subset**: the change
-applies to a pre-registered, randomly chosen fraction of the watchlist for a
-fixed period, with the remainder as a concurrent control. Stop conditions:
-guardrail breach, alert-rate excursion, or any harness blocking finding →
-automatic rollback. Expansion is stepwise, never straight to full.
+**Canary — and why a symbol subset is not a valid experiment here.** A random
+symbol split looks natural but violates independence: the bot shares position
+slots, rotation, cluster and correlation caps, cooldowns and one alert budget
+across all symbols. A treatment symbol taking a slot changes what the control
+symbols could have done, so the "control" is not a control.
+
+The staged answer:
+
+1. **Shadow twin** — candidate and baseline both evaluate every symbol with
+   fully independent state (positions, cooldowns, caps, budget). No interference
+   because nothing is shared. This is the main evidence stage.
+2. **Time-switchback canary** — if a live stage is still wanted, randomise over
+   pre-declared time blocks rather than symbols, so the shared resources belong
+   to one policy at a time.
+3. **Operator-only channel** — candidate messages go to a separate topic or a
+   tagged digest, never duplicating the production alert. For a single-operator
+   product this may be the final alert-quality gate, with acceptance criteria
+   pre-registered before the output is seen, and the operator's decision
+   recorded against those criteria so post-hoc rationalisation is visible.
+
+Stop conditions at every stage: guardrail breach, alert-rate excursion, data
+integrity violation, or any harness blocking finding → the **candidate flag**
+goes off and the frozen baseline is restored. The monitor never stops the
+baseline because a candidate failed.
 
 **Operator approval is a permanent rule for behaviour-affecting changes**, not a
 toggle. Bounded auto-promotion, if ever enabled, is limited to a pre-approved
@@ -462,21 +489,38 @@ v1 defined coverage and precision on different anchors and horizons, so they
 were not two sides of one event. Corrected — a single event definition:
 
 ```
-MoveEvent
+MoveEvent  v2
   universe_snapshot   watchlist hash
-  anchor              first bar where price rises >= THRESHOLD from the day's open
+  day                 UTC day, strictly            # not Europe/Budapest
+  qualifies_if        max(high) over the UTC day >= open × (1 + THRESHOLD)
   threshold           +5%          # proxy for weekly steering
-  horizon             to the day's close, Europe/Budapest cutoff
-  midpoint            first bar where half the move's amplitude is realised
-  dedup               one event per (symbol, day); alerts within the event window
+  opportunity_window  [UTC open, early_deadline]
+  early_deadline      first crossing of open × (1 + EARLY_FRACTION)
+  early_fraction      +2.5%        # FIXED, not derived from the move's size
+  dedup               one event per (symbol, UTC day); alerts inside the window
                       collapse to the earliest
-  label_mature_at     day close + settlement
+  label_mature_at     UTC day close + settlement
 ```
 
-| metric | definition on `MoveEvent` | n / week |
+**v1 defined this wrongly and the error inverted the window.** The midpoint was
+"half the move's amplitude", so a +6% move had its midpoint at +3% — *before*
+the +5% anchor that was supposed to open the window. Coverage would then have
+been measured against a deadline that preceded the event's own start. The
+deadline is now a **fixed** +2.5% crossing, independent of how large the move
+turned out to be, which also removes hindsight from the deadline itself.
+
+The day is UTC. `Europe/Budapest` introduces 23- and 25-hour days at DST
+boundaries and disagrees with the exchange day — a silent denominator defect in
+exactly the metric built to be trustworthy.
+
+| metric | definition on `MoveEvent v2` | n / week |
 |---|---|---:|
-| `Coverage@move` | share of MoveEvents with an alert at or before `midpoint` | ~83 |
-| `Precision@alert` | share of alerts that fall inside some MoveEvent window | ~143 |
+| `Coverage@move` | of qualifying MoveEvents, the share with a first eligible alert at or before `early_deadline` | ~83 |
+| `Precision@alert` | of unique symbol-day alerts emitted before `early_deadline` or the day's cutoff, the share whose symbol-day later qualifies | ~143 |
+
+Both now use **the same pair of boundaries** on the same event version, which is
+what makes them a genuine precision/recall pair rather than two similar-sounding
+rates.
 
 Recall and precision on the same event, so trading one for the other is visible.
 Ground truth comes from **exchange klines**, not `top_gainer_dataset`, so the
@@ -486,6 +530,19 @@ also step one of retiring `provisional` on the North Star.
 `move5` is an explicitly labelled **proxy for weekly steering**. It never
 replaces the top-20 mission metric, which is reported alongside it, unpowered
 and marked so.
+
+**The surrogate must be validated, not assumed.** The chain that would justify
+steering on it has three links and only the first is demonstrated:
+
+```
+better forward_top10_min3 label   → (shown: holdout lift 0.65× → 4.07×)
+  → better coverage/earliness on mature EOD top-20   → NOT shown
+    → better alerts actually sent                    → NOT shown
+```
+
+The weekly report publishes the measured relationship between `move5` and
+canonical top-20 outcomes. If that relationship is weak or unstable, `move5`
+stays diagnostic and **cannot produce a positive overall progress verdict**.
 
 ### 11.3 The inference rule
 
@@ -528,7 +585,7 @@ is also the correct order given §0.
 
 | Phase | Builds | Exit gate |
 |---|---|---|
-| **0a** | Repair measurement: immutable later-EOD labels, day-grouped splits, provenance fields | `truth_harness full` blocking findings → 0 |
+| **0a** | Repair measurement: immutable later-EOD labels, day-grouped splits, provenance fields, product-scoped harness profiles | zero blocking findings **in the `discovery/alert` and `exit` profiles**; `execution/portfolio` carries a signed waiver. A globally green harness is not a reachable gate — TH-11 demands portfolio alpha this product does not have, so requiring it builds a permanent freeze |
 | **0b** | ObjectiveContract, capability registry, contracts, negative register, four-store split | The 16 dead hypotheses are rejected mechanically; no LLM path reaches a runtime override |
 | 1 | Deterministic weekly report on `MoveEvent` | Two consecutive weeks published with CI, verdicts and no unsupported arrow |
 | 2 | Validation service: snapshot manifests, purge/embargo, sealed holdout, placebo, ledger | Reproduces three historical decisions within CI; A/A returns no effect |
