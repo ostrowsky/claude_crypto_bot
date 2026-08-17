@@ -39,8 +39,21 @@ def _by_day(records: Iterable[dict]) -> dict[str, list[dict]]:
 
 def winners_by_day(*, top_n: int = DEFAULT_TOP_N, watchlist: set[str] | None = None,
                    store: LabelStore | None = None,
-                   min_universe: int | None = None) -> tuple[set, dict]:
+                   min_universe: int | None = None,
+                   rank_before_filter: bool = False) -> tuple[set, dict]:
     """`(winners, eod_return)` where a winner is a day's top-N by EOD return.
+
+    `rank_before_filter` decides WHICH top-N, and the two are different metrics:
+
+    * `False` — rank inside the watchlist. "The best 20 coins I can trade."
+    * `True`  — rank the whole universe, then keep the winners that happen to be
+      on the watchlist. "The exchange's top 20, of which I could trade these."
+      This is the North Star's own denominator (`watchlist ∩ global-top20`) and
+      the definition `label_top20` uses, so it is the one that is comparable
+      with the historical series.
+
+    Ranking after filtering silently answers the easier question and mints
+    exactly `top_n` winners a day regardless of whether anything moved.
 
     A day whose universe is too thin yields **no** winners rather than a short
     list: ranking six symbols and calling the top three "the day's top-20" would
@@ -48,7 +61,7 @@ def winners_by_day(*, top_n: int = DEFAULT_TOP_N, watchlist: set[str] | None = N
     """
     store = store or LabelStore()
     records = store.records()
-    if watchlist is not None:
+    if watchlist is not None and not rank_before_filter:
         records = [r for r in records if r["symbol"] in watchlist]
 
     per_day = _by_day(records)
@@ -65,6 +78,11 @@ def winners_by_day(*, top_n: int = DEFAULT_TOP_N, watchlist: set[str] | None = N
             continue
         ranked = sorted(rows, key=lambda r: -float(r["eod_return_pct"]))
         for rec in ranked[:top_n]:
+            # The intersection happens AFTER the rank, so a day where none of
+            # the global top-20 is on the watchlist yields no winners — which is
+            # the honest answer, not a reason to reach further down the list.
+            if watchlist is not None and rec["symbol"] not in watchlist:
+                continue
             winners.add((day, rec["symbol"]))
     return winners, eod
 

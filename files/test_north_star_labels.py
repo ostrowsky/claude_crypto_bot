@@ -69,6 +69,40 @@ class TestWinnerSelection(unittest.TestCase):
                             for _, s in winners))
 
 
+class TestRankBeforeFilter(unittest.TestCase):
+    """Which top-20 is being asked for. Ranking inside the watchlist answers an
+    easier question and mints exactly N winners a day whatever the market did."""
+
+    def _mixed_day(self):
+        # 10 off-watchlist coins beat every watchlist coin.
+        rows = [rec(f"X{i:02d}", "2026-05-01", 50.0 - i) for i in range(10)]
+        rows += [rec(f"W{i:02d}", "2026-05-01", 20.0 - i) for i in range(20)]
+        return _Store(rows), {f"W{i:02d}" for i in range(20)}
+
+    def test_global_rank_then_intersect_yields_fewer_winners(self):
+        store, wl = self._mixed_day()
+        winners, _ = IL.winners_by_day(top_n=20, watchlist=wl, store=store,
+                                       rank_before_filter=True)
+        # 10 of the global top-20 are off-watchlist, so only 10 survive.
+        self.assertEqual(len(winners), 10)
+        self.assertTrue(all(s.startswith("W") for _, s in winners))
+
+    def test_ranking_inside_the_watchlist_always_mints_n(self):
+        store, wl = self._mixed_day()
+        winners, _ = IL.winners_by_day(top_n=20, watchlist=wl, store=store,
+                                       rank_before_filter=False)
+        self.assertEqual(len(winners), 20)
+
+    def test_a_day_with_no_watchlist_coin_in_the_global_top_n_has_no_winners(self):
+        # The honest answer, not a reason to reach further down the list.
+        rows = [rec(f"X{i:02d}", "2026-05-01", 50.0 - i) for i in range(25)]
+        rows += [rec("W00", "2026-05-01", -5.0)]
+        winners, _ = IL.winners_by_day(top_n=20, watchlist={"W00"},
+                                       store=_Store(rows),
+                                       rank_before_filter=True)
+        self.assertEqual(winners, set())
+
+
 class TestMissingIsNotZero(unittest.TestCase):
     def test_unknown_pair_returns_none(self):
         store = _Store([rec("AUSDT", "2026-05-01", 10.0)])
@@ -117,9 +151,8 @@ class TestFlagDefaults(unittest.TestCase):
 
 
 class TestPublishedSideBySide(unittest.TestCase):
-    """The immutable value is published BESIDE the old one, and marked
-    non-comparable — the two use different denominators, so a reader who
-    differences them measures the denominator, not the bot."""
+    """The immutable value is published BESIDE the old one, never instead of
+    it, and its comparability is a machine-readable field rather than prose."""
 
     def setUp(self):
         self.src = (HERE / "_compute_early_capture.py").read_text(encoding="utf-8")
@@ -135,8 +168,15 @@ class TestPublishedSideBySide(unittest.TestCase):
                     "immutable_denominator"):
             self.assertIn(key, self.src)
 
-    def test_non_comparability_is_machine_readable_not_only_prose(self):
-        self.assertIn('metric["immutable_comparable_to_primary"] = False', self.src)
+    def test_comparability_is_machine_readable_and_names_its_denominator(self):
+        # This asserted `= False` while the store held only watchlist symbols
+        # and the two values genuinely answered different questions. Since the
+        # store went global both rank the SAME denominator, so the flag flipped.
+        # The invariant that outlived it: comparability is never left to prose,
+        # and the denominator it rests on is stated in the artifact.
+        self.assertIn('metric["immutable_comparable_to_primary"]', self.src)
+        self.assertIn('global_top20_intersect_watchlist_from_label_store', self.src)
+        self.assertIn('rank_before_filter=True', self.src)
 
 
 if __name__ == "__main__":

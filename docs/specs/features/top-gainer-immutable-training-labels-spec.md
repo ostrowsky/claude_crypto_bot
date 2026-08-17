@@ -204,6 +204,50 @@ now delegates, so one path cannot disagree with itself.
 five. The code was right and the test was corrected — worth recording, because
 the opposite reflex would have loosened a threshold to make a test pass.
 
+## Update 2026-08-17 — the blocker is cleared
+
+[`global-label-universe`](global-label-universe-spec.md) extended the store to
+734 USDT pairs, so the tiers no longer collapse and the floor is no longer
+needed (`TRAIN_IMMUTABLE_LABEL_MIN_PCT` defaults to **0.0**, reproducing the
+original "top-N of all USDT pairs"). Re-measured over 122 545 rows,
+2025-10-07..2026-08-17, 86.9% of rows labelled:
+
+```
+tier     AUC leaky    base   AUC immut    base      dAUC
+top5        0.9932   1.13%      0.9254   1.81%   -0.0678
+top10       0.9954   2.48%      0.9216   3.37%   -0.0738
+top20       0.9942   4.77%      0.8978   5.74%   -0.0964
+top50       0.9881  10.23%      0.8374  12.19%   -0.1507
+```
+
+### The residual 0.90 is confirmation, not leakage — and it is measurable
+
+Dropping `tg_return_since_open` entirely changes nothing (0.8933 → 0.8952), so
+that feature is not carrying the answer under the immutable label. Stratifying
+the same fitted model by snapshot hour shows what is:
+
+```
+snapshot hour      n     base     AUC
+        00      6132    4.26%    0.800
+        06      4312    5.52%    0.839
+        12      5186    6.17%    0.905
+        18      5083    7.20%    0.963
+```
+
+AUC rises monotonically through the day. Late snapshots score high because most
+of the day has already happened — spread across many features, not one. **At
+00 UTC, where a genuine prediction is being made, AUC is 0.80 on a 4.26% base
+rate.** That is the number worth tracking; the pooled 0.90 mixes prediction with
+confirmation and should be reported stratified.
+
+**Recommendation: the flip is now a one-line operator decision.** Tiers are
+distinct, base rates sit near the originals (1.39/2.70/5.07/11.57 vs
+1.49/3.15/6.31/15.34), and no consumer breaks. The flag stays `False` here only
+because this project's invariant is that a behaviour change ships with current
+behaviour as its default — `ranker_top_gainer_prob` moves as soon as the
+retrained blob loads, so the first 24h of `bot_events.jsonl` must be compared
+for veto rate.
+
 ## Not in scope
 
 Extending the label store beyond the watchlist so the global rank becomes

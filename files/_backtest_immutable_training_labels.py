@@ -65,7 +65,8 @@ def main() -> int:
     labels["symbol"] = [labels["symbol"][i] for i in order]
 
     days = TT._utc_days(labels["ts"])
-    floor = 5.0
+    import config as _c
+    floor = float(getattr(_c, 'TRAIN_IMMUTABLE_LABEL_MIN_PCT', 0.0))
     keep, new_labels, stats = IL.tier_labels(days, labels["symbol"],
                                              tiers=TIERS, floor=floor)
     idx = np.asarray(keep, dtype=int)

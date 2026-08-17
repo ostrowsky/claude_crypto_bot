@@ -55,11 +55,16 @@ def main() -> int:
     # watchlist, ~3.8/day) against watchlist-top-20 (20/day by construction) and
     # would have reported the definitional gap as the leakage effect. Two
     # changes at once is not an experiment.
-    _, leaky_eod = CE.load_winners(
+    _leaky, leaky_eod = CE.load_winners(
         CE.ROOT / "files" / "top_gainer_dataset.jsonl", "label_top20", cut,
         watchlist=watchlist)
-    leaky_winners = _rank_top_n(leaky_eod, top_n=20)
-    imm_winners, imm_eod = IL.winners_by_day(top_n=20, watchlist=watchlist)
+    # Both sides now rank the global universe and intersect the watchlist,
+    # so the leaky side uses its NATIVE label rather than a re-ranking:
+    # the rule is already the same and re-ranking would change it.
+    leaky_winners = _leaky
+
+    imm_winners, imm_eod = IL.winners_by_day(top_n=20, watchlist=watchlist,
+                                             rank_before_filter=True)
 
     # Compare only where both label sources have days, or the difference is
     # calendar coverage rather than labelling (TH-04).

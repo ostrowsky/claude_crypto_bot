@@ -134,6 +134,35 @@ warning naming both denominators, `immutable_denominator` in the JSON, and
 `immutable_comparable_to_primary = False` so a downstream consumer cannot
 difference them by accident. The same-rule answer lives in the backtest.
 
+## Update 2026-08-17 — the two values are comparable now
+
+With the global store, `winners_by_day(rank_before_filter=True)` reproduces the
+North Star's own denominator (`watchlist ∩ global-top20`) at **3.08 winners/day**
+against the original label's ~3.8. `immutable_comparable_to_primary` flipped to
+`True` and the printed warning became a statement of what still differs.
+
+Recomputed over the maximum period both cover (109 days, 2026-04-19..08-16):
+
+```
+                          n   per day    EC      cov    cap    lead
+snapshot rolling-24h    405       3.7   0.0727   0.62   0.17   0.67
+immutable later-EOD     319       2.9   0.1041   0.75   0.22   0.63
+in both                 175        55%
+```
+
+Last 30 days, 18 full days: leaky **0.072** vs immutable **0.129** (cov 0.58 vs
+0.82).
+
+**The honest North Star is higher than the leaky one, and the reason is
+mechanical.** The old label ranks a rolling 24h window at snapshot time, so it
+counted coins that spiked *overnight, before the day being measured* — moves the
+bot could not have caught, scored as misses. Ranking a closed UTC day asks only
+about moves that happened while the bot was watching. Coverage 0.62 → 0.75 is
+that correction, not an improvement in the bot.
+
+Still far from the 0.40 target and the 0.25 floor. What changed is that the
+number can now be trusted and compared over time.
+
 ## Not in scope
 
 Retiring the old label from `top_gainer_dataset` (it still feeds the bandit and

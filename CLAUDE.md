@@ -127,14 +127,21 @@ computed North Star must be marked **provisional** and cannot prove progress.
 
 Since 2026-08-14 the metric is also published on immutable later-EOD labels from
 exchange klines (`NS_IMMUTABLE_LABELS_ENABLED`, `files/immutable_labels.py`) —
-**beside** the old value, never instead of it, and carrying
-`immutable_comparable_to_primary = False`: the two use different denominators
-(global top-20 ∩ watchlist vs top-20 within watchlist), so differencing them
-measures the denominator. The same-rule comparison is
-`files/_backtest_immutable_ns.py`: over 117 days the winner sets disagree on 38%
-of day-symbol pairs while EC moves 0.0243 → 0.0236. Provenance changed; the
-number did not. `provisional` lifts only when `train_top_gainer` also stops using
+**beside** the old value, never instead of it. Between 08-14 and 08-17 it carried
+`immutable_comparable_to_primary = False`, because the store held only watchlist
+symbols and the two values had different denominators. That is no longer the case
+— see the update below. `provisional` lifts only when `train_top_gainer` also stops using
 the snapshot label (`TRAIN_IMMUTABLE_LABELS_ENABLED`, currently **False**).
+
+**Updated 2026-08-17.** The label store now covers the **global** USDT universe
+(734 pairs fetched, 530 resolved, ~497/day over 240 days; `build_global_labels.py`),
+so `watchlist ∩ global-top20` is reproducible from exchange klines and the two
+North Star values are comparable. `immutable_comparable_to_primary = True`.
+Maximum period (109 days): leaky **0.0727** (cov 0.62) vs immutable **0.1041**
+(cov 0.75); last 30d 0.072 vs 0.129. The honest number is HIGHER because the old
+label ranked a rolling 24h window and counted overnight spikes — moves the bot
+could not catch — as misses. Still far from the 0.40 target; what changed is that
+it can be trusted. Delisted pairs remain unrecoverable (TH-05).
 
 - Project root: `D:\Projects\claude_crypto_bot\`
 - **DO NOT TOUCH** `D:\Projects\gpt_crypto_bot\` — separate bot, separate Telegram token, independent process. Always check cmdline before killing any python PID.

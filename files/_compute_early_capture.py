@@ -199,7 +199,12 @@ def main():
     if getattr(config, "NS_IMMUTABLE_LABELS_ENABLED", False):
         try:
             import immutable_labels as IL
-            imm_all, imm_eod = IL.winners_by_day(top_n=20, watchlist=watchlist)
+            # rank_before_filter=True reproduces the North Star's own
+            # denominator, `watchlist INTERSECT global-top20` — the same
+            # question label_top20 asks. Ranking inside the watchlist answers
+            # an easier one and mints 20 winners a day regardless of the market.
+            imm_all, imm_eod = IL.winners_by_day(top_n=20, watchlist=watchlist,
+                                                 rank_before_filter=True)
             imm_all = {k for k in imm_all if k[0] >= cut_dt.strftime("%Y-%m-%d")}
             imm = {k for k in imm_all if k[0] in full_days}
             if imm:
@@ -238,17 +243,17 @@ def main():
               f"cap={r['decomp_capture_mean']:.2f}, "
               f"lead={r['decomp_time_lead_mean']:.2f})")
     if res_imm:
-        # The two lines above use DIFFERENT denominators and subtracting them
-        # measures mostly that. `label_top20` is the global top-20 intersected
-        # with the watchlist (~2 winners/day); the immutable set is the top-20
-        # *within* the watchlist (20/day), because the store holds no symbols
-        # outside it. A harder denominator scores lower on the same behaviour.
-        print(f"\n  ! the two lines are NOT comparable: {res_top20['n']} vs "
-              f"{res_imm['n']} winners over the same {len(full_days)} days.")
-        print("    top20           = global top-20 INTERSECT watchlist "
-              "(snapshot returns)")
-        print("    top20_immutable = top-20 WITHIN watchlist (exchange klines)")
-        print("    Same-rule comparison: files/_backtest_immutable_ns.py")
+        # Both lines now ask the same question — `watchlist INTERSECT
+        # global-top20` — since the label store covers the global universe.
+        # What still differs is the window and which pairs exist in it.
+        print(f"\n  both lines use the SAME rule now: global top-20 INTERSECT "
+              f"watchlist  ({res_top20['n']} vs {res_imm['n']} winners over "
+              f"{len(full_days)} full days)")
+        print("    top20           = ranked from the snapshot's rolling-24h return")
+        print("    top20_immutable = ranked from exchange klines at the day's close")
+        print("    Residual gap is the window and the universe, not the rule: the")
+        print("    store holds ~497 currently-listed pairs a day and cannot rank a")
+        print("    pair delisted since (TH-05).")
     if res_sustained is None:
         print("\nEarlyCapture@sustained: dataset_v2 not found — run "
               "files/_backfill_sustained_uptrend.py first")
@@ -291,12 +296,18 @@ def main():
         metric["immutable_coverage"] = res_imm["decomp_coverage"]
         metric["immutable_capture_mean"] = res_imm["decomp_capture_mean"]
         metric["immutable_time_lead_mean"] = res_imm["decomp_time_lead_mean"]
-        # The store covers ~98 of the watchlist's 105 symbols and starts
-        # 2026-01-26; a reader comparing the two needs that in the artifact.
-        metric["immutable_universe_note"] = "label store universe != watchlist"
+        # ~497 currently-listed pairs a day over a 240-day window. Pairs
+        # delisted since cannot be ranked, so a past day's global top-20 may be
+        # missing a coin that was genuinely in it (TH-05).
+        metric["immutable_universe_note"] = (
+            "global daily-kline universe ~497 pairs/day; delisted pairs absent")
         # Carried so a downstream reader cannot difference the two by accident.
-        metric["immutable_denominator"] = "top20_within_watchlist_from_label_store"
-        metric["immutable_comparable_to_primary"] = False
+        metric["immutable_denominator"] = "global_top20_intersect_watchlist_from_label_store"
+        # The same denominator as the primary since the store went global. The
+        # residual difference is the window (closed UTC day vs rolling 24h) and
+        # the universe (~497 currently-listed pairs, no delisted ones), not the
+        # rule — so the two may now be read against each other.
+        metric["immutable_comparable_to_primary"] = True
     if res_sustained:
         metric["sustained_n"] = res_sustained["n"]
         metric["sustained_early_capture"] = res_sustained["early_capture"]

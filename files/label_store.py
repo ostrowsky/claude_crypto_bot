@@ -36,11 +36,16 @@ import hashlib
 import io
 import json
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+# UNCHANGED on purpose. `_identity` hashes builder_version, so bumping this
+# would make every rebuild of the 19 502 written records raise
+# ImmutableLabelError. The daily tier gets its own version instead.
 BUILDER_VERSION = "label-store-v1"
+DAILY_BUILDER_VERSION = "label-store-daily-v1"
 HOUR_MS = 3_600_000
 DAY_MS = 24 * HOUR_MS
 MOVE_THRESHOLD_PCT = 5.0
@@ -109,6 +114,77 @@ def build_day_record(symbol: str, day_start_ms: int, bars: list[list],
         "complete": complete,
         "label_mature_at": _utc_day(day_start_ms + DAY_MS),
         "provenance": dict(provenance, builder_version=BUILDER_VERSION),
+    }
+
+
+def build_day_record_daily(symbol: str, day_start_ms: int, bar: list,
+                           *, provenance: dict,
+                           now_ms: int | None = None) -> dict[str, Any]:
+    """One (symbol, UTC day) label from that day's DAILY kline.
+
+    This is the global ranking tier: enough to rank a finished day by return,
+    and deliberately not enough to time anything inside it. `anchor_ts` and
+    `early_deadline_ts` stay `None` — a daily bar knows the day's high but not
+    when it was reached, and inventing a time would be worse than not having one.
+
+    Completeness is decided by whether the UTC day has closed, not by a bar
+    count: `MIN_BARS_COMPLETE` counts hourly bars, and applying it here would
+    mark every global record incomplete and drop it from every consumer.
+    """
+    if not bar:
+        raise ValueError("cannot label a day with no bar")
+    day_open = float(bar[1])
+    if day_open <= 0:
+        raise ValueError("non-positive open price")
+
+    high, low, close = float(bar[2]), float(bar[3]), float(bar[4])
+    now_ms = int(time.time() * 1000) if now_ms is None else now_ms
+    complete = now_ms >= day_start_ms + DAY_MS
+
+    max_move_pct = (high / day_open - 1.0) * 100.0
+    eod_return_pct = (close / day_open - 1.0) * 100.0
+
+    return {
+        "symbol": symbol,
+        "utc_day": _utc_day(day_start_ms),
+        "open": day_open,
+        "high": high,
+        "low": low,
+        "close": close,
+        "eod_return_pct": round(eod_return_pct, 6),
+        "max_move_pct": round(max_move_pct, 6),
+        "qualifies_move5": bool(complete and max_move_pct >= MOVE_THRESHOLD_PCT),
+        # Intraday timing does not exist at this resolution. None, never 0.
+        "anchor_ts": None,
+        "early_deadline_ts": None,
+        "bars_used": 1,
+        "complete": complete,
+        "resolution": "1d",
+        "label_mature_at": _utc_day(day_start_ms + DAY_MS),
+        "provenance": dict(provenance, builder_version=DAILY_BUILDER_VERSION),
+    }
+
+
+def resolution_of(rec: dict) -> str:
+    """Records written before the daily tier existed carry no `resolution`.
+    They are all hourly, and defaulting here beats backfilling a field into
+    immutable records — which is precisely what the store forbids."""
+    return rec.get("resolution") or "1h"
+
+
+def summarise_universe_build(*, resolved: list, failed: list) -> dict[str, Any]:
+    """Build summary that names what it could not fetch.
+
+    A universe list fetched today has no delisted pairs, so a past day's global
+    ranking is missing coins that were live then. That absence looks exactly
+    like a quiet market unless it is counted (TH-05).
+    """
+    return {
+        "symbols_resolved": len(resolved),
+        "symbols_failed": len(failed),
+        "failed_symbols": sorted(failed)[:50],
+        "caveat": "survivorship: the universe is fetched today, so pairs "
+                  "delisted since a past day are absent from that day's rank",
     }
 
 

@@ -89,11 +89,13 @@ TRAIN_SPLIT_EMBARGO_DAYS: int = 1
 # hard veto, so relabelling it changes live gating indirectly.
 NS_IMMUTABLE_LABELS_ENABLED: bool = True
 TRAIN_IMMUTABLE_LABELS_ENABLED: bool = False
-# The floor is load-bearing, not a tuning knob: a pure rank mints exactly N
-# winners a day whatever the market does, so the base rate is fixed by
-# construction. Measured here: no floor puts top50 at a 52.6% base rate.
-# +5% is the project's existing MoveEvent qualification threshold.
-TRAIN_IMMUTABLE_LABEL_MIN_PCT: float = 5.0
+# 0.0 = pure global rank, which is what the ORIGINAL label is: top-N of all
+# USDT pairs. The floor existed only because the store held the watchlist
+# alone, where rank-only put top50 at a 52.6% base rate — a coin flip.
+# Over the global universe (~500/day) rank is discriminative again:
+# base rates 1.39/2.70/5.07/11.57% against the original 1.49/3.15/6.31/15.34%.
+# Raise it to re-impose a return floor; the label path supports both.
+TRAIN_IMMUTABLE_LABEL_MIN_PCT: float = 0.0
 
 ML_CANDIDATE_RANKER_RUNTIME_ENABLED: bool = True
 ML_CANDIDATE_RANKER_MODEL_FILE: str = "ml_candidate_ranker.json"

@@ -106,7 +106,11 @@ class TestTrainerWiring(unittest.TestCase):
         import config
         self.assertFalse(getattr(config, "TRAIN_IMMUTABLE_LABELS_ENABLED", None),
                          "this model feeds the ranker hard veto")
-        self.assertEqual(getattr(config, "TRAIN_IMMUTABLE_LABEL_MIN_PCT", None), 5.0)
+        # The floor defaulted to +5% only because the store held the watchlist
+        # alone, where a pure rank put top50 at a 52.6% base rate. Over the
+        # global universe the rank is discriminative again and 0.0 reproduces
+        # the ORIGINAL label — top-N of all USDT pairs. Both remain supported.
+        self.assertEqual(getattr(config, "TRAIN_IMMUTABLE_LABEL_MIN_PCT", None), 0.0)
 
     def test_label_timing_is_not_hardcoded_to_the_leaky_value(self):
         # Three call sites used to state the leaky provenance unconditionally;

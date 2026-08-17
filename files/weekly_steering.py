@@ -99,6 +99,18 @@ def _metric(per_day: dict[str, tuple[int, int]], *, base_rate: float | None,
     }
 
 
+def is_move_event_source(rec: dict) -> bool:
+    """Only intraday-resolution records can answer a timing question.
+
+    A MoveEvent needs `early_deadline_ts` — the first crossing of +2.5% from the
+    open. A daily bar knows the day's high but not when it was reached, so it
+    cannot produce one, and a missing deadline does not mean "no deadline": it
+    means the question is unanswerable for that record.
+    """
+    import label_store
+    return label_store.resolution_of(rec) == "1h"
+
+
 def compute(labels: Sequence[dict], alerts: Sequence[dict],
             observed_hours: dict[str, int], *,
             bootstrap: int = BOOTSTRAP_DEFAULT) -> dict[str, Any]:
@@ -131,6 +143,13 @@ def compute(labels: Sequence[dict], alerts: Sequence[dict],
     for rec in labels:
         day = rec["utc_day"]
         if day not in scored_days or not rec.get("complete", True):
+            continue
+        if not is_move_event_source(rec):
+            # A daily-resolution record has no `early_deadline_ts`, and the
+            # eligibility test below degenerates to `alert_ts is not None` when
+            # the deadline is None — every alert would count as early. The
+            # watchlist filter happens to exclude these today; this does not
+            # depend on that staying true.
             continue
         total_events += 1
         qualifies = bool(rec.get("qualifies_move5"))
