@@ -85,6 +85,20 @@ class TestScorecardRefusesAProxyValue(unittest.TestCase):
         rp = self._score({})["realized_potential"]
         self.assertIsNone(rp["value"])
 
+
+    def test_reason_does_not_reinstate_the_refuted_cause(self):
+        # The first diagnosis blamed missing 15m kline history. Instrumenting
+        # the matcher showed ZERO misses from absent files: 17 of 18 are trades
+        # overlapping no detected uptrend at 1h. This pins the corrected reason
+        # so the refuted one cannot drift back into a user-facing report.
+        s = self._score({"potential_source": "mixed", "top20_zigzag_n": 9,
+                         "zigzag_coverage": 0.36,
+                         "top20": {"n": 27, "median": 0.0032}})
+        reason = str(s["realized_potential"].get("reason", "")).lower()
+        self.assertIn("not a data gap", reason)
+        self.assertNotIn("missing 15m", reason)
+        self.assertIn("overlap", reason)
+
     def test_share_carries_its_denominator(self):
         # TH-01: 11.1% is three trades out of 27; one trade moves it 3.7pp.
         s = self._score({"potential_source": "zigzag",

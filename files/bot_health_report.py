@@ -411,9 +411,9 @@ def _realized_potential_entry(ex1_payload: dict) -> dict:
                   "a matched uptrend; it is not the canonical answer")
     else:
         reason = (f"canonical coverage too thin: {zz_n} of {top.get('n')} top-20 "
-                  f"rows matched an uptrend (coverage {coverage}); the cause is "
-                  f"missing 15m kline history (history/ holds 854 files at 1h "
-                  f"against 98 at 15m), not the metric")
+                  f"rows matched an uptrend (coverage {coverage}). Not a data "
+                  f"gap — every row has klines. The trades simply do not overlap "
+                  f"any uptrend the labeler detects at swing_pct=4.0")
     return {**base, "value": None, "status": "unknown", "reason": reason,
             "diagnostic_proxy_value": top.get("median")}
 

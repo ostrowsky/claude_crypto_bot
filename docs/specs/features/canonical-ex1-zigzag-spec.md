@@ -106,13 +106,40 @@ not half-and-half) rather than fitted — and otherwise reports `unknown` **with
 the coverage and the cause**. TH-11 stays red, honestly, and now names what would
 clear it.
 
-### The cause is a data gap, not the metric
+### The cause is NOT a data gap — the first diagnosis was wrong
 
-`_zigzag_potential_for_trade` loads `history/<SYM>_<tf>.csv`. That directory
-holds **854 files at 1h and 98 at 15m**; the `_90d` variants do not match the
-name the loader builds. Most trades are on 15m, so most lookups find nothing.
-Clearing TH-11 means fetching 15m history for the traded symbols — a
-data-collection task with its own change, not a tweak here.
+The initial version of this spec said coverage was blocked by missing 15m kline
+history, citing `history/` holding 854 files at 1h against 98 at 15m. That was
+inferred from a file count and never tested. Instrumenting the matcher gives:
+
+```
+top-20 scored rows        27
+  matched                  9
+  uptrends exist, none overlapping the trade   18
+  no CSV                   0
+timeframe of unmatched:  1h  17,  15m  1
+```
+
+**Not one failure comes from a missing file.** The plain `<sym>_15m.csv` files
+cover exactly the EX1 window (2026-07-18..08-17, 2 880 bars, 98 of 105 watchlist
+symbols); it is the `_90d` variants that are stale (2026-03-22..06-20), and they
+are irrelevant here. Fetching more history would have changed nothing.
+
+What actually happens: the detector finds uptrends in the symbol's history, and
+**none of them overlaps the trade's own interval** — 17 of the 18 misses on 1h.
+Two readings, and the data here cannot separate them:
+
+- the bot entered and exited outside any clean uptrend, which for a bot whose
+  purpose is catching uptrends would be a finding about the entries, not the
+  metric;
+- or `swing_pct=4.0, min_duration_bars=4` is too strict at 1h resolution for
+  trades this short.
+
+**Relaxing the threshold until coverage looks acceptable is not the way to find
+out.** That fits the measurement to the desired answer, and this repo has a rule
+about it. Separating the two needs the trade's entry/exit timestamps carried into
+the row (they are not, today) so overlap can be examined per trade rather than
+counted in aggregate. That is the next step, and it is small.
 
 ## Findings from the review
 
