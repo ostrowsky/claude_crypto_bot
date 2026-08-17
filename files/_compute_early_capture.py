@@ -265,26 +265,41 @@ def main():
         print(f"  {b['d']} {b['sym']:<10} score={b['score']:.3f}  "
               f"(cov={b['cov']:.0f}, cap={b['cap']:.2f}, lead={b['lead']:.2f})")
 
-    # METRIC_JSON for daily aggregator (keep top-20 as primary)
+    # METRIC_JSON for daily aggregator.
+    #
+    # The immutable value becomes PRIMARY once it is available, and the metric
+    # is versioned rather than silently redefined: `_v2` so a reader comparing
+    # today against last month sees two names, not one number that changed
+    # meaning. The leaky value keeps travelling under `legacy_*` so the old
+    # series stays reconstructable (TH-04).
+    primary = res_imm or res_top20
+    versioned = "NS_EarlyCapture_top20_v2" if res_imm else "NS_EarlyCapture_top20"
     metric = {
-        "metric": "NS_EarlyCapture_top20",
+        "metric": versioned,
         # Which top-20 `n` counts. The recall denominator changed once already
         # (April), and PROJECT_CONTEXT records the two methodologies as
         # "несопоставимы напрямую"; naming it here makes the next silent
         # redefinition visible in the artifact itself.
-        "denominator": "top20_within_watchlist_from_top_gainer_dataset",
-        # Ground truth still comes from the same rolling-24h snapshot that
-        # produces the features, so this metric stays provisional (CLAUDE.md §1).
-        "label_provenance": "rolling_24h_same_snapshot",
+        "denominator": ("global_top20_intersect_watchlist_from_label_store"
+                        if res_imm else
+                        "top20_within_watchlist_from_top_gainer_dataset"),
+        "label_provenance": ("immutable_later_eod_klines" if res_imm
+                             else "rolling_24h_same_snapshot"),
         "days_window": args.days,
         "days_full": len(full_days),
         "days_down_or_partial": args.days - len(full_days),
         "raw_early_capture_all_days": res_raw["early_capture"],
-        "n": res_top20["n"],
-        "early_capture": res_top20["early_capture"],
-        "decomp_coverage": res_top20["decomp_coverage"],
-        "decomp_capture_mean": res_top20["decomp_capture_mean"],
-        "decomp_time_lead_mean": res_top20["decomp_time_lead_mean"],
+        "n": primary["n"],
+        "early_capture": primary["early_capture"],
+        "decomp_coverage": primary["decomp_coverage"],
+        "decomp_capture_mean": primary["decomp_capture_mean"],
+        "decomp_time_lead_mean": primary["decomp_time_lead_mean"],
+        # The old series, kept so it stays reconstructable rather than lost.
+        "legacy_metric": "NS_EarlyCapture_top20",
+        "legacy_label_provenance": "rolling_24h_same_snapshot",
+        "legacy_n": res_top20["n"],
+        "legacy_early_capture": res_top20["early_capture"],
+        "legacy_coverage": res_top20["decomp_coverage"],
     }
     if res_imm:
         # A second value, not a replacement. The two are computed on the same

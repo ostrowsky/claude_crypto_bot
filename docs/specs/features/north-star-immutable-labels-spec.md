@@ -1,7 +1,7 @@
 # North Star on immutable labels (TH-03)
 
 - **Slug:** `north-star-immutable-labels`
-- **Status:** spec → implementation
+- **Status:** shipped; immutable value PRIMARY since 2026-08-17
 - **Created:** 2026-08-14
 - **Consumes:** [`immutable-label-store`](immutable-label-store-spec.md)
 - **Truth-harness invariants:** TH-03 (label provenance), TH-04 (comparable
@@ -162,6 +162,48 @@ that correction, not an improvement in the bot.
 
 Still far from the 0.40 target and the 0.25 floor. What changed is that the
 number can now be trusted and compared over time.
+
+## 2026-08-17 — the immutable value becomes primary, versioned
+
+`NS_EarlyCapture_top20` → **`NS_EarlyCapture_top20_v2`**. The metric is versioned
+rather than silently redefined: a reader comparing today against last month sees
+two names, not one number whose meaning changed. The old value keeps travelling
+in the same payload as `legacy_metric` / `legacy_early_capture` / `legacy_n`, so
+the historical series stays reconstructable (TH-04).
+
+```
+metric            NS_EarlyCapture_top20_v2
+label_provenance  immutable_later_eod_klines
+denominator       global_top20_intersect_watchlist_from_label_store
+30d               0.129  (n=28, cov 0.82)
+legacy 30d        0.072  (n=38, cov 0.58)
+```
+
+Rollback: `NS_IMMUTABLE_LABELS_ENABLED=False` restores the old value as primary.
+
+### The harness checks could not see their own repair
+
+`TH03_TOP_GAINER_TARGET` and `TH04_DAY_GROUP_SPLIT` were pure source-string
+checks — "train_top_gainer splits by row index", "the label comes from the same
+snapshot". Both stayed red after the fixes shipped behind flags, because the
+strings they matched are still in the file (the legacy paths remain on purpose).
+A check that cannot observe its own repair is worse than no check: it keeps
+reporting a solved finding until the reader learns to skip the red line.
+
+They now read the **deployed model blob** — `label_timing`, `evaluation_scope` —
+which is a stricter witness than the flag, since a flag can be on while the model
+in production predates it. `TH03_NORTH_STAR_TARGET` reads which value the metric
+publishes as primary, not whether the legacy loader exists.
+
+Blocking findings dropped 5 → 2. What remains is genuinely open: canonical ZigZag
+EX1 (TH-11) and two gate locks without current-epoch evidence (TH-10).
+
+**And the re-pointed check was wrong on its first run.** `_trained_model_facts`
+caught bare `Exception` and used `io`, which `truth_harness` does not import, so
+every field came back `None` and the checks reported "no immutable label" about a
+model that had one. A swallowed error returning a plausible answer is the exact
+failure this file exists to prevent; the handler is now narrow and an unreadable
+blob is reported as `_unreadable` rather than as an absent field.
 
 ## Not in scope
 

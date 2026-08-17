@@ -132,8 +132,18 @@ exchange klines (`NS_IMMUTABLE_LABELS_ENABLED`, `files/immutable_labels.py`) —
 symbols and the two values had different denominators. That is no longer the case
 — see the update below. The remaining condition for lifting `provisional` was
 that `train_top_gainer` also stop using the snapshot label; that flag went **ON
-2026-08-17**, so the condition is met and the wording above is kept only until
-the harness check is re-pointed at the immutable value.
+2026-08-17**, so the condition is met: the primary metric is now
+`NS_EarlyCapture_top20_v2` on immutable labels and the paragraph above describes
+history, not the current state.
+
+**The primary metric is `NS_EarlyCapture_top20_v2` since 2026-08-17** — computed
+on immutable later-EOD labels, `label_provenance = immutable_later_eod_klines`,
+denominator `global_top20_intersect_watchlist_from_label_store`. It is
+**versioned, not redefined**: the old value keeps travelling in the same payload
+as `legacy_early_capture` / `legacy_n` so the historical series stays
+reconstructable (TH-04). Current 30d reading: **v2 = 0.129 (n=28, cov 0.82)**
+against legacy 0.072 (n=38, cov 0.58). Rollback: `NS_IMMUTABLE_LABELS_ENABLED=False`
+restores the old value as primary.
 
 **Updated 2026-08-17.** The label store now covers the **global** USDT universe
 (734 pairs fetched, 530 resolved, ~497/day over 240 days; `build_global_labels.py`),

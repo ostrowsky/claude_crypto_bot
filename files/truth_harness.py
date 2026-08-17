@@ -167,6 +167,37 @@ def audit_enforcement(audit: Audit, root: Path = ROOT,
                       "Run: git config core.hooksPath .githooks")
 
 
+def _trained_model_facts(root: Path) -> dict:
+    """What the live model blob says about how it was actually trained.
+
+    Source-string checks cannot see a fix: they asserted "train_top_gainer
+    splits by row index" and "the label comes from the same snapshot" long after
+    both were put behind flags, so a solved finding kept being reported. A check
+    that cannot observe its own repair is worse than no check — it teaches the
+    reader to skip the red line.
+
+    The blob is the right witness, not the flag: a flag can be on while the
+    model in production was trained before it was flipped.
+    """
+    blob = root / "files" / "top_gainer_model.json"
+    if not blob.exists():
+        return {"_unreadable": "model blob missing"}
+    try:
+        data = json.loads(blob.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        # Narrow on purpose. The first version caught bare Exception and used
+        # `io`, which this module does not import — so every field came back
+        # None and the checks reported "no immutable label" about a model that
+        # had one. A swallowed bug that returns a plausible answer is the
+        # failure mode this whole file exists to prevent.
+        return {"_unreadable": f"{type(exc).__name__}: {exc}"}
+    return {
+        "label_timing": data.get("label_timing"),
+        "evaluation_scope": data.get("evaluation_scope") or "",
+        "label_encoding_features": data.get("label_encoding_features") or [],
+    }
+
+
 def audit_model_provenance(audit: Audit, root: Path = ROOT) -> None:
     """Detect known optimistic evaluation paths from source, not model blobs."""
     audit.checked("TH03_TOP_GAINER_TARGET")
@@ -180,30 +211,53 @@ def audit_model_provenance(audit: Audit, root: Path = ROOT) -> None:
         "rank_gainers(tickers)" in daily
         and '"label_top20": int(sym in top20)' in daily
     )
-    if same_snapshot_label and '"tg_return_since_open"' in features:
+    facts = _trained_model_facts(root)
+    trained_on_snapshot = facts.get("label_timing") != "immutable_later_eod_close"
+    if same_snapshot_label and '"tg_return_since_open"' in features and trained_on_snapshot:
         audit.add(
             "TH03_TOP_GAINER_TARGET", "TH-03", "error",
             "Top-gainer AUC recognizes the current leaderboard; it does not prove final-leaderboard prediction",
-            "label_top20 and tg_return_since_open come from the same snapshot",
+            f"deployed model label_timing={facts.get('label_timing')!r}; "
+            f"label_top20 and tg_return_since_open come from the same snapshot",
             "Attach a later immutable EOD label and publish a leaky-feature ablation.",
         )
-    if same_snapshot_label and 'label_field="label_top20"' in north_star:
+    # The legacy loader stays in the source on purpose — the old series must
+    # remain reconstructable — so its presence is not the question. What matters
+    # is which value is PRIMARY in the emitted metric.
+    immutable_is_primary = (
+        '"label_provenance": ("immutable_later_eod_klines" if res_imm' in north_star
+        and '"metric": versioned' in north_star
+    )
+    if same_snapshot_label and not immutable_is_primary:
         audit.add(
             "TH03_NORTH_STAR_TARGET", "TH-03", "error",
             "Canonical North Star is not based on immutable later EOD ground truth",
-            "_compute_early_capture.py consumes label_top20 created from the same rolling-24h snapshot",
+            "_compute_early_capture.py publishes the rolling-24h snapshot label as primary",
             "Create later EOD labels, version the metric, and recompute historical baselines.",
         )
 
     audit.checked("TH04_DAY_GROUP_SPLIT")
     row_split = "split_idx = int(len(X) * (1 - val_ratio))" in trainer
-    grouped_day_split = "split_day" in trainer or "unique_days" in trainer
-    if row_split and not grouped_day_split:
+    grouped_day_split = ("split_day" in trainer or "unique_days" in trainer
+                         or "split_indices_by_day" in trainer)
+    # The deployed blob records which split actually produced it, so a trainer
+    # that merely *can* cut by row index is not a finding once the model in
+    # production was built the other way.
+    deployed_row_split = not facts.get("evaluation_scope", "").startswith("day_grouped")
+    if row_split and not grouped_day_split and deployed_row_split:
         audit.add(
             "TH04_DAY_GROUP_SPLIT", "TH-04", "error",
             "Top-gainer validation can split one UTC day across train and holdout",
-            "train_top_gainer.py splits sorted rows by row index",
+            f"deployed model evaluation_scope={facts.get('evaluation_scope')!r}",
             "Split on complete UTC days and persist date ranges.",
+        )
+    elif row_split and deployed_row_split:
+        audit.add(
+            "TH04_DAY_GROUP_SPLIT", "TH-04", "warning",
+            "Deployed top-gainer model was not built with the day-grouped split",
+            f"evaluation_scope={facts.get('evaluation_scope')!r} "
+            f"while the splitter is wired in",
+            "Retrain, or state why the flag is off.",
         )
 
     audit.checked("TH04_BANDIT_POST_FIT")

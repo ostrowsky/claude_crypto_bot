@@ -159,10 +159,17 @@ class TestPublishedSideBySide(unittest.TestCase):
     def setUp(self):
         self.src = (HERE / "_compute_early_capture.py").read_text(encoding="utf-8")
 
-    def test_primary_metric_keys_are_not_overwritten(self):
-        # Substituting the loader would make a change of provenance look like a
-        # change in performance across the historical series.
-        for key in ('"early_capture": res_top20', '"label_provenance": "rolling_24h_same_snapshot"'):
+    def test_the_legacy_series_stays_reconstructable(self):
+        # This asserted the leaky value was PRIMARY, which was right while it
+        # was the only trustworthy denominator. Since 2026-08-17 the immutable
+        # value is primary and the metric is VERSIONED (`_v2`) rather than
+        # redefined. The invariant that outlived it: substituting one value for
+        # another without renaming would make a change of provenance look like a
+        # change in performance, so the old series must still be emitted.
+        for key in ('"legacy_metric": "NS_EarlyCapture_top20"',
+                    '"legacy_label_provenance": "rolling_24h_same_snapshot"',
+                    '"legacy_early_capture": res_top20',
+                    'NS_EarlyCapture_top20_v2'):
             self.assertIn(key, self.src)
 
     def test_immutable_value_is_emitted_with_its_provenance(self):

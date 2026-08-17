@@ -163,5 +163,36 @@ class HealthTruthTests(unittest.TestCase):
         self.assertFalse(audit.blocking, audit.findings)
 
 
+class TestChecksObserveTheDeployedArtifact(unittest.TestCase):
+    """A check that cannot see its own repair is worse than no check: it keeps
+    reporting a solved finding and teaches the reader to skip the red line."""
+
+    def test_facts_come_from_the_model_blob(self):
+        import truth_harness as TH
+        facts = TH._trained_model_facts(TH.ROOT)
+        self.assertNotIn("_unreadable", facts,
+                         "the blob must be readable; a swallowed error used to "
+                         "return {} and report 'no immutable label' about a "
+                         "model that had one")
+        for key in ("label_timing", "evaluation_scope"):
+            self.assertIn(key, facts)
+
+    def test_unreadable_blob_is_reported_not_silently_empty(self):
+        import truth_harness as TH
+        facts = TH._trained_model_facts(Path("no", "such", "root"))
+        self.assertIn("_unreadable", facts)
+
+    def test_th03_clears_when_the_deployed_model_carries_immutable_labels(self):
+        import truth_harness as TH
+        facts = TH._trained_model_facts(TH.ROOT)
+        audit = TH.Audit("full")
+        TH.audit_model_provenance(audit)
+        ids = {f.check_id for f in audit.findings if f.severity == "error"}
+        if facts.get("label_timing") == "immutable_later_eod_close":
+            self.assertNotIn("TH03_TOP_GAINER_TARGET", ids)
+        if str(facts.get("evaluation_scope", "")).startswith("day_grouped"):
+            self.assertNotIn("TH04_DAY_GROUP_SPLIT", ids)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
