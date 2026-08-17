@@ -306,9 +306,21 @@ def _compute_metrics(y_true: np.ndarray, y_proba: np.ndarray, name: str) -> dict
     precision_05 = tp_05 / (tp_05 + fp_05) if (tp_05 + fp_05) > 0 else 0.0
     recall_05 = tp_05 / (tp_05 + fn_05) if (tp_05 + fn_05) > 0 else 0.0
 
+    # The entry-score bonus ladder used fixed cuts (0.3/0.3/0.35/0.4) tuned
+    # against a model whose AUC was 0.99 because it could read the label. An
+    # honestly-labelled model spreads its probabilities out, so those same cuts
+    # fired three times as often — 12.2% -> 37.1% of live candidates got a
+    # bonus, a large loosening of the entry gate smuggled in with a metric fix.
+    # Predicting positives as often as they actually occur is self-calibrating:
+    # it depends on this model's distribution, not on the previous model's.
+    base = n_pos / len(y_true) if len(y_true) else 0.0
+    bonus_threshold = (float(np.quantile(y_proba, 1.0 - base))
+                       if 0.0 < base < 1.0 else 0.5)
+
     return {
         "name": name,
         "auc": round(auc, 4),
+        "bonus_threshold": round(bonus_threshold, 6),
         "n_samples": len(y_true),
         "n_positive": n_pos,
         "positive_rate": round(n_pos / len(y_true), 4) if len(y_true) > 0 else 0,
@@ -469,6 +481,11 @@ def train_and_save(
         "tier_models": models,
         "metrics": all_metrics,
         "thresholds": {"top5": 0.15, "top10": 0.20, "top20": 0.30, "top50": 0.40},
+        # Calibrated to each tier's own base rate: the ladder fires as often as
+        # the tier actually occurs. The fixed 0.3/0.3/0.35/0.4 were tuned for
+        # the leaky model's peaked probabilities and do not transfer.
+        "bonus_thresholds": {t: m["bonus_threshold"] for t, m in
+                             all_metrics.items() if "bonus_threshold" in m},
         "train_samples": n_train,
         "val_samples": len(X_val),
         "evaluation_scope": scope,

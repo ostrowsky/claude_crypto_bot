@@ -62,6 +62,17 @@ class TopGainerPrediction:
     # Feature importance (top 5 for interpretability)
     top_features: Dict[str, float] = field(default_factory=dict)
 
+    # Ladder thresholds. The defaults below were tuned against the LEAKY model,
+    # whose AUC-0.99 probabilities were extremely peaked. An honestly-labelled
+    # model spreads its probabilities out, so reusing the fixed numbers tripled
+    # the share of candidates receiving a bonus (12.2% -> 37.1% on 48h of live
+    # candidates) — a large loosening of the entry-score gate smuggled in with a
+    # metric fix. The trainer now emits per-tier thresholds calibrated to each
+    # tier's own base rate, and they travel with the model that produced them.
+    bonus_thresholds: Dict[str, float] = field(
+        default_factory=lambda: {"top5": 0.3, "top10": 0.3,
+                                 "top20": 0.35, "top50": 0.4})
+
     @property
     def is_likely_top_gainer(self) -> bool:
         """High-confidence top 20 prediction."""
@@ -70,13 +81,14 @@ class TopGainerPrediction:
     @property
     def score_bonus(self) -> float:
         """Score bonus to add to entry decision."""
-        if self.prob_top5 > 0.3:
+        t = self.bonus_thresholds or {}
+        if self.prob_top5 > t.get("top5", 0.3):
             return 15.0
-        if self.prob_top10 > 0.3:
+        if self.prob_top10 > t.get("top10", 0.3):
             return 10.0
-        if self.prob_top20 > 0.35:
+        if self.prob_top20 > t.get("top20", 0.35):
             return 6.0
-        if self.prob_top50 > 0.4:
+        if self.prob_top50 > t.get("top50", 0.4):
             return 3.0
         return 0.0
 
@@ -413,6 +425,9 @@ class TopGainerModel:
                 prob_top50=probs.get("top50", 0.0),
                 expected_eod_return=0.0,
                 confidence=float(max(probs.values())) if probs else 0.0,
+                bonus_thresholds=dict(
+                    (self._model_payload or {}).get("bonus_thresholds")
+                    or {"top5": 0.3, "top10": 0.3, "top20": 0.35, "top50": 0.4}),
             )
         except Exception:
             pass

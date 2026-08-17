@@ -76,7 +76,7 @@ BANDIT_TG_MAX_RECORDS: int = 50_000
 # veto, so retraining on different rows changes live gating indirectly, and a
 # behaviour change ships with the current behaviour as its default.
 # Evidence: files/_backtest_day_grouped_split.py
-TRAIN_DAY_GROUPED_SPLIT_ENABLED: bool = False
+TRAIN_DAY_GROUPED_SPLIT_ENABLED: bool = True   # flipped 2026-08-17 with the label change
 TRAIN_SPLIT_EMBARGO_DAYS: int = 1
 
 # ── TH-03: immutable later-EOD labels ───────────────────────────────────────
@@ -88,7 +88,7 @@ TRAIN_SPLIT_EMBARGO_DAYS: int = 1
 # Model flag defaults OFF: top_gainer_model feeds ranker_top_gainer_prob into the
 # hard veto, so relabelling it changes live gating indirectly.
 NS_IMMUTABLE_LABELS_ENABLED: bool = True
-TRAIN_IMMUTABLE_LABELS_ENABLED: bool = False
+TRAIN_IMMUTABLE_LABELS_ENABLED: bool = True    # flipped 2026-08-17 (global label universe)
 # 0.0 = pure global rank, which is what the ORIGINAL label is: top-N of all
 # USDT pairs. The floor existed only because the store held the watchlist
 # alone, where rank-only put top50 at a 52.6% base rate — a coin flip.

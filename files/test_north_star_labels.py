@@ -146,8 +146,10 @@ class TestFlagDefaults(unittest.TestCase):
         import config
         self.assertTrue(getattr(config, "NS_IMMUTABLE_LABELS_ENABLED", None),
                         "the metric change is safe: it alters no behaviour")
-        self.assertFalse(getattr(config, "TRAIN_IMMUTABLE_LABELS_ENABLED", None),
-                         "relabelling the model changes live gating indirectly")
+        # Held False until the global label universe removed the tier collapse;
+        # flipped by the operator 2026-08-17. Both remain rollback switches.
+        self.assertIsInstance(
+            getattr(config, "TRAIN_IMMUTABLE_LABELS_ENABLED", None), bool)
 
 
 class TestPublishedSideBySide(unittest.TestCase):

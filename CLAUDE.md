@@ -130,8 +130,10 @@ exchange klines (`NS_IMMUTABLE_LABELS_ENABLED`, `files/immutable_labels.py`) —
 **beside** the old value, never instead of it. Between 08-14 and 08-17 it carried
 `immutable_comparable_to_primary = False`, because the store held only watchlist
 symbols and the two values had different denominators. That is no longer the case
-— see the update below. `provisional` lifts only when `train_top_gainer` also stops using
-the snapshot label (`TRAIN_IMMUTABLE_LABELS_ENABLED`, currently **False**).
+— see the update below. The remaining condition for lifting `provisional` was
+that `train_top_gainer` also stop using the snapshot label; that flag went **ON
+2026-08-17**, so the condition is met and the wording above is kept only until
+the harness check is re-pointed at the immutable value.
 
 **Updated 2026-08-17.** The label store now covers the **global** USDT universe
 (734 pairs fetched, 530 resolved, ~497/day over 240 days; `build_global_labels.py`),
@@ -335,15 +337,26 @@ from the same rolling-24h snapshot that produces the features, so
 immutable later-EOD labels instead, the same features score **0.83** — that is
 the honest level (`files/_backtest_immutable_training_labels.py`, 120 088 rows).
 
-The immutable path is shipped behind `TRAIN_IMMUTABLE_LABELS_ENABLED` (**False**)
-with `TRAIN_IMMUTABLE_LABEL_MIN_PCT = 5.0`. **Do not flip it without first
-deciding what happens to the tiers:** the label store holds only watchlist
-symbols, so tiers become top-N *within the watchlist*, and under the +5% floor
-`top20` and `top50` are byte-identical on the holdout (top10 differs on 0.05% of
-rows). `top_gainer_model.py`'s tier ladder uses fixed thresholds
-(0.3/0.3/0.35/0.4) calibrated for base rates 1.49/3.15/6.31/15.34%; four
-identical heads at ~3% would mis-calibrate every rung at once. Options and
-evidence: `docs/specs/features/top-gainer-immutable-training-labels-spec.md`.
+**`TRAIN_IMMUTABLE_LABELS_ENABLED` and `TRAIN_DAY_GROUPED_SPLIT_ENABLED` are ON
+since 2026-08-17**, together, so one measurable change is attributable. Live AUC
+0.925/0.921/0.898/0.837, `evaluation_scope = day_grouped_holdout_immutable_later_eod_label`.
+Rollback: flip either flag and restore `files/top_gainer_model.pre_immutable.json`.
+
+**`top_gainer_model.json` does NOT feed the ranker hard veto** — an earlier
+version of this file said it did. `ranker_top_gainer_prob` comes from a
+top-gainer model trained inside `ml_candidate_ranker.py` and serialised into
+`ml_candidate_ranker.json`. `top_gainer_model.json` is loaded by
+`enhanced_signals` and becomes `top_gainer_bonus`, added to the entry score.
+(Over 24h `ranker_hard_veto` fired 0 times in 2 573 blocks — the four gates above
+it take everything.)
+
+**The bonus ladder is calibrated per model since 2026-08-17.** `score_bonus` used
+fixed cuts (0.3/0.3/0.35/0.4) implicitly tuned to the leaky model's peaked
+probabilities; on the honest model those same cuts fired on 37.1% of candidates
+instead of 12.2% — a 3× loosening of the entry gate that would have shipped
+silently at the 02:30 retrain. `_compute_metrics` now emits a per-tier
+`bonus_threshold` at the base-rate quantile and the ladder reads it. Net effect
++0.7pp. Evidence: `docs/specs/features/top-gainer-immutable-training-labels-spec.md`.
 
 ### Learning progress (rebased 2026-08-13)
 

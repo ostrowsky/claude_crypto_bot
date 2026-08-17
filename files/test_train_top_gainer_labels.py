@@ -102,10 +102,17 @@ class TestTrainerWiring(unittest.TestCase):
     def setUp(self):
         self.src = (HERE / "train_top_gainer.py").read_text(encoding="utf-8")
 
-    def test_flag_defaults_to_current_behaviour(self):
+    def test_flags_exist_as_rollback_switches(self):
         import config
-        self.assertFalse(getattr(config, "TRAIN_IMMUTABLE_LABELS_ENABLED", None),
-                         "this model feeds the ranker hard veto")
+        # This asserted the flag was OFF, and asserted it was off "because this
+        # model feeds the ranker hard veto" — which is WRONG and was inherited
+        # from CLAUDE.md without checking. `ranker_top_gainer_prob` comes from a
+        # top-gainer model trained INSIDE ml_candidate_ranker.py and stored in
+        # its own blob. `top_gainer_model.json` feeds enhanced_signals'
+        # `top_gainer_bonus`, which adjusts the entry score. Flipped on
+        # 2026-08-17; what must survive is that the switch exists.
+        self.assertIsInstance(
+            getattr(config, "TRAIN_IMMUTABLE_LABELS_ENABLED", None), bool)
         # The floor defaulted to +5% only because the store held the watchlist
         # alone, where a pure rank put top50 at a 52.6% base rate. Over the
         # global universe the rank is discriminative again and 0.0 reproduces
@@ -126,6 +133,50 @@ class TestTrainerWiring(unittest.TestCase):
     def test_report_carries_base_rate_and_trained_row_count(self):
         for key in ("label_base_rate", "n_records_labelled"):
             self.assertIn(key, self.src)
+
+
+class TestBonusLadderCalibration(unittest.TestCase):
+    """The entry-score bonus ladder used cuts tuned against a model that could
+    read its own label. Reusing them on an honest model tripled how often the
+    bonus fired (12.2% -> 37.1% of live candidates) — a gate change smuggled in
+    with a metric fix."""
+
+    def test_prediction_uses_supplied_thresholds(self):
+        from top_gainer_model import TopGainerPrediction
+        p = TopGainerPrediction(symbol="X", timestamp_ms=0, prob_top5=0.5,
+                                prob_top10=0.5, prob_top20=0.5, prob_top50=0.5,
+                                expected_eod_return=0.0, confidence=0.5,
+                                bonus_thresholds={"top5": 0.9, "top10": 0.9,
+                                                  "top20": 0.9, "top50": 0.9})
+        self.assertEqual(p.score_bonus, 0.0)
+        p.bonus_thresholds = {"top5": 0.4, "top10": 0.4,
+                              "top20": 0.4, "top50": 0.4}
+        self.assertEqual(p.score_bonus, 15.0)
+
+    def test_default_thresholds_preserve_the_old_ladder(self):
+        # A model blob without calibration must behave exactly as before.
+        from top_gainer_model import TopGainerPrediction
+        p = TopGainerPrediction(symbol="X", timestamp_ms=0, prob_top5=0.0,
+                                prob_top10=0.0, prob_top20=0.36, prob_top50=0.0,
+                                expected_eod_return=0.0, confidence=0.4)
+        self.assertEqual(p.score_bonus, 6.0)
+
+    def test_trainer_emits_a_threshold_per_tier(self):
+        src = (HERE / "train_top_gainer.py").read_text(encoding="utf-8")
+        self.assertIn('"bonus_thresholds"', src)
+        self.assertIn("bonus_threshold", src)
+
+    def test_threshold_is_the_base_rate_quantile(self):
+        # Predicting positives as often as they occur is self-calibrating: it
+        # depends on this model's distribution, not the previous model's.
+        import numpy as np
+        import train_top_gainer as TT
+        rng = np.random.default_rng(7)
+        y = (rng.random(2000) < 0.05).astype(float)
+        proba = rng.random(2000)
+        m = TT._compute_metrics(y, proba, "t")
+        fired = float((proba > m["bonus_threshold"]).mean())
+        self.assertAlmostEqual(fired, y.mean(), places=2)
 
 
 if __name__ == "__main__":

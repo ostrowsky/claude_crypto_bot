@@ -1,13 +1,13 @@
 # `top_gainer_model` on immutable training labels (TH-03)
 
 - **Slug:** `top-gainer-immutable-training-labels`
-- **Status:** spec → implementation
+- **Status:** shipped, flags ON 2026-08-17
 - **Created:** 2026-08-15
 - **Parent:** [`north-star-immutable-labels`](north-star-immutable-labels-spec.md)
 - **Consumes:** [`immutable-label-store`](immutable-label-store-spec.md)
 - **Truth-harness invariants:** TH-01 (base rate beside every ratio), TH-03
   (label provenance), TH-04 (comparable windows), TH-07 (flagged behaviour change)
-- **Flag:** `TRAIN_IMMUTABLE_LABELS_ENABLED`, **default `False`**
+- **Flag:** `TRAIN_IMMUTABLE_LABELS_ENABLED` — **ON since 2026-08-17**
 - **Rollback:** set the flag to `False`; the next nightly retrain restores the
   previous labels
 
@@ -20,10 +20,16 @@ is an input *and* very nearly the answer. The model scores AUC ≈ 0.99 on every
 tier and the emitted `label_timing` already confesses
 `same_snapshot_current_24h_leaderboard`.
 
-This is the last consumer of the leaky label that changes live behaviour:
-`top_gainer_model` produces `ranker_top_gainer_prob`, which feeds the candidate
-ranker's hard veto. It is also what keeps TH-03 red and the North Star
-`provisional`.
+This is the last consumer of the leaky label that changes live behaviour, and it
+keeps TH-03 red and the North Star `provisional`.
+
+**Correction (2026-08-17):** earlier revisions of this spec said the model feeds
+`ranker_top_gainer_prob` into the ranker's hard veto. It does not, and the claim
+was inherited from CLAUDE.md without being checked. `ranker_top_gainer_prob`
+comes from a top-gainer model trained inside `ml_candidate_ranker.py` and stored
+in that blob. `top_gainer_model.json` is consumed by `enhanced_signals` as
+`top_gainer_bonus`, an addition to the entry **score**. The reasoning built on
+the wrong consumer still reached a safe conclusion, but for the wrong reason.
 
 ## What the store can and cannot reproduce
 
@@ -124,9 +130,9 @@ label sets have different base rates and AUC alone would not show it.
 
 **Shadow/canary:** the flag default leaves production untouched, so there is no
 second live behaviour to stage. When the operator flips it, the nightly retrain
-is the change and the rollback is the flag. `ranker_top_gainer_prob` shifts as
-soon as the retrained blob loads, so the first 24h of `bot_events.jsonl` must be
-compared for veto rate before walking away.
+is the change and the rollback is the flag. The quantity to watch is the
+`top_gainer_bonus` distribution and the `entry_score` block rate — not the veto
+rate; see the correction above.
 
 ## Maximum-period evidence
 
@@ -247,6 +253,51 @@ because this project's invariant is that a behaviour change ships with current
 behaviour as its default — `ranker_top_gainer_prob` moves as soon as the
 retrained blob loads, so the first 24h of `bot_events.jsonl` must be compared
 for veto rate.
+
+## Flipped 2026-08-17 — and the veto was the wrong thing to watch
+
+Both flags on (`TRAIN_IMMUTABLE_LABELS_ENABLED`, `TRAIN_DAY_GROUPED_SPLIT_ENABLED`),
+retrained, blob promoted, bot restarted. `evaluation_scope` now reads
+`day_grouped_holdout_immutable_later_eod_label` and `label_encoding_features` is
+empty. 84 565 train / 21 069 holdout rows.
+
+**`top_gainer_model.json` does not feed the ranker hard veto.** This spec, and
+CLAUDE.md, said it did. `ranker_top_gainer_prob` comes from a top-gainer model
+trained *inside* `ml_candidate_ranker.py` and serialised into its own blob
+(`ml_candidate_ranker.py:1188`). `top_gainer_model.json` is loaded by
+`enhanced_signals`, which turns it into `top_gainer_bonus` — an addition to the
+entry **score**. So the veto rate cannot move with this change.
+
+It also could not have been observed: over the last 24h, `ranker_hard_veto`
+fired **0 times in 2 573 blocks**. The four gates above it take everything:
+`trend_quality` 30.2%, `mode_range_quality` 28.9%, `trend_chop` 21.7%,
+`ml_zone` 18.5%.
+
+### The bonus ladder was calibrated to the leaky model, and nearly shipped a gate change
+
+The quantity that *does* move is the score bonus. Scored on the same 1 883 live
+candidates from the last 48h:
+
+```
+                                mean    p90    bonus fires on
+OLD blob (leaky, fixed cuts)   +0.893  +3.00      12.2%
+NEW blob, fixed cuts           +4.480 +15.00      37.1%    <- 3x looser
+NEW blob, calibrated cuts      +0.772  +3.00      12.9%
+```
+
+`score_bonus` used hardcoded cuts (0.3/0.3/0.35/0.4) implicitly tuned to a model
+whose AUC was 0.99 because it could read its label. An honestly-labelled model
+spreads its probabilities, so the same cuts fired three times as often — a large
+loosening of the entry-score gate that would have ridden along with a metric fix,
+unnoticed, at the 02:30 retrain.
+
+`_compute_metrics` now emits a per-tier `bonus_threshold` at the base-rate
+quantile: the ladder fires as often as the tier actually occurs. This is
+self-calibrating — it depends on the model's own distribution, not the previous
+model's. Live cuts: 0.937 / 0.902 / 0.827 / 0.658. Net effect on the bonus rate
+is **+0.7pp**, which is the honest size of this change.
+
+Rollback: flip either flag and restore `files/top_gainer_model.pre_immutable.json`.
 
 ## Not in scope
 

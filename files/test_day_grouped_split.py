@@ -93,11 +93,17 @@ class TestTrainerWiring(unittest.TestCase):
     """The flag must be inert by default: production behaviour is unchanged
     until the operator flips it."""
 
-    def test_flag_exists_and_defaults_to_off(self):
+    def test_flag_exists_as_the_rollback_path(self):
+        # Asserted "defaults to off" until the operator flipped it on
+        # 2026-08-17, together with the immutable label change so one
+        # measurable change is attributable. What must survive is that the
+        # flag still EXISTS and still names a rollback — a behaviour change
+        # without a way back is the thing this test was really guarding.
         import config
-        self.assertFalse(getattr(config, "TRAIN_DAY_GROUPED_SPLIT_ENABLED", None),
-                         "a behaviour change must default to current behaviour")
+        self.assertIsInstance(
+            getattr(config, "TRAIN_DAY_GROUPED_SPLIT_ENABLED", None), bool)
         self.assertIsInstance(getattr(config, "TRAIN_SPLIT_EMBARGO_DAYS", None), int)
+
 
     def test_trainer_imports_the_shared_splitter(self):
         src = (HERE / "train_top_gainer.py").read_text(encoding="utf-8")
