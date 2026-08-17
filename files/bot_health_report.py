@@ -339,6 +339,38 @@ def compute_training_to_live_gap(training: dict, deploy: dict) -> dict:
     return {"available": True, "value": gap, "severity": severity, "interpretation": interp}
 
 
+
+def _portfolio_alpha_entry() -> dict:
+    """TH-11 canonical profitability, computed rather than declared unknown.
+
+    Stays `unknown` when it genuinely cannot be computed — a window with no
+    closed trades is not 0% alpha. It is reported as a DIAGNOSTIC: the bot is an
+    alert system with no position sizing, so this answers "is the stream worth
+    acting on", not "what should be maximised".
+    """
+    try:
+        import portfolio_alpha
+        res = portfolio_alpha.compute(30)
+    except Exception as exc:                       # never break the report
+        return {"value": None, "target": 0.0, "unit": "pct", "status": "unknown",
+                "reason": f"portfolio_alpha failed: {type(exc).__name__}",
+                "source": "portfolio_alpha.compute"}
+    if not res.get("available"):
+        return {"value": None, "target": 0.0, "unit": "pct", "status": "unknown",
+                "reason": res.get("reason", "not computable"),
+                "source": "portfolio_alpha.compute"}
+    return {
+        "value": res["alpha_vs_buy_and_hold_pct"], "target": 0.0, "unit": "pct",
+        "status": "measured",
+        "role": "diagnostic",
+        "n": res["n_trades"], "window": res["window"],
+        "bot_return_pct": res["bot_return_pct"],
+        "buy_and_hold_pct": res["buy_and_hold_pct"],
+        "win_rate_pct": res["win_rate_pct"],
+        "source": "portfolio_alpha.compute (MAX_OPEN equal slots, closed trades)",
+    }
+
+
 def build_canonical_scorecard(metrics_daily: dict) -> dict:
     """One current value per canonical business question.
 
@@ -364,12 +396,7 @@ def build_canonical_scorecard(metrics_daily: dict) -> dict:
             "definition": "mean(coverage * realized_capture * time_lead) on watchlist∩global-top20 winner-days",
             "source": "NS_EarlyCapture_top20",
         },
-        "portfolio_alpha": {
-            "value": None, "target": 0.0, "unit": "pct",
-            "status": "unknown",
-            "reason": "fresh aggregate weekly evaluator report not available in health inputs",
-            "source": "signal-efficiency evaluator summary.alpha_vs_buy_and_hold_pct",
-        },
+        "portfolio_alpha": _portfolio_alpha_entry(),
         "signal_precision": {
             "value": precision.get("precision_pct"), "target": 35.0,
             "unit": "pct", "n": precision.get("n_unique_entries"),

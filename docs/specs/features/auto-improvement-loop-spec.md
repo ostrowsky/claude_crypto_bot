@@ -130,7 +130,7 @@ Legend: ✅ done · 🟡 partial · ❌ not implemented · ⏸ deferred
 
 | ID | Component | Status | Tests | Notes |
 |----|-----------|--------|-------|-------|
-| L1-a | `bot_health_report.py` daily snapshot | ✅ | `test_bot_health_critic_phase.py` (6) | reads `top_gainer_critic_*_final` preferred over `_midday` |
+| L1-a | `bot_health_report.py` daily snapshot | ✅ | `test_bot_health_critic_phase.py` (6), `test_portfolio_alpha.py` (11) | reads `top_gainer_critic_*_final` preferred over `_midday`. **`portfolio_alpha` is computed since 2026-08-17** (`portfolio_alpha.compute`, MAX_OPEN equal slots vs equal-weight watchlist buy-and-hold from the immutable store) instead of reading `unknown` off a stale evaluator report. First honest reading: alpha **negative on every window** (30d -6.24%, 180d -15.97%) against a benchmark that was itself negative. Reported as a diagnostic, not an optimisation target; an uncomputable window stays `unknown`, never 0%. Spec: [`portfolio-alpha`](portfolio-alpha-spec.md) |
 | L1-b | Training evidence (recall@20, UCB sep, AUC) | 🟡 | `test_truth_harness.py`, `test_bot_health_report_integrity.py` | legacy recall is post-fit/in-sample; AUC uses same-snapshot target and answer-encoding feature; report now suppresses/labels diagnostics; honest temporal holdout remains P0 |
 | L1-c | Deployment health (early_capture, FPR, …) | ✅ | indirect | from critic final |
 | L1-d | Per-mode signal evaluator | ✅ | — | `_weekly_signal_eval_with_tg.py` writes `evaluation_output/per_mode/<mode>/report.json` |

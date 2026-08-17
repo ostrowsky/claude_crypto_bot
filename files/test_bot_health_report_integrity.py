@@ -163,12 +163,26 @@ class TrainingEvidenceTests(unittest.TestCase):
         gap = H.compute_training_to_live_gap(got, {"watchlist_top_bought_pct": 0.4})
         self.assertFalse(gap["available"])
 
-    def test_scorecard_keeps_portfolio_alpha_unknown_and_prioritizes_ground_truth(self):
+    def test_scorecard_prioritizes_ground_truth_and_never_fabricates_alpha(self):
         score = H.build_canonical_scorecard({"metrics": {
             "NS_EarlyCapture_top20": {"early_capture": 0.07, "n": 26,
                                          "days_window": 14, "days_full": 10},
         }})
-        self.assertIsNone(score["portfolio_alpha"]["value"])
+        # Alpha used to be asserted None because it was genuinely uncomputable.
+        # It is computed now (portfolio_alpha.compute), so the invariant that
+        # survives is the one that mattered: a value only ever appears WITH the
+        # evidence behind it, and an uncomputable window stays None rather than
+        # becoming 0% — "flat" is a claim, "unknown" is the truth.
+        alpha = score["portfolio_alpha"]
+        if alpha["value"] is None:
+            self.assertEqual(alpha["status"], "unknown")
+            self.assertIn("reason", alpha)
+        else:
+            self.assertEqual(alpha["status"], "measured")
+            self.assertEqual(alpha["role"], "diagnostic")
+            for key in ("n", "window", "bot_return_pct", "buy_and_hold_pct"):
+                self.assertIn(key, alpha)
+
         self.assertEqual(score["north_star"]["status"], "provisional")
         steps = H.derive_next_steps(score, {}, {}, date(2026, 8, 13))
         self.assertEqual(steps[0]["id"], "restore_eod_ground_truth")
