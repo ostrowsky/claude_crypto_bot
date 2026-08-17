@@ -543,6 +543,15 @@ Grace period backtest (2026-04-20): не помогает — проблема �
 |--------|-------|----------|
 | `CryptoBot_DailyLearning_EOD` | 02:30 local (00:30 UTC) | Полный цикл обучения: snapshot → resolve → train bandit → retrain model → report |
 | `CryptoBot_IntradaySnapshot` | 08:30, 14:30, 20:30 local | Сбор фич для top_gainer_dataset (intraday snapshot) |
+| `CryptoBot_KlinesBackfill_Daily` | 06:00 local | Обновление `history/<sym>_15m.csv` (`--days 30 --tf 15m`) |
+| `CryptoBot_KlinesBackfill_1h_Daily` | 06:20 local | Обновление `history/<sym>_1h.csv` (`--days 60 --tf 1h`) — **добавлена 2026-08-17** |
+
+**До 2026-08-17 часовые klines не обновлял никто.** Задача в 06:00 идёт только с
+`--tf 15m`, поэтому `history/<sym>_1h.csv` замёрзли на 2026-06-20 (58 дней), а 15m
+оставались свежими. Ошибок не было: задача, которую не просили делать 1h, не может
+на этом упасть. Цена вскрылась через два слоя — канонический режим EX1 сопоставил
+**0 из 136** сделок на 1h. Проверка свежести исправна (`cache_covers_window`
+перекачивает всё старше 6 часов), так что `--skip-existing` устаревание не вернёт.
 
 **Подвох планировщика (исправлено 2026-08-13):** все задачи CryptoBot были созданы
 с `DisallowStartIfOnBatteries` / `StopIfGoingOnBatteries` = True, поэтому на

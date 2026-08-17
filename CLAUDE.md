@@ -416,6 +416,18 @@ To re-run: `pyembed\python.exe files\analyze_blocked_gates.py` from repo root.
 |------|------|--------|
 | `CryptoBot_DailyLearning_EOD` | 02:30 local (00:30 UTC) | Full cycle: snapshot → resolve → train bandit → retrain model → report |
 | `CryptoBot_IntradaySnapshot` | 08:30 / 14:30 / 20:30 local | Feature snapshot → `top_gainer_dataset` |
+| `CryptoBot_KlinesBackfill_Daily` | 06:00 local | `history/<sym>_15m.csv` refresh (`--days 30 --tf 15m`) |
+| `CryptoBot_KlinesBackfill_1h_Daily` | 06:20 local | `history/<sym>_1h.csv` refresh (`--days 60 --tf 1h`) — **added 2026-08-17** |
+
+
+**Nothing refreshed 1h until 2026-08-17.** The 06:00 task runs `--tf 15m` only,
+so `history/<sym>_1h.csv` froze at 2026-06-20 — 58 days stale — while the 15m
+cache stayed current. Nothing errored: a task never asked to do 1h cannot fail at
+it. The cost showed up two layers away, in EX1's canonical mode matching **0 of
+136** trades on 1h, because no uptrend can overlap a trade happening two months
+after the data ends. The freshness check itself is fine (`cache_covers_window`
+re-fetches anything whose last bar is over 6h old), so `--skip-existing` will not
+re-introduce staleness — the gap was purely that no schedule invoked it.
 
 **Scheduler gotcha (fixed 2026-08-13):** every CryptoBot task was created with
 `DisallowStartIfOnBatteries` / `StopIfGoingOnBatteries` = True, so on battery the
