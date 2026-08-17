@@ -371,6 +371,53 @@ def _portfolio_alpha_entry() -> dict:
     }
 
 
+
+# Canonical EX1 needs enough rows measured against a MATCHED uptrend. Chosen,
+# not fitted: 20 top-20 rows is about a month of winners, and 60% coverage
+# means the average is not half one definition and half another.
+EX1_MIN_TOP20_ZIGZAG = 20
+EX1_MIN_COVERAGE = 0.60
+
+
+def _realized_potential_entry(ex1_payload: dict) -> dict:
+    """Publish EX1 only when it is canonical enough to mean what it says.
+
+    The proxy takes the day's intraday high as the potential, so it reports a
+    systematically smaller ratio — on the same 30 days, share_ex1_ge_05 = 0.0%
+    against the canonical 11.1%. Publishing it would answer the question with a
+    number measuring a move no single trade had to catch. A mixed average of the
+    two is worse: two definitions wearing one name (TH-02).
+    """
+    top = (ex1_payload or {}).get("top20") or {}
+    source = (ex1_payload or {}).get("potential_source")
+    zz_n = (ex1_payload or {}).get("top20_zigzag_n") or 0
+    coverage = (ex1_payload or {}).get("zigzag_coverage")
+    base = {
+        "target": 0.50, "unit": "ratio",
+        "n": top.get("n"),
+        "share_ex1_ge_05": top.get("share_ex1_ge_05"),
+        "potential_source": source,
+        "zigzag_coverage": coverage,
+        "top20_zigzag_n": zz_n,
+        "source": "EX1_realized_potential.top20",
+    }
+    if source == "zigzag" or (source == "mixed"
+                              and zz_n >= EX1_MIN_TOP20_ZIGZAG
+                              and (coverage or 0) >= EX1_MIN_COVERAGE):
+        return {**base, "value": top.get("median"), "status": "measured"}
+
+    if source == "proxy" or source is None:
+        reason = ("proxy-mode EX1 measures against the day's intraday high, not "
+                  "a matched uptrend; it is not the canonical answer")
+    else:
+        reason = (f"canonical coverage too thin: {zz_n} of {top.get('n')} top-20 "
+                  f"rows matched an uptrend (coverage {coverage}); the cause is "
+                  f"missing 15m kline history (history/ holds 854 files at 1h "
+                  f"against 98 at 15m), not the metric")
+    return {**base, "value": None, "status": "unknown", "reason": reason,
+            "diagnostic_proxy_value": top.get("median")}
+
+
 def build_canonical_scorecard(metrics_daily: dict) -> dict:
     """One current value per canonical business question.
 
@@ -417,14 +464,8 @@ def build_canonical_scorecard(metrics_daily: dict) -> dict:
             "provenance": "winner set uses same-snapshot rolling-24h labels",
             "source": "E1_time_to_signal",
         },
-        "realized_potential": {
-            "value": None, "diagnostic_proxy_value": ex1.get("median"),
-            "target": 0.50,
-            "unit": "ratio", "n": ex1.get("n"),
-            "status": "unknown",
-            "reason": "daily aggregator runs deprecated proxy-mode, not canonical --use-zigzag mode",
-            "source": "EX1_realized_potential.top20",
-        },
+        "realized_potential": _realized_potential_entry(
+            md.get("EX1_realized_potential") or {}),
         "fast_reversal": {
             "value": fr.get("fr_v1_overall_pct"), "target_max": 8.0,
             "unit": "pct", "n": fr.get("n_total_pairs"),

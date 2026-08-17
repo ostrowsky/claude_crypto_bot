@@ -14,25 +14,31 @@ ROOT = Path(__file__).resolve().parent.parent
 PYEMBED = ROOT / "pyembed" / "python.exe"
 
 SCRIPTS = [
-    "_backtest_top20_coverage_funnel.py",   # C1, C2
-    "_backtest_fast_reversal_by_mode.py",   # Q1, Q3
-    "_backtest_signal_precision.py",        # D1, D2
-    "_backtest_whipsaw_rate.py",            # Q2
-    "_backtest_time_to_signal.py",          # E1
-    "_backtest_capture_ratio.py",           # E2
-    "_compute_early_capture.py",            # north-star
-    "_backtest_ex1_realized_potential.py",  # EX1 (exit-side, 2026-05-02)
-    "_backtest_net_realized_pnl.py",        # NET realized pnl, gross vs fee (2026-06-17)
+    # (filename, args). It was a flat list of names and subprocess.run
+    # passed no arguments, so `--use-zigzag` could not be set no matter
+    # what anyone intended — the daily EX1 has always been the proxy.
+    # A metric computable only one way because the CALLER cannot express
+    # the other is a caller defect, not a metric defect.
+    ("_backtest_top20_coverage_funnel.py", []),
+    ("_backtest_fast_reversal_by_mode.py", []),
+    ("_backtest_signal_precision.py", []),
+    ("_backtest_whipsaw_rate.py", []),
+    ("_backtest_time_to_signal.py", []),
+    ("_backtest_capture_ratio.py", []),
+    ("_compute_early_capture.py", []),
+    ("_backtest_ex1_realized_potential.py", ["--use-zigzag"]),
+    ("_backtest_net_realized_pnl.py", []),
 ]
 
 row = {"ts": datetime.now(timezone.utc).isoformat()}
-for s in SCRIPTS:
+for s, script_args in SCRIPTS:
     p = ROOT / "files" / s
     if not p.exists():
         row[s] = {"error": "missing"}
         continue
     try:
-        out = subprocess.run([str(PYEMBED), str(p)], capture_output=True,
+        out = subprocess.run([str(PYEMBED), str(p), *script_args],
+                             capture_output=True,
                              text=True, encoding="utf-8", timeout=180)
         text = (out.stdout or "") + (out.stderr or "")
         # Find METRIC_JSON: lines
@@ -59,7 +65,7 @@ with io.open(out_path, "a", encoding="utf-8") as f:
 # Print compact summary
 print(f"=== Metrics row appended: {out_path} ===")
 print(f"timestamp: {row['ts']}")
-for s in SCRIPTS:
+for s, _ in SCRIPTS:
     m = row.get(s, {})
     if "error" in m:
         print(f"  {s:<45} ERR: {m['error']}")

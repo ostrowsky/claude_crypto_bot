@@ -266,8 +266,33 @@ for ex1, r in worst[:10]:
     print(f"  {r['d']:<11} {r['sym']:<10} {r['mode']+'/'+r['tf']:<22} "
           f"{r['pnl']:>+6.2f}% {r['potential']:>+6.1f}% {ex1:>+5.2f}  {r['exit_reason']}")
 
+# Which measure produced these numbers. The proxy takes the day's intraday
+# high as the potential, so every ratio comes out smaller: on the same 30 days
+# the proxy reported share_ex1_ge_05 = 0.0% where the canonical zigzag measure
+# reported 11.1%. Two materially different numbers under one metric name is
+# what TH-02 exists to prevent, and downstream they were indistinguishable.
+# Counted over the rows that actually enter the metric (those with potential
+# data), not over `pairs` as a whole. The first version read a stray `rows`
+# that happened to exist at module scope, so it reported 1 and 1 out of 403 —
+# Python raised nothing and the "mixed" verdict was built on noise.
+_scored = top20_pairs + non_pairs
+_n_zigzag = sum(1 for r in _scored if r.get("potential_source") == "zigzag")
+_n_proxy = sum(1 for r in _scored if r.get("potential_source") == "proxy")
 metric = {
     "metric": "EX1_realized_potential",
+    # Canonical only when every row was measured against a matched uptrend. A
+    # trade with no match falls back to the proxy rather than being dropped, so
+    # a mixed population is possible and is reported rather than averaged away.
+    "potential_source": ("zigzag" if USE_ZIGZAG and _n_proxy == 0
+                         else "mixed" if USE_ZIGZAG else "proxy"),
+    "n_zigzag": _n_zigzag,
+    "n_proxy": _n_proxy,
+    # Coverage of the canonical measure, and the top-20 subset it actually
+    # covers — a "canonical" number averaged over 36% zigzag and 64% proxy
+    # rows is two definitions wearing one name.
+    "zigzag_coverage": round(_n_zigzag / max(1, len(_scored)), 4),
+    "top20_zigzag_n": sum(1 for r in top20_pairs
+                          if r.get("potential_source") == "zigzag"),
     "top20": s_top20,
     "non_winners": s_non,
 }
