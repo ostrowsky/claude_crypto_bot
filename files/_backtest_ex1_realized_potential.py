@@ -56,27 +56,51 @@ def _load_klines_csv(sym: str, tf: str = "15m") -> list[dict]:
     return bars
 
 
-def _zigzag_potential_for_trade(sym: str, entry_dt: datetime,
-                                exit_dt: datetime, tf: str = "15m") -> float | None:
-    """Find UpTrend covering this trade interval, return gain_pct (or None)."""
+def _zigzag_potential_for_trade(sym: str, entry_dt: datetime, exit_dt: datetime,
+                                tf: str = "15m") -> tuple[float | None, dict]:
+    """`(gain_pct, diag)` for the UpTrend covering this trade interval.
+
+    Returns a REASON, not just None. A missing kline file, a symbol with no
+    detected uptrends, and a trade that falls between uptrends are three
+    different facts, and all three used to arrive downstream as "proxy" — which
+    is how a coverage gap got attributed to missing data when not one row was
+    actually missing a file.
+
+    `nearest_gap_min` is how far the closest uptrend sits from the trade
+    interval, in minutes: 0 means overlapping, a large number means the trade
+    sat in a stretch the labeler sees no trend in. It is **None** when no
+    uptrend exists at all — zero there would read as "adjacent", which is the
+    opposite conclusion.
+    """
+    diag = {"why": "matched", "n_trends": 0, "nearest_gap_min": None}
     bars = _load_klines_csv(sym, tf)
     if not bars:
-        return None
+        diag["why"] = "no_klines"
+        return None, diag
     trends = detect_uptrends(bars, symbol=sym,
                              swing_pct=4.0, max_drawdown_pct=2.0,
                              min_duration_bars=4)
+    diag["n_trends"] = len(trends)
     if not trends:
-        return None
-    # Find trend whose interval overlaps with [entry_dt, exit_dt]
+        diag["why"] = "no_uptrends"
+        return None, diag
+
     best = None
+    nearest = None
     for t in trends:
-        if t.end_ts < entry_dt: continue
-        if t.start_ts > exit_dt: continue
-        # Prefer trend that started closest BEFORE or AT entry
-        if best is None or abs((t.start_ts - entry_dt).total_seconds()) < \
-                           abs((best.start_ts - entry_dt).total_seconds()):
+        gap = max(0.0, (t.start_ts - exit_dt).total_seconds(),
+                  (entry_dt - t.end_ts).total_seconds()) / 60.0
+        if nearest is None or gap < nearest:
+            nearest = gap
+        if t.end_ts < entry_dt or t.start_ts > exit_dt:
+            continue
+        if best is None or abs((t.start_ts - entry_dt).total_seconds()) <                            abs((best.start_ts - entry_dt).total_seconds()):
             best = t
-    return best.gain_pct if best else None
+    diag["nearest_gap_min"] = round(nearest, 1) if nearest is not None else None
+    if best is None:
+        diag["why"] = "no_overlap"
+        return None, diag
+    return best.gain_pct, diag
 
 
 # Phase D CLI flag — argparse only kicks in when run directly (not when imported)
@@ -180,8 +204,11 @@ with io.open(ROOT/"files"/"bot_events.jsonl", encoding="utf-8") as f:
             # Phase D: try ZigZag potential first if cache available, else proxy
             potential = None
             potential_source = "proxy"
+            zz_diag = {"why": "not_attempted", "n_trends": 0,
+                       "nearest_gap_min": None}
             if USE_ZIGZAG:
-                zz = _zigzag_potential_for_trade(sym, ent["entry_dt"], dt, tf=ent["tf"])
+                zz, zz_diag = _zigzag_potential_for_trade(
+                    sym, ent["entry_dt"], dt, tf=ent["tf"])
                 if zz is not None:
                     potential = zz
                     potential_source = "zigzag"
@@ -194,6 +221,14 @@ with io.open(ROOT/"files"/"bot_events.jsonl", encoding="utf-8") as f:
                 "potential_source": potential_source,
                 "exit_class": exit_class,
                 "exit_reason": reason[:60],
+                # The trade's own interval, so a rejection can be examined
+                # per trade instead of counted in aggregate.
+                "entry_ts": ent["entry_dt"].isoformat(),
+                "exit_ts": dt.isoformat(),
+                "hold_hours": round((dt - ent["entry_dt"]).total_seconds() / 3600.0, 2),
+                "zz_why": zz_diag["why"],
+                "zz_n_trends": zz_diag["n_trends"],
+                "zz_nearest_gap_min": zz_diag["nearest_gap_min"],
             })
 
 print(f"=== EX1: realized-to-potential capture (30 d) ===\n")
@@ -291,6 +326,17 @@ metric = {
     # covers — a "canonical" number averaged over 36% zigzag and 64% proxy
     # rows is two definitions wearing one name.
     "zigzag_coverage": round(_n_zigzag / max(1, len(_scored)), 4),
+    # Why the canonical measure could not be used, per trade rather than in
+    # aggregate. Counting "not zigzag" told us the size of the gap and nothing
+    # about its cause, and the cause was guessed wrong once already.
+    "match_failure": {
+        w: sum(1 for r in _scored if r.get("zz_why") == w)
+        for w in ("matched", "no_klines", "no_uptrends", "no_overlap")
+    },
+    "top20_match_failure": {
+        w: sum(1 for r in top20_pairs if r.get("zz_why") == w)
+        for w in ("matched", "no_klines", "no_uptrends", "no_overlap")
+    },
     "top20_zigzag_n": sum(1 for r in top20_pairs
                           if r.get("potential_source") == "zigzag"),
     "top20": s_top20,

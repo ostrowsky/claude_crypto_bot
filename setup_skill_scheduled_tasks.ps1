@@ -52,6 +52,19 @@ Register-OrUpdate `
     -LimitMin 15 `
     -Desc "Refresh history/<sym>_<tf>.csv klines cache for skill + EX1 ZigZag mode"
 
+# ── Task 1b: Daily klines backfill, 1h ─────────────────────────────────────
+# Task 1 refreshes 15m ONLY. Nothing refreshed 1h, so history/<sym>_1h.csv
+# froze at 2026-06-20 while the 15m cache stayed current — 58 days stale, with
+# no error anywhere, because a task that was never asked to run 1h cannot fail
+# at it. EX1's canonical mode then matched ZERO of 136 trades on 1h: no uptrend
+# can overlap a trade that happens two months after the data ends.
+Register-OrUpdate `
+    -Name "CryptoBot_KlinesBackfill_1h_Daily" `
+    -CmdArgs "$ROOTiles\_backfill_klines_history.py --days 60 --tf 1h --skip-existing" `
+    -Trigger (New-ScheduledTaskTrigger -Daily -At 06:20) `
+    -LimitMin 15 `
+    -Desc "Refresh history/<sym>_1h.csv - EX1 ZigZag matches nothing on stale 1h"
+
 # ── Task 2: Daily signal-evaluator (silent on no incidents) ────────────────
 Register-OrUpdate `
     -Name "CryptoBot_SignalEval_Daily" `

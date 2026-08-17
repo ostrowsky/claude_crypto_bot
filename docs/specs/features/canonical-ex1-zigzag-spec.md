@@ -106,40 +106,60 @@ not half-and-half) rather than fitted — and otherwise reports `unknown` **with
 the coverage and the cause**. TH-11 stays red, honestly, and now names what would
 clear it.
 
-### The cause is NOT a data gap — the first diagnosis was wrong
+### The cause, third and final version
 
-The initial version of this spec said coverage was blocked by missing 15m kline
-history, citing `history/` holding 854 files at 1h against 98 at 15m. That was
-inferred from a file count and never tested. Instrumenting the matcher gives:
+Two wrong answers preceded this one, and the sequence is the point.
+
+**First: "missing 15m kline history"** — inferred from a file count (854 at 1h
+against 98 at 15m), never tested. Wrong: the plain `<sym>_15m.csv` files cover
+exactly the EX1 window and not one failure came from an absent file.
+
+**Second: "the bot trades outside any detected uptrend"** — inferred from the
+failure counts. Also wrong, or rather premature. Carrying each trade's own
+interval into the row (`entry_ts`, `exit_ts`, `zz_why`, `zz_nearest_gap_min`)
+made the distribution readable, and it was bimodal in a way no market produces:
 
 ```
-top-20 scored rows        27
-  matched                  9
-  uptrends exist, none overlapping the trade   18
-  no CSV                   0
-timeframe of unmatched:  1h  17,  15m  1
+before the refresh   nearest uptrend gap:  median 44 771 min (31 days), 54% > 24h
+matched by timeframe:  15m 145,  1h 0     <- zero out of 136 on 1h
 ```
 
-**Not one failure comes from a missing file.** The plain `<sym>_15m.csv` files
-cover exactly the EX1 window (2026-07-18..08-17, 2 880 bars, 98 of 105 watchlist
-symbols); it is the `_90d` variants that are stale (2026-03-22..06-20), and they
-are irrelevant here. Fetching more history would have changed nothing.
+**A gap of exactly ~31 days on every 1h trade is not a market fact.** All 400
+sampled `<sym>_1h.csv` files ended **2026-06-20**, 58 days stale, while the 15m
+cache was current to 2026-08-17. No uptrend can overlap a trade that happens two
+months after the data stops.
 
-What actually happens: the detector finds uptrends in the symbol's history, and
-**none of them overlaps the trade's own interval** — 17 of the 18 misses on 1h.
-Two readings, and the data here cannot separate them:
+The operational cause is one line: `CryptoBot_KlinesBackfill_Daily` runs
+`_backfill_klines_history.py --days 30 --tf 15m --skip-existing`. **Only 15m.**
+Nothing ever refreshed 1h, and nothing failed — a task that was never asked to
+do 1h cannot report an error at it.
 
-- the bot entered and exited outside any clean uptrend, which for a bot whose
-  purpose is catching uptrends would be a finding about the entries, not the
-  metric;
-- or `swing_pct=4.0, min_duration_bars=4` is too strict at 1h resolution for
-  trades this short.
+### After refreshing 1h (60 days, 95 of 105 symbols)
 
-**Relaxing the threshold until coverage looks acceptable is not the way to find
-out.** That fits the measurement to the desired answer, and this repo has a rule
-about it. Separating the two needs the trade's entry/exit timestamps carried into
-the row (they are not, today) so overlap can be examined per trade rather than
-counted in aggregate. That is the next step, and it is small.
+```
+                    before      after
+zigzag_coverage      0.359      0.520
+top-20 matched      9 of 27   19 of 27
+top-20 median       0.0032     0.0267
+share EX1 >= 0.5     11.1%      22.2%
+```
+
+The remaining misses now look like a market fact rather than an artifact:
+
+```
+nearest uptrend gap:  median 113 min,  41% < 1h,  62% < 4h,  8% > 24h
+top-20 misses (8):    13, 44, 63, 127, 420, 899, 1320, 2341 minutes
+```
+
+Half the remaining top-20 misses sit within two hours of a detected uptrend.
+That is the honest version of "the bot trades outside uptrends": it enters *near*
+them, not in a different regime — a question about entry timing, which is the
+same place the negative portfolio alpha points.
+
+**The metric still does not publish.** The bar declared in the previous commit
+is `top20_zigzag_n >= 20` and `coverage >= 0.60`; this run gives 19 and 0.52.
+Lowering it now, having seen the number, is precisely the fitting this spec
+refused earlier — so TH-11 stays red, one row short.
 
 ## Findings from the review
 
