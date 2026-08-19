@@ -318,10 +318,21 @@ def audit_health_report(audit: Audit, root: Path = ROOT,
                       "North Star omits denominator/window evidence",
                       f"missing={missing}")
         score_ns = ((report.get("canonical_scorecard") or {}).get("north_star") or {})
-        if score_ns.get("status") not in ("verified", "provisional"):
+        ns_status = score_ns.get("status")
+        # `measured` is accepted ONLY on immutable later-EOD labels. CLAUDE.md §1
+        # makes "provisional" conditional -- it stands until immutable klines
+        # replace the rolling-24h same-snapshot label, which happened in
+        # c237d91. Accepting the word unconditionally would let any future
+        # provenance regression quietly relabel itself as measured, so the
+        # provenance is checked rather than the vocabulary.
+        ok = ns_status in ("verified", "provisional") or (
+            ns_status == "measured"
+            and score_ns.get("provenance") == "immutable_later_eod_klines")
+        if not ok:
             audit.add("TH03_NORTH_STAR_DISCLOSURE", "TH-03", "error",
                       "Health report does not disclose provisional North-Star labels",
-                      f"status={score_ns.get('status') or 'missing'}")
+                      f"status={ns_status or 'missing'}; "
+                      f"provenance={score_ns.get('provenance') or 'unknown'}")
 
     training = report.get("training_health") or {}
     if training.get("recall_at_20") is not None:
