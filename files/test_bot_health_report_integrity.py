@@ -338,5 +338,67 @@ class RenderingIntegrityTests(unittest.TestCase):
         self.assertNotIn("модель: находит", text)
 
 
+class VersionedMetricLookupTests(unittest.TestCase):
+    """Renaming a metric must not blank its consumers.
+
+    NS_EarlyCapture_top20 -> NS_EarlyCapture_top20_v2 stopped four lookups from
+    matching, and the 2026-08-19 morning report shipped with north_star = null.
+    The versioning was meant to stop a number changing meaning under one name;
+    it broke the reader instead.
+    """
+
+    def _latest(self, metric_name, **fields):
+        payload = {"metric": metric_name, "early_capture": 0.13, "n": 17,
+                   "days_window": 14, "days_full": 12}
+        payload.update(fields)
+        return {"available": True, "ts": "x",
+                "metrics": {metric_name: payload}}
+
+    def test_versioned_metric_answers_to_its_base_name(self):
+        md = {"ts": "x", "_compute_early_capture.py":
+              {"metric": "NS_EarlyCapture_top20_v2", "early_capture": 0.13}}
+        import pipeline_lib as PL
+        original = PL.iter_jsonl
+        PL.iter_jsonl = lambda *_a, **_k: iter([md])
+        try:
+            got = H.collect_metrics_daily_latest()["metrics"]
+        finally:
+            PL.iter_jsonl = original
+        self.assertIn("NS_EarlyCapture_top20_v2", got)
+        self.assertIn("NS_EarlyCapture_top20", got, "base name must resolve too")
+
+    def test_an_explicit_base_named_metric_wins_over_the_alias(self):
+        # The alias is a fallback, not an override.
+        md = {"ts": "x",
+              "a.py": {"metric": "NS_EarlyCapture_top20", "early_capture": 0.07},
+              "b.py": {"metric": "NS_EarlyCapture_top20_v2", "early_capture": 0.13}}
+        import pipeline_lib as PL
+        original = PL.iter_jsonl
+        PL.iter_jsonl = lambda *_a, **_k: iter([md])
+        try:
+            got = H.collect_metrics_daily_latest()["metrics"]
+        finally:
+            PL.iter_jsonl = original
+        self.assertEqual(got["NS_EarlyCapture_top20"]["early_capture"], 0.07)
+
+    def test_provenance_is_read_from_the_payload_not_hardcoded(self):
+        # The string claimed "same_snapshot ... not immutable later EOD truth"
+        # while the value came from immutable klines — an untruth in a
+        # user-facing report.
+        sc = H.build_canonical_scorecard(self._latest(
+            "NS_EarlyCapture_top20_v2",
+            label_provenance="immutable_later_eod_klines"))
+        ns = sc["north_star"]
+        self.assertEqual(ns["provenance"], "immutable_later_eod_klines")
+        self.assertEqual(ns["status"], "measured")
+        self.assertEqual(ns["metric"], "NS_EarlyCapture_top20_v2")
+
+    def test_a_snapshot_labelled_payload_stays_provisional(self):
+        sc = H.build_canonical_scorecard(self._latest(
+            "NS_EarlyCapture_top20",
+            label_provenance="rolling_24h_same_snapshot"))
+        self.assertEqual(sc["north_star"]["status"], "provisional")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

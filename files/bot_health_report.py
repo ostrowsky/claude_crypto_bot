@@ -204,6 +204,17 @@ def collect_metrics_daily_latest() -> dict:
         for metric_name, value in sub.items():
             if metric_name == "metric" and isinstance(value, str):
                 extract[value] = sub
+                # A versioned metric also answers to its base name, or renaming
+                # one silently blanks every consumer that looks it up: the
+                # 2026-08-19 report shipped with north_star = null because
+                # NS_EarlyCapture_top20 became NS_EarlyCapture_top20_v2 and four
+                # lookups stopped matching. Registered only as a FALLBACK, so an
+                # explicitly emitted base-named metric still wins, and the entry
+                # keeps its own `metric` field so nothing has to guess which
+                # version it is reading.
+                base = re.sub(r"_v\d+$", "", value)
+                if base != value:
+                    extract.setdefault(base, sub)
                 break
     return {"available": True, "ts": latest.get("ts"), "metrics": extract}
 
@@ -418,6 +429,25 @@ def _realized_potential_entry(ex1_payload: dict) -> dict:
             "diagnostic_proxy_value": top.get("median")}
 
 
+def _north_star_metric(md: dict) -> dict:
+    """The North Star payload, newest version first.
+
+    Relying on the loader's base-name alias was not enough: any caller that
+    builds `metrics` itself still missed a versioned metric, which is how a
+    rename blanked the report. Resolving it here means every consumer of the
+    scorecard gets the same answer regardless of how the dict was assembled.
+    """
+    md = md or {}
+    versioned = sorted(
+        (k for k in md if re.fullmatch(r"NS_EarlyCapture_top20(_v\d+)?", k)),
+        key=lambda k: int(re.search(r"_v(\d+)$", k).group(1)) if "_v" in k else 0,
+        reverse=True)
+    for key in versioned:
+        if md.get(key):
+            return md[key]
+    return {}
+
+
 def build_canonical_scorecard(metrics_daily: dict) -> dict:
     """One current value per canonical business question.
 
@@ -426,7 +456,7 @@ def build_canonical_scorecard(metrics_daily: dict) -> dict:
     never substituted.
     """
     md = (metrics_daily or {}).get("metrics") or {}
-    ns = md.get("NS_EarlyCapture_top20") or {}
+    ns = _north_star_metric(md)
     precision = md.get("D1_D2_precision_msgrate") or {}
     tts = md.get("E1_time_to_signal") or {}
     ex1 = (md.get("EX1_realized_potential") or {}).get("top20") or {}
@@ -436,12 +466,22 @@ def build_canonical_scorecard(metrics_daily: dict) -> dict:
         "north_star": {
             "value": ns.get("early_capture"), "target": 0.40,
             "acceptable_floor": 0.25, "unit": "ratio",
-            "status": "provisional",
-            "provenance": "same_snapshot_rolling_24h_label; not immutable later EOD truth",
+            # Read from the payload, not hardcoded: the string said
+            # "same_snapshot ... not immutable later EOD truth" while the value
+            # came from immutable klines, which would have been a plain untruth
+            # in a user-facing report.
+            "status": ("measured"
+                       if ns.get("label_provenance") == "immutable_later_eod_klines"
+                       else "provisional"),
+            "provenance": ns.get("label_provenance")
+                          or "same_snapshot_rolling_24h_label; not immutable later EOD truth",
+            "metric": ns.get("metric"),
+            "denominator": ns.get("denominator"),
+            "legacy_early_capture": ns.get("legacy_early_capture"),
             "n": ns.get("n"), "days_window": ns.get("days_window"),
             "days_full": ns.get("days_full"),
             "definition": "mean(coverage * realized_capture * time_lead) on watchlist∩global-top20 winner-days",
-            "source": "NS_EarlyCapture_top20",
+            "source": ns.get("metric") or "NS_EarlyCapture_top20",
         },
         "portfolio_alpha": _portfolio_alpha_entry(),
         "signal_precision": {
@@ -643,7 +683,7 @@ def detect_red_flags(deploy: dict, per_mode: dict, gap: dict, scout: dict,
     # More than one partial/down day cannot be explained solely by today's
     # unfinished UTC day and is an operational-coverage alert.
     md = (metrics_daily or {}).get("metrics") or {}
-    ns_md = md.get("NS_EarlyCapture_top20") or {}
+    ns_md = _north_star_metric(md)
     down = ns_md.get("days_down_or_partial")
     if isinstance(down, (int, float)) and down > 1:
         unexpected = float(down - 1)
@@ -1341,7 +1381,7 @@ def render_telegram(r: dict) -> str:
     the bot is developing, where it loses, what past decisions did, and
     whether action is needed — zero jargon."""
     md = (r.get("metrics_daily_latest") or {}).get("metrics") or {}
-    ns_md = md.get("NS_EarlyCapture_top20") or {}
+    ns_md = _north_star_metric(md)
     funnel = md.get("C1_C2_coverage_funnel") or {}
     rf = r.get("red_flags") or []
 
@@ -1572,7 +1612,7 @@ def _render_telegram_legacy(r: dict) -> str:
     # metrics_daily (NS_EarlyCapture_top20) so the headline is the actual
     # target, not a saturated training proxy.
     md = (r.get("metrics_daily_latest") or {}).get("metrics") or {}
-    ns_md = md.get("NS_EarlyCapture_top20") or {}
+    ns_md = _north_star_metric(md)
     funnel = md.get("C1_C2_coverage_funnel") or {}
     if ns["value"] is not None:
         reg = ""

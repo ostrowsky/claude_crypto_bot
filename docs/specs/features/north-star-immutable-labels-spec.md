@@ -205,6 +205,37 @@ model that had one. A swallowed error returning a plausible answer is the exact
 failure this file exists to prevent; the handler is now narrow and an unreadable
 blob is reported as `_unreadable` rather than as an absent field.
 
+## 2026-08-19 — the rename blanked the report, and how it is prevented
+
+Versioning the metric stopped one number changing meaning under one name. It
+also broke four lookups keyed on the old name, so `health-2026-08-19.json`
+shipped with `north_star.value = null` and `TH10_HEALTH_REPORT` went red. The
+report said nothing rather than something wrong — the better failure mode, still
+a failure.
+
+Fixed at two layers, because one was not enough:
+
+- `collect_metrics_daily_latest` registers a versioned metric under its base
+  name as a **fallback**, so an explicitly emitted base-named metric still wins;
+- `_north_star_metric()` resolves the newest version at every consumer. The
+  loader alias only helps callers that go through the loader, and a test written
+  for this change caught that any caller assembling `metrics` itself still
+  missed `_v2`.
+
+The scorecard additionally hardcoded
+`provenance: "same_snapshot_rolling_24h_label; not immutable later EOD truth"`.
+Reading the v2 value under that string is a plain untruth in a user-facing
+report, so provenance and status now come from the payload:
+`immutable_later_eod_klines` → `measured`, snapshot label → `provisional`.
+
+Verified live: `north_star` 0.129, status `measured`, n=17, days_full=12, with
+`legacy_early_capture` 0.074 beside it.
+
+**Invariants:** TH-02 (one canonical metric per question), TH-03 (provenance
+travels with the number), TH-10 (the report must not publish a claim it cannot
+support).
+
+
 ## Not in scope
 
 Retiring the old label from `top_gainer_dataset` (it still feeds the bandit and
