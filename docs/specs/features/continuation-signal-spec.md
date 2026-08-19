@@ -1,7 +1,7 @@
 # Continuation signal: does the information exist at decision time?
 
 - **Slug:** `continuation-signal`
-- **Status:** measurement in progress — no behaviour change proposed
+- **Status:** evidence 2026-08-19 — ranking POSITIVE, exit policy NEGATIVE, no behaviour change
 - **Created:** 2026-08-19
 - **Truth-harness invariants:** TH-01 (a ratio without its base rate is not
   evidence), TH-03 (holdout, split by time), TH-06 (validate on the population
@@ -61,10 +61,14 @@ all**. Every indicator the entry event carries (`adx`, `rsi`, `slope_pct`,
 
 So a predictor cannot be built from the logs: at the moment of decision there is
 nothing to feed it. Features here are recomputed from hourly klines, which is
-legitimate because they were available to the bot at that instant — but if
-anything ships from this line of work, **instrumenting the exit event is a
-prerequisite**, not an afterthought (§0 — a change blocked by missing logging is
-a logging-fix-first task).
+legitimate because they were available to the bot at that instant.
+
+When this was written, instrumenting the exit event looked like a hard
+prerequisite for shipping anything (§0 — a change blocked by missing logging is
+a logging-fix-first task). Step 2 then found there is nothing to ship, so the
+instrumentation is **demoted to measurement hygiene**: still worth doing, so the
+next person asking this question does not have to rebuild the state from klines
+again, but no longer blocking anything.
 
 The hourly cache also had to be repaired first: `_1h_365d` stops on 2026-06-20
 while `_1h` reached today for only a quarter of symbols, so "use whichever file
@@ -202,12 +206,100 @@ ranking runs at **15.5%**.
   Goal 3 currently captures 19.8% of the remaining move; nothing here yet says
   how much of the other 80% this could recover.
 
+## Step 2 — the replay: the ranking does NOT become an exit policy
+
+`_backtest_continuation_exit_policy.py`. Hold from entry, score P(continues) at
+each hourly bar, leave the first time it falls below a threshold; time stop at
+48 bars. Model trained on the earlier days with an embargo **on the bar, not
+just on the trade** — a trade entered before the cut runs on for 48 bars, so its
+later bars sit on the test days. (The embargo changed the answer by 0.007pp, so
+it mattered for correctness rather than for the conclusion.)
+
+Compared against the actual exits **of the same 905 trades**, not against all
+4 174: the test window is a different market, and comparing across windows is
+the error that produced a fake "СТАЛО ХУЖЕ" after the outage.
+
+```
+policy                         n    median      mean       win      beats    sum pnl   hold
+ACTUAL exits (bot today)     905    -0.499    -0.335     35.7%       0.0%     -303.4      -
+continuation p<0.03          905    -0.966    -0.700     39.1%      43.0%     -633.1     47
+continuation p<0.05          905    -0.848    -0.644     38.7%      43.9%     -582.6     47
+continuation p<0.08          905    -0.391    -0.598     33.6%      46.1%     -540.7     12
+continuation p<0.12          905    -0.257    -0.233     34.9%      55.7%     -210.7      2
+continuation p<0.20          905    -0.143    -0.152     39.2%      60.0%     -137.8      1
+fixed trail 1.5%             905    -1.136    -0.437     27.1%      37.9%     -395.8      6
+fixed trail 3.0%             905    -1.660    -0.509     30.9%      35.7%     -460.9     19
+fixed trail 8.0%             905    -0.934    -0.458     39.1%      43.4%     -414.5     47
+hold to 48 bars              905    -0.967    -0.706     38.9%      43.0%     -638.5      -
+```
+
+Two thresholds beat the actual exits on median **and** head-to-head — `p<0.20`
+at −0.143 vs −0.499, winning 60% of pairs. That looks like the result this file
+was built to find.
+
+**The duration control refutes it.** Random exits drawn from the *same*
+holding-time distribution give a median in **[−0.148, −0.116]**, which brackets
+the policy's −0.143. At equal holding time, the ranking adds nothing. And the
+`hold` column says what the "policy" actually learned: `p<0.20` holds a median
+of **one bar**, `p<0.12` two. The threshold did not learn when to leave; it
+learned to leave immediately.
+
+This is why the control existed. Without it the honest-looking conclusion would
+have been "the continuation model improves exits by 0.36pp per trade".
+
+## Why the ranking is real and still useless here
+
+Both are true and they do not conflict. The model orders bars by P(continue)
+better than chance (z = 4.53). An exit policy needs something else: the bar
+where continuation *stops*, which is one specific bar per trade, not an
+ordering over all of them. A 1.60× lift on a 9.7% base leaves the top decile
+wrong 84.5% of the time — enough to rank, nowhere near enough to time a single
+irreversible decision.
+
+## The finding underneath: the loss is not at the exit
+
+Every exit rule tested — the bot's own, five thresholds, three trail widths,
+hold-to-48 — lands between −0.14% and −1.66% median. The best is the one that
+holds for one hour. That pattern only has one explanation, and
+`_diag_forward_drift.py` confirms it directly on all 4 392 trades:
+
+```
+bar      n    median      mean    win%
+  1   4389    -0.078    -0.057    42.7
+  4   4384    -0.289    -0.199    40.7
+ 12   4378    -0.549    -0.260    39.8
+ 24   4371    -0.665    -0.331    41.0
+ 47   4359    -0.799    -0.384    43.0
+```
+
+**The median trade is already negative one hour after entry, and gets worse
+monotonically.** Win rate sits near 40% at every horizon. An exit rule chooses
+*when* to realise a path; it cannot change the path. On a population with
+negative drift from bar 1, the optimal exit converges on "immediately", which is
+the same statement as "do not enter".
+
+This agrees with `portfolio-alpha` (negative on every window: 30d −6.24%,
+60d −14.56%, 90d −11.84%, 180d −15.97%) and with `weekly-steering-pair`
+(early-alert lift 1.04× vs all-alert 3.96× — the bot confirms moves rather than
+predicting them), both reached by unrelated routes.
+
+**Goal 3 is not where the loss is.** Work aimed at capturing more of the
+remaining move is optimising the smaller term. The binding constraint is which
+candidates get entered at all — goals 1 and 2.
+
 ## Next step, in order
 
-1. **Instrument the exit event** with the state the entry event already carries.
-   Without it there is nothing to feed a live predictor, and this stays a
-   backtest forever (§0: a change blocked by missing logging is a
-   logging-fix-first task).
-2. **Replay exits under the shape-only ranking on all 4 174 trades**, the exact
-   test that killed the fixed-width trails, with the cost paid on every trade.
-3. Only then consider a shadow deployment.
+Step 2 is done and it came back negative, which changes the order of what is
+left.
+
+1. **Nothing more on exits until entries change.** With median drift negative
+   from bar 1, an exit improvement is bounded by a term that is not the binding
+   one. Re-open this only if the entered population stops losing from the first
+   hour.
+2. **Instrumenting the exit event stays worth doing**, but as measurement
+   hygiene rather than as a prerequisite for a policy: without market state at
+   exit, the next person to ask this question also has to reconstruct it from
+   klines. Demoted from blocking to useful.
+3. **The live question is goals 1 and 2** — which candidates get entered at all.
+   The early-ranking shadow is accumulating days toward a verdict; it addresses
+   exactly this and needs no new hypothesis.
