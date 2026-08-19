@@ -128,9 +128,29 @@ class TestTheTwoDefectsTheFirstLiveRunHad(unittest.TestCase):
         self.assertIn('if not blob.get("tier_models")', self.src)
         self.assertIn("refusing to", self.src)
 
+
+    def test_one_record_per_day(self):
+        # score() counts RECORDS, not days: a retry beside the scheduled run
+        # would count that day twice and bias the evidence.
+        self.assertIn("_already_logged", self.src)
+        self.assertIn('"already logged"', self.src)
+
     def test_provenance_fields_are_written(self):
         for key in ("model_evaluation_scope", "model_label_timing"):
             self.assertIn(key, self.src)
+
+
+class TestExitCodesMeanSomething(unittest.TestCase):
+    """A scheduled task whose result is always 1 trains everyone to ignore it —
+    which is how the 1h kline cache went 58 days stale without one error."""
+
+    def test_already_logged_is_success_not_failure(self):
+        src = (HERE / "early_ranking_shadow.py").read_text(encoding="utf-8")
+        self.assertIn('res.get("reason") == "already logged"', src)
+
+    def test_a_real_failure_still_returns_nonzero(self):
+        src = (HERE / "early_ranking_shadow.py").read_text(encoding="utf-8")
+        self.assertIn("        return 1", src)
 
 
 if __name__ == "__main__":

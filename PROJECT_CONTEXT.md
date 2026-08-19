@@ -545,6 +545,7 @@ Grace period backtest (2026-04-20): не помогает — проблема �
 | `CryptoBot_IntradaySnapshot` | 08:30, 14:30, 20:30 local | Сбор фич для top_gainer_dataset (intraday snapshot) |
 | `CryptoBot_KlinesBackfill_Daily` | 06:00 local | Обновление `history/<sym>_15m.csv` (`--days 30 --tf 15m`) |
 | `CryptoBot_KlinesBackfill_1h_Daily` | 06:20 local | Обновление `history/<sym>_1h.csv` (`--days 60 --tf 1h`) — **добавлена 2026-08-17** |
+| `CryptoBot_EarlyRankingShadow_Daily` | 02:50 local | Теневой top-k по целям 1-2 из снимка 00 UTC; только журнал — **добавлена 2026-08-19** |
 
 **До 2026-08-17 часовые klines не обновлял никто.** Задача в 06:00 идёт только с
 `--tf 15m`, поэтому `history/<sym>_1h.csv` замёрзли на 2026-06-20 (58 дней), а 15m

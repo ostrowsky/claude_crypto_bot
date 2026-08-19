@@ -90,6 +90,22 @@ def latest_snapshot(watchlist: set) -> tuple[str | None, list]:
     return day, sorted(by_day[day].items())
 
 
+def _already_logged(day: str) -> bool:
+    if not SHADOW_LOG.exists():
+        return False
+    with io.open(SHADOW_LOG, encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                if json.loads(line).get("utc_day") == day:
+                    return True
+            except json.JSONDecodeError:
+                continue
+    return False
+
+
 def write_today(k: int = DEFAULT_K) -> dict[str, Any]:
     watchlist = set(json.loads((HERE / "watchlist.json").read_text(encoding="utf-8")))
     day, rows = latest_snapshot(watchlist)
@@ -117,6 +133,13 @@ def write_today(k: int = DEFAULT_K) -> dict[str, Any]:
     picks = build_list(scored, k)
     if picks is None:
         return {"written": False, "reason": "empty universe"}
+
+    # One record per UTC day. `score()` counts records, not days, so a second
+    # run — a manual invocation beside the scheduled one, or a retry — would
+    # count that day twice and quietly bias the very evidence this path exists
+    # to produce.
+    if _already_logged(day):
+        return {"written": False, "utc_day": day, "reason": "already logged"}
 
     record = {
         "utc_day": day,
@@ -211,7 +234,14 @@ def main(argv: list[str] | None = None) -> int:
     if not args.score:
         res = write_today(args.k)
         print(json.dumps(res, ensure_ascii=False))
-        return 0 if res.get("written") else 1
+        # "already logged" is a NORMAL outcome for a daily task that may fire
+        # twice or be re-run by hand — it is nothing to do, not a failure.
+        # Returning 1 for it would make LastTaskResult meaningless, and a task
+        # whose result means nothing is a task nobody checks: that is exactly
+        # how the 1h kline cache went 58 days stale without a single error.
+        if res.get("written") or res.get("reason") == "already logged":
+            return 0
+        return 1
 
     if not SHADOW_LOG.exists():
         print("no shadow log yet")

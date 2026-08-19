@@ -65,6 +65,18 @@ Register-OrUpdate `
     -LimitMin 15 `
     -Desc "Refresh history/<sym>_1h.csv - EX1 ZigZag matches nothing on stale 1h"
 
+# ── Task 1c: Early-ranking shadow (goals 1-2) ──────────────────────────────
+# Runs 20 min after the 02:30 local EOD snapshot, so the 00 UTC rows exist.
+# Writes a top-k list and nothing else: no alert, no gate. Idempotent per UTC
+# day, and "already logged" exits 0 — a task whose result is always non-zero is
+# a task nobody checks.
+Register-OrUpdate `
+    -Name "CryptoBot_EarlyRankingShadow_Daily" `
+    -CmdArgs "$ROOTiles\early_ranking_shadow.py --k 10" `
+    -Trigger (New-ScheduledTaskTrigger -Daily -At 02:50) `
+    -LimitMin 10 `
+    -Desc "Shadow: name the day top-k at 00 UTC from the fresh snapshot. Logs only, no alert."
+
 # ── Task 2: Daily signal-evaluator (silent on no incidents) ────────────────
 Register-OrUpdate `
     -Name "CryptoBot_SignalEval_Daily" `

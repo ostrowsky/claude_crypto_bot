@@ -418,6 +418,7 @@ To re-run: `pyembed\python.exe files\analyze_blocked_gates.py` from repo root.
 | `CryptoBot_IntradaySnapshot` | 08:30 / 14:30 / 20:30 local | Feature snapshot → `top_gainer_dataset` |
 | `CryptoBot_KlinesBackfill_Daily` | 06:00 local | `history/<sym>_15m.csv` refresh (`--days 30 --tf 15m`) |
 | `CryptoBot_KlinesBackfill_1h_Daily` | 06:20 local | `history/<sym>_1h.csv` refresh (`--days 60 --tf 1h`) — **added 2026-08-17** |
+| `CryptoBot_EarlyRankingShadow_Daily` | 02:50 local | Shadow top-k for goals 1-2 from the 00 UTC snapshot; logs only — **added 2026-08-19** |
 
 
 **Nothing refreshed 1h until 2026-08-17.** The 06:00 task runs `--tf 15m` only,

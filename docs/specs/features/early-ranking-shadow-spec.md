@@ -142,3 +142,22 @@ picks   EOSUSDT 0.765, XAIUSDT 0.557, RNDRUSDT 0.552, POLUSDT 0.538,
 
 No verdict for at least 20 scored days — the scorer refuses one below that, and
 says so rather than printing a number.
+
+## Scheduled 2026-08-19, and two things that had to change first
+
+`CryptoBot_EarlyRankingShadow_Daily`, 02:50 local — twenty minutes after the
+02:30 EOD snapshot, so the 00 UTC rows exist. Battery flags off, verified
+`LastTaskResult 0`.
+
+**Idempotency.** `score()` counts *records*, not days. A retry beside the
+scheduled run — or a manual invocation while testing, which is what actually
+happened — would log the same UTC day twice and count it twice, biasing the very
+evidence this path exists to produce. `write_today` now skips a day already in
+the log.
+
+**Exit codes.** "already logged" returned 1, so a correct no-op reported failure.
+A task whose result is always non-zero is a task nobody reads, and that is
+exactly how the 1h kline cache sat 58 days stale without one error being raised.
+Success now means "written OR nothing to do"; 1 is reserved for a missing
+snapshot or an unloaded model — the two states that would silently produce a
+worthless list.
