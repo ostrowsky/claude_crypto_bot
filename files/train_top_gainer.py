@@ -56,6 +56,20 @@ def load_dataset(path: Path, min_samples: int = 100) -> Tuple[np.ndarray, dict]:
             except json.JSONDecodeError:
                 continue
 
+    # A delisted pair keeps answering the ticker endpoint that feeds the
+    # snapshot, so 3.98% of this file describes instruments that had already
+    # stopped trading on the day the row claims. EOSUSDT carried
+    # tg_return_since_open=6.79 with no candle since May 2025. Judged as of each
+    # row's own day, so rows written while the symbol was still live survive.
+    try:
+        import phantom_filter as _pf
+        records, _dropped = _pf.drop_phantom_rows(records)
+        if _dropped:
+            log.info("phantom filter: dropped %d of %d rows",
+                     _dropped, _dropped + len(records))
+    except Exception:
+        log.exception("phantom filter unavailable; training on the raw file")
+
     if len(records) < min_samples:
         log.error("Insufficient data: %d records (need %d)", len(records), min_samples)
         return np.array([]), {}

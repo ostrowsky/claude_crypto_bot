@@ -152,5 +152,56 @@ class TestSnapshotWriterIsGuarded(unittest.TestCase):
         self.assertIn("writing the raw watchlist", src)
 
 
+class TestHistoricalRows(unittest.TestCase):
+    """4 973 of 125 008 rows describe instruments that had already stopped
+    trading on the day the row claims."""
+
+    def _rec(self, sym, d):
+        import calendar
+        ts = calendar.timegm(datetime.strptime(d, "%Y-%m-%d").timetuple()) * 1000
+        return {"symbol": sym, "ts": ts, "features": {}}
+
+    def test_a_row_is_judged_as_of_its_own_day(self):
+        # Live in March, delisted in June: the March row is good data and
+        # deleting it retroactively would be a different, wrong claim.
+        store = _Store([rec("XUSDT", "2026-03-10")])
+        self.assertFalse(PF.row_is_phantom(self._rec("XUSDT", "2026-03-12"),
+                                           store=store))
+        self.assertTrue(PF.row_is_phantom(self._rec("XUSDT", "2026-06-12"),
+                                          store=store))
+
+    def test_a_row_without_a_timestamp_is_not_guessed_at(self):
+        self.assertFalse(PF.row_is_phantom({"symbol": "XUSDT"}))
+
+    def test_drop_reports_how_many_it_removed(self):
+        store = _Store([rec("XUSDT", "2026-03-10")])
+        rows = [self._rec("XUSDT", "2026-03-12"), self._rec("XUSDT", "2026-06-12")]
+        kept, dropped = PF.drop_phantom_rows(rows, store=store)
+        self.assertEqual(len(kept), 1)
+        self.assertEqual(dropped, 1)
+
+
+class TestConsumersFilterOnRead(unittest.TestCase):
+    """The 147 MB journal is NOT rewritten: an in-place rewrite of these files
+    froze the event loop for 130-300s in August and then failed with
+    PermissionError while the bot held the file open."""
+
+    def test_the_trainer_filters(self):
+        src = (HERE / "train_top_gainer.py").read_text(encoding="utf-8")
+        self.assertIn("drop_phantom_rows", src)
+
+    def test_the_bandit_filters(self):
+        # This is where it actually bites: _forward_move_pct reads the raw
+        # dataset fields with no label join, so a phantom row paid the bandit
+        # for a "move ahead" computed on prices that never printed.
+        src = (HERE / "offline_rl.py").read_text(encoding="utf-8")
+        self.assertIn("drop_phantom_rows", src)
+
+    def test_neither_rewrites_the_file(self):
+        for name in ("train_top_gainer.py", "offline_rl.py", "phantom_filter.py"):
+            src = (HERE / name).read_text(encoding="utf-8")
+            self.assertNotIn("top_gainer_dataset.jsonl\", \"w", src)
+
+
 if __name__ == "__main__":
     unittest.main()

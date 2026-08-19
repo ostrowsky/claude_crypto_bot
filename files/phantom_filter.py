@@ -113,6 +113,49 @@ def filter_live(symbols, *, store: LabelStore | None = None,
     return kept, dropped
 
 
+def row_is_phantom(record: dict, *, store: LabelStore | None = None,
+                   max_age_days: int | None = None) -> bool:
+    """Was this dataset row written for an instrument that had already stopped
+    trading on the day it describes?
+
+    Judged AS OF the row's own day, never with today's knowledge: a symbol that
+    was live in March and delisted in June produced good rows in March, and
+    deleting those retroactively would be a different (and wrong) claim.
+
+    4 973 of 125 008 rows (3.98%) across 13 symbols are phantoms, and the share
+    is growing — 1 563 in July alone — because a delisted pair keeps answering
+    the ticker endpoint that feeds the snapshot.
+    """
+    symbol = record.get("symbol")
+    if not symbol:
+        return False
+    ts = record.get("ts") or 0
+    try:
+        ts = float(ts)
+    except (TypeError, ValueError):
+        return False
+    if ts > 1e11:
+        ts /= 1000.0
+    day = datetime.fromtimestamp(ts, timezone.utc).strftime("%Y-%m-%d")
+    return liveness(symbol, store=store,
+                    max_age_days=max_age_days or DEFAULT_MAX_AGE_DAYS,
+                    today=day) == "stale"
+
+
+def drop_phantom_rows(records, *, store: LabelStore | None = None) -> tuple[list, int]:
+    """`(kept, dropped)`. The file is NOT rewritten.
+
+    Rewriting a 147 MB journal in place is the operation that froze the event
+    loop for 130-300s in August and then failed with PermissionError while the
+    bot held the file open. Filtering on read costs one predicate per row and
+    leaves the journal intact.
+    """
+    if not enabled():
+        return list(records), 0
+    kept = [r for r in records if not row_is_phantom(r, store=store)]
+    return kept, len(records) - len(kept)
+
+
 def _config_flag(name: str, default):
     try:
         import config

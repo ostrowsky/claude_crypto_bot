@@ -168,7 +168,21 @@ def _load_top_gainer_dataset(max_records: int = 50000) -> List[dict]:
                 continue
             if rec.get("features") and rec.get("symbol"):
                 keep.append(rec)
-    return list(keep)
+    rows = list(keep)
+    # 3.98% of this file describes instruments that had already stopped trading
+    # on the day the row claims — a delisted pair keeps answering the ticker
+    # endpoint the snapshot is built from. The bandit is paid for the move still
+    # AHEAD of a snapshot, and a phantom row's "move ahead" is arithmetic on
+    # prices that never printed.
+    try:
+        import phantom_filter as _pf
+        rows, dropped = _pf.drop_phantom_rows(rows)
+        if dropped:
+            log.info("phantom filter: dropped %d of %d bandit rows",
+                     dropped, dropped + len(rows))
+    except Exception:
+        log.exception("phantom filter unavailable; training on the raw file")
+    return rows
 
 
 def _forward_move_pct(rec: dict) -> Optional[float]:

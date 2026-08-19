@@ -156,3 +156,40 @@ data is not.
 The writer logs what it dropped rather than silently shrinking the universe, and
 if the helper cannot be imported it writes the raw watchlist and says so: losing
 a day of collection to a failed import is worse than a few phantom rows.
+
+## The historical rows: filtered on read, not rewritten
+
+4 973 of 125 008 rows (**3.98%**) describe instruments that had already stopped
+trading on the day the row claims, across 13 symbols, and the share is growing —
+1 563 rows in July alone.
+
+They are removed **on read**, not by rewriting the file. An in-place rewrite of
+these datasets is the operation that froze the event loop for 130-300s in August
+and then failed with `PermissionError` while the bot held the file open; the
+repo's own conclusion was to stop rewriting whole files. Filtering costs one
+predicate per row and leaves the journal intact, so the decision is reversible by
+a flag rather than by restoring a backup.
+
+Judged **as of each row's own day**: a symbol live in March and delisted in June
+produced good rows in March, and deleting those retroactively would be a
+different and wrong claim.
+
+### Where it actually bites — and where it does not
+
+| consumer | effect |
+|---|---|
+| `offline_rl` (entry bandit) | **4 973 rows removed** |
+| `train_top_gainer` | **no change** |
+| early ranking | 3 of 10 picks were phantoms |
+| snapshot writer | stops new ones |
+
+**The model did not change, and the reason matters.** Of the 4 973 phantom rows,
+the immutable label store can label **zero** — so the label join already dropped
+every one of them. Retrained figures are identical within noise (top20 AUC
+0.8981 → 0.8979). The filter is defence-in-depth there, live only on the
+rollback path where `TRAIN_IMMUTABLE_LABELS_ENABLED` is off and the leaky labels
+return.
+
+The bandit is where it bites. `_forward_move_pct` reads `tg_return_since_open`
+and `eod_return_pct` straight from the row with no label join, so a phantom paid
+the bandit for a "move still ahead" computed on prices that never printed.
