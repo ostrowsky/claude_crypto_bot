@@ -156,5 +156,39 @@ class TestPopulationIsUpstreamOfTheBot(unittest.TestCase):
         self.assertIn("UP.watchlist()", SRC)
 
 
+class TestStartLabelIsActuallyWired(unittest.TestCase):
+    """This class exists because it was not, and the failure was invisible.
+
+    A patch inserted `start_bars` and reported success without checking; the
+    anchor it matched on had drifted, so the function was defined and never
+    called. Three runs then printed "label: this bar is within 6h of the start"
+    above numbers produced by the FORWARD label -- identical AUC to four
+    decimals across supposedly different labels was the only clue.
+    """
+
+    def test_start_bars_is_called_and_its_result_used(self):
+        self.assertIn("starts = (start_bars(", SRC)
+        self.assertIn("y = starts.get(i, 0)", SRC)
+
+    def test_the_middle_of_a_trend_is_a_negative(self):
+        # Without this the model keeps scoring confirmation and loses nothing.
+        self.assertIn("1 if i <= a + window else 0", SRC)
+
+    def test_the_header_cannot_claim_a_label_the_run_did_not_use(self):
+        self.assertIn('if args.label == "start":', SRC)
+
+
+class TestEarlinessConstraint(unittest.TestCase):
+    """Measuring the PRICE of earliness needs the budget to be spent only on
+    early bars. Re-ranking instead of suppressing would let a bar at RSI 80 keep
+    its slot and hide the cost."""
+
+    def test_high_rsi_bars_are_suppressed_not_reranked(self):
+        self.assertIn('0.0 if r["rsi"] >= args.max_rsi else p', SRC)
+
+    def test_it_reports_how_much_of_the_universe_it_removed(self):
+        self.assertIn("test bars remain eligible", SRC)
+
+
 if __name__ == "__main__":
     unittest.main()

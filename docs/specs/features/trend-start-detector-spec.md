@@ -1,7 +1,7 @@
 # Trend-start detector: catching the move, not the close
 
 - **Slug:** `trend-start-detector`
-- **Status:** evidence 2026-08-19 — POSITIVE at the +20% target, negative below it; nothing deployed
+- **Status:** evidence 2026-08-20 — POSITIVE on WHICH coin, NEGATIVE on WHEN; nothing deployed
 - **Created:** 2026-08-19
 - **Truth-harness invariants:** TH-01 (base rate and lift beside every ratio),
   TH-03 (holdout split by time), TH-06 (the population the bot actually sees —
@@ -135,17 +135,58 @@ regimes where large trends occur and covered them". That is real information —
 the random control rules out duration as the explanation — but it is knowledge
 of **where**, not of **when**.
 
-## Not yet established
+## The three outstanding checks — all now run
 
-94 trends and roughly 300 positive rows in the holdout is thin. Three checks are
-outstanding, any of which could overturn this:
+1. **Stability across time cuts.** Repeated at 55/45, 65/35, 70/30 and 80/20.
+   AUC 0.600 / 0.662 / 0.692 / 0.686 and catch 90.4% / 91.6% / 95.7% / 97.7% —
+   stable, and AUC *rises with training size* and plateaus, which is a learning
+   curve rather than a boundary artefact. **Do not read the z column of that
+   table**: it used 3 shuffled seeds, so the null's own sd is unstable and z
+   swung 1.93-15.34 across near-identical AUCs. Stability lives in AUC and catch
+   rate, not in z.
+2. **A tighter operating point — passed, and it is the one to use.**
 
-1. **Stability across time cuts.** One split is one observation; 3–4 needed.
-2. **A tighter operating point.** Top-0.5% carries lift 11.92× — if 1376 alerts
-   catch nearly as many trends, the noise falls fourfold.
-3. **Duration of the caught trends.** An unbounded +20% target can run for
-   weeks. If the median caught trend spans weeks, "exit before it ends" becomes
-   a different problem at a different scale.
+   | budget | alerts | caught | still ahead |
+   |---|---|---|---|
+   | 0.5% | 1 425 | 86.2% | 14.51% |
+   | 1.0% | 2 851 | 91.5% | 16.30% |
+   | 2.0% | 5 702 | 95.7% | 18.98% |
+   | 5.0% | 14 257 | 97.9% | 21.03% |
+
+   Cutting alerts fourfold costs 9 trends of 90 and drops the noise from ~63
+   false per catch to ~16. **0.5% is the operating point**, not 2%.
+3. **Duration — the premise was wrong.** Caught trends run p25 5h, median **7h**,
+   p75 11h, max 37h, and **0%** last longer than a week. At a 2% give-back a
+   weekly wave is cut into a dozen segments, so multi-week trends do not exist in
+   this population at all. Wanting them means widening the give-back, which is a
+   decision about the target rather than about the model.
+
+   This also refutes the concern that "exit before it ends" would be a
+   position-management problem at weekly scale. It is not.
+
+## The exit, measured while the entry question was still open
+
+`_backtest_trend_exit_rule.py`, 76 episodes over 36 symbols, entering at the
+trend start (generous — it isolates the exit from the detector's timing):
+
+| policy | median | capture | exited before the peak |
+|---|---|---|---|
+| ideal (exit at the peak) | 19.10% | 1.00 | 0% |
+| **2% give-back from the peak** | **15.13%** | **0.78** | 7% |
+| slope over 6h ≤ 0 | 10.85% | 0.65 | 17% |
+| no new high for 6h | 12.27% | 0.62 | 14% |
+| below MA12 | 12.05% | 0.60 | 11% |
+| slope over 24h ≤ 0 | 8.98% | 0.46 | 0% |
+
+The operator proposed selling on a plateau or a turn down. **The simplest rule —
+wait for a 2% give-back — beats every plateau rule** on capture, on median gain
+and on premature exits. The `exited before the peak` column says why: on a
+7-hour trend the hourly slope flattens several times, and a plateau rule sells
+on the first pause.
+
+For contrast, the live bot captures 19.8% of the remaining move with a median
+trade of −0.50%. The difference is not the exit rule; it is what is being exited
+from.
 
 ## Verification
 
@@ -156,3 +197,84 @@ unchanged by appending later bars, `bars_in_base` responding to duration rather
 than tightness, alerts credited only inside the trend window, remaining move
 measured from the alert price, and the random baseline existing at the same
 budget.
+
+## The earliness question, answered separately — and NEGATIVELY
+
+The detector above finds trends. It does not find their beginnings: the first
+alert lands a median **40-48% into the move**, while a random alert placed
+inside a trend lands at ~50%. That is close to no timing advantage at all, and
+it is not a shortfall of the model — the forward label ("from here there is
++20% ahead") is satisfied by a bar in the middle of a move exactly as well as by
+one at its start. The model was never asked for the start.
+
+Three independent attacks on that, all failing on timing while agreeing with
+each other:
+
+| approach | caught | still ahead | **into the move** |
+|---|---|---|---|
+| forward label | 84.2% | 14.90% | **48%** |
+| start label, 1h window | 55.8% | 17.40% | **46%** |
+| start label, 2h window | 68.4% | 17.47% | **40%** |
+| start label, 3h window | 83.2% | 17.28% | **43%** |
+| start label, 6h window | 90.5% | 17.47% | **45%** |
+| forward label, alerts banned at RSI ≥ 65 | 21.1% | 21.35% | 32% |
+| forward label, alerts banned at RSI ≥ 55 | 4.2% | 22.68% | 20% |
+
+**The start label raises ranking sharply and moves the timing not at all.**
+AUC 0.694 → 0.822-0.841 and lift 12.5× → 21-61×, stable across every window
+width — yet `into%` stays flat at 40-46% whether the label calls the first hour
+of a trend positive or the first six. Trained *exclusively* on opening bars, the
+model's highest-scoring bars are still mid-move ones.
+
+The RSI constraint prices the same wall from the other side. Banning alerts
+above RSI 65 removes only **7.2%** of test bars from eligibility and costs
+**three quarters** of all catches — the score is concentrated almost entirely on
+bars whose momentum has already turned. Buying `into%` down to 20% costs 96% of
+the catches.
+
+### What this means, stated as narrowly as the evidence allows
+
+On **hourly** bars with these features, the start of a strong trend is not
+separable from its middle. This is a statement about resolution as much as about
+features: the median caught trend runs **7 hours**, so its opening hour is one
+observation in seven and has almost no shape to describe. The same experiments
+on 15m bars would give that trend 28 observations instead of 7.
+
+What survives intact: the detector answers **which coin** with AUC 0.82-0.84 and
+lift 21-61×, stable across four label widths and four time cuts. It does not
+answer **when**.
+
+### A live confirmation, and its limits
+
+On 2026-08-19 the bot sat out a market-wide rally: every gate rejected it
+(`ml_proba` 0.04-0.19 against a 0.22 floor on eight coins, the bandit preferring
+SKIP at ucb 1.72 vs 1.20, `trend_quality` on RSI 77.8 > 76, an explicit "late 1h
+continuation" guard). Scored on the same hours, trained only on data before
+08-18, the detector fired 9 alerts of 93 symbols at the 0.5% budget:
+
+```
+ETHUSDT  +8.84% since alert (peak +11.88%)    WLDUSDT  +8.78% (peak +11.19%)
+NEARUSDT +5.66%   SNXUSDT +2.00%   CRVUSDT +1.57%   LDOUSDT +1.46%
+BNTUSDT  +1.15%   ARBUSDT -0.45%   ENSUSDT -0.70%
+median +1.57%, 7 of 9 positive; six of the nine fired at 15:00, four hours
+before the rally accelerated
+```
+
+**Nine alerts on one evening is an anecdote, not evidence** — on a day when
+nearly everything rose, 7-of-9 would occur by chance often enough to prove
+nothing. The statistical case is the backtest, not this. And of the twelve coins
+the operator was watching, only ETH fired; INJ ran 4.24 → 4.61 and scored
+0.0028. That is a miss and is recorded as one.
+
+## A run that reported the wrong label — recorded on purpose
+
+A patch adding the start label matched on an anchor that had since drifted, so
+`start_bars` was defined and never called. The patch script printed
+"start-label mode wired" without verifying. Three runs then printed
+`label: this bar is within 6h of the start` above numbers produced by the
+forward label; the only clue was **identical AUC to four decimal places across
+supposedly different labels**.
+
+`test_trend_start_detector.py` now asserts the function is called and its result
+used. The failure is kept in this file because a spec that records only what was
+intended is the failure mode the whole document exists to prevent.

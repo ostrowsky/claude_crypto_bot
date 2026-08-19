@@ -238,6 +238,35 @@ def feature_table(bars: list) -> list:
 
 # ------------------------------------------------------------------ build ---
 
+def start_bars(sym: str, run_pct: float, give_back: float, window: int) -> dict:
+    """bar-index -> 1 for the first `window` bars of each qualifying uptrend.
+
+    The forward label ("from here, +X% before a give-back") is satisfied just as
+    well by a bar in the MIDDLE of a move as by one at its start -- which is why
+    the detector trained on it fires a median 40% into the move. It is not
+    missing the start; it was never asked for it.
+
+    This label asks for it directly: positive only inside the opening window of
+    a trend, and every later bar of that same trend is a NEGATIVE. That is the
+    part that does the work -- without it the model is free to keep scoring the
+    middle and lose nothing.
+    """
+    bars = CS.bars(sym)
+    idx = {b[0]: i for i, b in enumerate(bars)}
+    out = {}
+    for t in UP.trends_for(sym, run_pct, give_back, 4):
+        st = UP.attr(t, "start_ts", "start", "low_ts")
+        en = UP.attr(t, "end_ts", "end", "high_ts")
+        if st is None or en is None:
+            continue
+        a, b = idx.get(st), idx.get(en)
+        if a is None or b is None or b <= a:
+            continue
+        for i in range(a, b + 1):
+            out[i] = 1 if i <= a + window else 0
+    return out
+
+
 def build(symbols: list, args) -> list:
     rows = []
     for si, sym in enumerate(symbols):
@@ -246,8 +275,13 @@ def build(symbols: list, args) -> list:
             continue
         feats = feature_table(bars)
         tail = HORIZON if args.horizon <= 0 else args.horizon
+        starts = (start_bars(sym, args.run, args.give_back, args.start_window)
+                  if args.label == "start" else None)
         for i in range(WARMUP, len(bars) - tail):
-            y = will_run(bars, i, args.run, args.give_back, args.horizon)
+            if starts is not None:
+                y = starts.get(i, 0)
+            else:
+                y = will_run(bars, i, args.run, args.give_back, args.horizon)
             if y is None:
                 continue
             r = dict(feats[i])
@@ -332,15 +366,34 @@ def main() -> None:
     ap.add_argument("--give-back", type=float, default=GIVE_BACK_PCT)
     ap.add_argument("--horizon", type=int, default=0,
                     help="bars the run must complete within; 0 = to resolution")
+    ap.add_argument("--max-rsi", type=float, default=None,
+                    help="forbid alerts on bars whose RSI is already above this. "
+                         "Measures the PRICE of earliness: the budget can only be "
+                         "spent before the move is visible in momentum.")
+    ap.add_argument("--label", choices=("forward", "start"), default="forward",
+                    help="'forward' = there is a move ahead; 'start' = this bar "
+                         "is in the opening hours of one")
+    ap.add_argument("--start-window", type=int, default=6,
+                    help="hours after the trend low that still count as its start")
+    ap.add_argument("--stability", action="store_true",
+                    help="repeat the whole evaluation at several time cuts")
+    ap.add_argument("--cuts", default="0.55,0.65,0.70,0.80",
+                    help="train fractions to repeat the whole evaluation at; "
+                         "one split is one observation")
     ap.add_argument("--alert-rate", type=float, default=0.02,
                     help="share of bars that fire, i.e. the alert budget")
     args = ap.parse_args()
 
     print("=" * 96)
     print("TREND-START DETECTOR -- can the beginning of a linear uptrend be seen?")
-    print("label: from this bar, +%.1f%% before giving back %.1f%% from the peak%s"
-          % (args.run, args.give_back,
-             " (no time limit)" if args.horizon <= 0 else ", within %dh" % args.horizon))
+    if args.label == "start":
+        print("label: this bar is within %dh of the start of a +%.1f%% trend "
+              "(its later bars are NEGATIVES)" % (args.start_window, args.run))
+    else:
+        print("label: from this bar, +%.1f%% before giving back %.1f%% from the peak%s"
+              % (args.run, args.give_back,
+                 " (no time limit)" if args.horizon <= 0 else
+                 ", within %dh" % args.horizon))
     print("population: every bar of every watchlist symbol -- NOT the bot's entries")
     print("=" * 96)
 
@@ -352,6 +405,43 @@ def main() -> None:
 
     base_all = sum(r["_y"] for r in rows) / len(rows)
     days = sorted(set(r["_day"] for r in rows))
+
+    if args.stability:
+        # One split is one observation. A result that only exists at 70/30 is a
+        # property of that boundary, not of the market.
+        print()
+        print("STABILITY ACROSS TIME CUTS -- run target +%.0f%%" % args.run)
+        print("%-12s%8s%9s%9s%9s%8s%10s%10s" % (
+            "cut", "train", "test", "base", "AUC", "z", "trends", "caught%"))
+        print("-" * 78)
+        for frac in [float(x) for x in args.cuts.split(",")]:
+            c = days[int(len(days) * frac)]
+            tr = [r for r in rows if r["_day"] < c]
+            te = [r for r in rows if r["_day"] >= c]
+            if not tr or not te:
+                continue
+            pp, _ = fit(tr, te)
+            if pp is None:
+                continue
+            yy = [r["_y"] for r in te]
+            aa = CS.auc(yy, pp)
+            nn = []
+            for sd in range(3):
+                qq, _ = fit(tr, te, seed=200 + sd, shuffle=True)
+                if qq:
+                    nn.append(CS.auc(yy, qq))
+            nmean = sum(nn) / len(nn) if nn else float("nan")
+            nsdev = ((sum((v - nmean) ** 2 for v in nn) / max(len(nn) - 1, 1)) ** 0.5
+                     if len(nn) > 1 else float("nan"))
+            oo = sorted(range(len(pp)), key=lambda i: -pp[i])
+            kk = max(1, int(len(oo) * args.alert_rate))
+            rr = catch_report(te, pp, pp[oo[kk - 1]], args)
+            tt = rr["caught"] + rr["missed"]
+            print("%-12s%8d%9d%9.4f%9.4f%8.2f%10d%9.1f%%" % (
+                c, len(tr), len(te), sum(yy) / len(yy), aa,
+                (aa - nmean) / nsdev if nsdev else float("nan"),
+                tt, 100.0 * rr["caught"] / tt if tt else 0))
+        return
     cut = days[int(len(days) * 0.7)]
     train = [r for r in rows if r["_day"] < cut]
     test = [r for r in rows if r["_day"] >= cut]
@@ -392,6 +482,17 @@ def main() -> None:
         print("%-10s%12.4f%10.4f%10.2fx" % (
             "%.1f%%" % (frac * 100), prec, base, prec / base if base else 0))
 
+    if args.max_rsi is not None:
+        # Suppress rather than re-rank: an alert on a bar at RSI 80 is a
+        # confirmation whatever its score, and letting it keep the budget slot
+        # would hide the cost this flag exists to measure.
+        probs = [0.0 if r["rsi"] >= args.max_rsi else p
+                 for r, p in zip(test, probs)]
+        alive = sum(1 for p in probs if p > 0)
+        print()
+        print("EARLINESS CONSTRAINT: alerts forbidden at RSI >= %.0f "
+              "-- %d of %d test bars remain eligible (%.1f%%)"
+              % (args.max_rsi, alive, len(probs), 100.0 * alive / len(probs)))
     order = sorted(range(len(probs)), key=lambda i: -probs[i])
     k = max(1, int(len(order) * args.alert_rate))
     thr = probs[order[k - 1]]
@@ -402,6 +503,35 @@ def main() -> None:
     print("=" * 96)
     rep = catch_report(test, probs, thr, args)
     tot = rep["caught"] + rep["missed"]
+
+    # Check 2 -- does a tighter budget keep the catches? If 0.5% of bars catch
+    # nearly as many trends, the false-alert load falls fourfold for free.
+    print()
+    print("%-10s%9s%10s%12s%14s" % (
+        "budget", "alerts", "caught", "caught %", "still ahead"))
+    print("-" * 60)
+    for rate in (0.005, 0.01, 0.02, 0.05):
+        kk = max(1, int(len(order) * rate))
+        t2 = probs[order[kk - 1]]
+        r2 = catch_report(test, probs, t2, args)
+        tt = r2["caught"] + r2["missed"]
+        ah = sorted(x["ahead"] for x in r2["rows"]) or [float("nan")]
+        print("%-10s%9d%10d%11.1f%%%13.2f%%" % (
+            "%.1f%%" % (rate * 100), r2["n_alerts"], r2["caught"],
+            100.0 * r2["caught"] / tt if tt else 0, ah[len(ah) // 2]))
+
+    # Check 3 -- how long do the caught trends run? An unbounded +20% target can
+    # last weeks, and "exit before it ends" is a different problem at that scale.
+    durs = sorted((x["end"] - x["start"]).total_seconds() / 3600.0
+                  for x in rep["rows"])
+    if durs:
+        print()
+        print("duration of CAUGHT trends (hours): p25 %.0f  median %.0f  "
+              "p75 %.0f  p90 %.0f  max %.0f"
+              % (durs[len(durs) // 4], durs[len(durs) // 2],
+                 durs[3 * len(durs) // 4], durs[int(0.9 * len(durs))], durs[-1]))
+        wk = sum(1 for d in durs if d > 168) / len(durs)
+        print("  share running longer than a week: %.0f%%" % (wk * 100))
     print("trends in holdout        %d" % tot)
     print("caught (alert inside)    %d  (%.1f%%)"
           % (rep["caught"], 100.0 * rep["caught"] / tot if tot else 0))
