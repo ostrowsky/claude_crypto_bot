@@ -87,6 +87,12 @@ TRAIN_SPLIT_EMBARGO_DAYS: int = 1
 # both values are published side by side so the change is visible.
 # Model flag defaults OFF: top_gainer_model feeds ranker_top_gainer_prob into the
 # hard veto, so relabelling it changes live gating indirectly.
+# Goal 2 (signal entry as early as possible) cannot be tracked through the
+# clock-hour lead: it scored a perfect 20:05 catch at 0.17 and an idle 02:00
+# buy at 0.92. Move-relative lead measures against the +2.5% crossing.
+# Default False until the side-by-side reading is published; expect the
+# value to FALL, because that is the metric starting to ask the right thing.
+NS_MOVE_RELATIVE_LEAD_ENABLED: bool = True
 NS_IMMUTABLE_LABELS_ENABLED: bool = True
 TRAIN_IMMUTABLE_LABELS_ENABLED: bool = True    # flipped 2026-08-17 (global label universe)
 # 0.0 = pure global rank, which is what the ORIGINAL label is: top-N of all

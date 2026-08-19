@@ -130,15 +130,56 @@ def load_entries(cut_dt: datetime):
     return first_entry, pnl_pairs
 
 
-def compute_north_star(winners, eod_ret, first_entry, pnl_pairs, label_name: str):
-    ec_scores = []; breakdown = []
+def move_relative_lead(entry_dt, *, open_ts, deadline_ts):
+    """How early the alert was AGAINST THE MOVE, in [0, 1].
+
+    `lead = 1 - (entry - open) / (deadline - open)`, where the deadline is the
+    first crossing of +2.5% from the UTC open. 1.0 = at or before the open,
+    0.0 = at or after the move was already underway.
+
+    The clock-hour version this replaces (`1 - hour/24`) measured earliness in
+    the CALENDAR: a coin that started moving at 20:00 and was alerted at 20:05 —
+    the best the bot could do — scored 0.17, while an idle 02:00 buy scored 0.92.
+    That is backwards for the stated objective, so a change that genuinely
+    improved entry timing could have lowered the North Star.
+
+    Returns **None** when there is no deadline to measure against (a
+    daily-resolution label carries no crossing time). Scoring 0.0 there would
+    assert the bot alerted late, which is a claim about the bot rather than
+    about the data (TH-05).
+    """
+    if deadline_ts is None or open_ts is None or entry_dt is None:
+        return None
+    window = (deadline_ts - open_ts).total_seconds()
+    if window <= 0:
+        return None
+    elapsed = (entry_dt - open_ts).total_seconds()
+    return max(0.0, min(1.0, 1.0 - elapsed / window))
+
+
+def compute_north_star(winners, eod_ret, first_entry, pnl_pairs, label_name: str,
+                       *, lead_mode: str = "clock", deadlines: dict | None = None):
+    """`lead_mode="move"` scores earliness against the coin's own move instead of
+    the clock. A winner-day whose label carries no +2.5% crossing time cannot be
+    scored that way and is EXCLUDED and counted, never scored 0.0 — a zero would
+    assert the bot alerted late when the truth is that we cannot tell (TH-05)."""
+    ec_scores = []; breakdown = []; skipped_no_deadline = 0
+    deadlines = deadlines or {}
     for key in winners:
         d, sym = key
         ent = first_entry.get(key)
         coverage = 1.0 if ent else 0.0
         if ent:
             edt, ep = ent
-            time_lead = 1.0 - (edt.hour / 24.0)
+            if lead_mode == "move":
+                open_ts, dl_ts = deadlines.get(key, (None, None))
+                time_lead = move_relative_lead(edt, open_ts=open_ts,
+                                               deadline_ts=dl_ts)
+                if time_lead is None:
+                    skipped_no_deadline += 1
+                    continue
+            else:
+                time_lead = 1.0 - (edt.hour / 24.0)
             pnl = pnl_pairs.get(key)
             eod = eod_ret.get(key)
             if pnl is not None and eod is not None:
@@ -164,6 +205,8 @@ def compute_north_star(winners, eod_ret, first_entry, pnl_pairs, label_name: str
     mean_lead = sum(b["lead"] for b in entered) / max(1, len(entered))
     return {
         "label": label_name, "n": n,
+        "lead_definition": ("move_relative" if lead_mode == "move" else "clock_hour"),
+        "winners_without_deadline": skipped_no_deadline,
         "early_capture": mean_ec,
         "decomp_coverage": mean_cov,
         "decomp_capture_mean": mean_cap,
@@ -213,6 +256,27 @@ def main():
         except Exception as exc:                      # never break the daily run
             print(f"[immutable labels unavailable: {exc}]")
 
+    # Goal 2 (signal entry as early as possible) measured against the MOVE.
+    # Published beside v2, never instead of it: the two answer different
+    # questions and the value is EXPECTED to fall (TH-04).
+    res_move = None
+    if res_imm is not None and getattr(config, "NS_MOVE_RELATIVE_LEAD_ENABLED", False):
+        try:
+            import label_store as LS
+            deadlines = {}
+            for r in LS.LabelStore().records():
+                if LS.resolution_of(r) != "1h" or not r.get("early_deadline_ts"):
+                    continue                    # only intraday labels can time
+                day = r["utc_day"]
+                open_ts = datetime.strptime(day, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+                dl = datetime.fromtimestamp(r["early_deadline_ts"] / 1000, timezone.utc)
+                deadlines[(day, r["symbol"])] = (open_ts, dl)
+            res_move = compute_north_star(imm, imm_eod, first_entry, pnl_pairs,
+                                          "top20_move_lead", lead_mode="move",
+                                          deadlines=deadlines)
+        except Exception as exc:
+            print(f"[move-relative lead unavailable: {exc}]")
+
     # Sustained (P1.1 — try v2 dataset, fall back if absent)
     res_sustained = None
     v2_path = ROOT/"files"/"top_gainer_dataset_v2.jsonl"
@@ -236,7 +300,7 @@ def main():
               f"EC={res_raw['early_capture']:.3f} cov={res_raw['decomp_coverage']:.2f} "
               f"(n={res_raw['n']}) — DO NOT read as performance")
     print()
-    for r in [res_top20, res_imm, res_sustained]:
+    for r in [res_top20, res_imm, res_move, res_sustained]:
         if r is None: continue
         print(f"EarlyCapture@{r['label']:<16}  {r['early_capture']:.3f}  "
               f"(n={r['n']}, cov={r['decomp_coverage']:.2f}, "
@@ -323,6 +387,15 @@ def main():
         # the universe (~497 currently-listed pairs, no delisted ones), not the
         # rule — so the two may now be read against each other.
         metric["immutable_comparable_to_primary"] = True
+    metric["lead_definition"] = primary.get("lead_definition", "clock_hour")
+    if res_move:
+        metric["move_lead_metric"] = "NS_EarlyCapture_top20_v3"
+        metric["move_lead_early_capture"] = res_move["early_capture"]
+        metric["move_lead_n"] = res_move["n"]
+        metric["move_lead_mean"] = res_move["decomp_time_lead_mean"]
+        # Winner-days whose label has no +2.5% crossing time. Counted, because a
+        # metric must know what it cannot see rather than score it zero.
+        metric["move_lead_winners_without_deadline"] = res_move["winners_without_deadline"]
     if res_sustained:
         metric["sustained_n"] = res_sustained["n"]
         metric["sustained_early_capture"] = res_sustained["early_capture"]
