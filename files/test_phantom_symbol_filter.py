@@ -132,5 +132,25 @@ class TestFailsOpenWhenTheStoreLags(unittest.TestCase):
         self.assertNotIn("stood_down", dropped)
 
 
+class TestSnapshotWriterIsGuarded(unittest.TestCase):
+    """The dataset is what every model here trains on, so a phantom row costs
+    more than a wasted slot in a ten-name list."""
+
+    def test_the_snapshot_filters_before_writing(self):
+        src = (HERE / "backfill_top_gainer_dataset.py").read_text(encoding="utf-8")
+        self.assertIn("phantom_filter", src)
+        self.assertIn("filter_live", src)
+
+    def test_it_reports_rather_than_silently_shrinking(self):
+        src = (HERE / "backfill_top_gainer_dataset.py").read_text(encoding="utf-8")
+        self.assertIn("phantom filter: dropped", src)
+
+    def test_an_unavailable_filter_does_not_stop_collection(self):
+        # Losing a day of training data because a helper failed to import is a
+        # worse outcome than a few phantom rows.
+        src = (HERE / "backfill_top_gainer_dataset.py").read_text(encoding="utf-8")
+        self.assertIn("writing the raw watchlist", src)
+
+
 if __name__ == "__main__":
     unittest.main()

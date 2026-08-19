@@ -138,3 +138,21 @@ instruments that cannot trade.
 The filter's own risk — standing between the ranking and a live symbol — is
 covered by the fail-open guard rather than by a canary: above a 25% drop it
 stands down, because that is a broken label store rather than a dead market.
+
+## The second application landed a commit late
+
+The change section promised the filter in two places. The first commit shipped
+only the early ranking, and the spec said otherwise for one commit — worth
+recording, because a spec that describes what was intended rather than what
+exists is the failure mode this file is supposed to prevent.
+
+Both snapshot sites in `backfill_top_gainer_dataset.py` are now guarded. The
+watchlist cleanup made this redundant *today* — the snapshot iterates the
+watchlist and the watchlist is clean — but the next rename would leak straight
+into `top_gainer_dataset.jsonl`, and that file is what every model here trains
+on. A wasted slot in a ten-name list is cheap; a phantom row in the training
+data is not.
+
+The writer logs what it dropped rather than silently shrinking the universe, and
+if the helper cannot be imported it writes the raw watchlist and says so: losing
+a day of collection to a failed import is worse than a few phantom rows.

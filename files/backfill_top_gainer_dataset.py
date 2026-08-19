@@ -216,6 +216,20 @@ async def collect_daily(session: aiohttp.ClientSession) -> int:
 
     top5, top10, top20, top50 = rank_gainers(tickers)
     watchlist = config.load_watchlist()
+    # A delisted pair keeps answering /api/v3/ticker/24hr with a non-zero volume,
+    # so it would arrive here with a complete, plausible feature row and be
+    # written into the file every model trains on. Liveness comes from the
+    # immutable label store (klines), which a phantom ticker cannot fake. Fails
+    # OPEN above a 25% drop — that is a broken store, not a dead market.
+    try:
+        import phantom_filter as _pf
+        watchlist, _dropped = _pf.filter_live(
+            watchlist, enabled=_pf.enabled(), max_age_days=_pf.max_age_days())
+        if _dropped.get("stale") or _dropped.get("stood_down"):
+            log.warning("phantom filter: dropped %s, stood_down=%s",
+                        _dropped.get("stale"), _dropped.get("stood_down", False))
+    except Exception:
+        log.exception("phantom filter unavailable; writing the raw watchlist")
 
     # BTC context
     btc_data = await fetch_klines(session, "BTCUSDT", "1h", limit=10)
@@ -286,6 +300,20 @@ async def backfill_historical(session: aiohttp.ClientSession, days: int) -> int:
       - Log to dataset
     """
     watchlist = config.load_watchlist()
+    # A delisted pair keeps answering /api/v3/ticker/24hr with a non-zero volume,
+    # so it would arrive here with a complete, plausible feature row and be
+    # written into the file every model trains on. Liveness comes from the
+    # immutable label store (klines), which a phantom ticker cannot fake. Fails
+    # OPEN above a 25% drop — that is a broken store, not a dead market.
+    try:
+        import phantom_filter as _pf
+        watchlist, _dropped = _pf.filter_live(
+            watchlist, enabled=_pf.enabled(), max_age_days=_pf.max_age_days())
+        if _dropped.get("stale") or _dropped.get("stood_down"):
+            log.warning("phantom filter: dropped %s, stood_down=%s",
+                        _dropped.get("stale"), _dropped.get("stood_down", False))
+    except Exception:
+        log.exception("phantom filter unavailable; writing the raw watchlist")
     total = 0
     now_utc = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
 
