@@ -87,6 +87,14 @@ TRAIN_SPLIT_EMBARGO_DAYS: int = 1
 # both values are published side by side so the change is visible.
 # Model flag defaults OFF: top_gainer_model feeds ranker_top_gainer_prob into the
 # hard veto, so relabelling it changes live gating indirectly.
+# A delisted pair keeps answering /api/v3/ticker/24hr with a non-zero volume,
+# so the snapshot builds a complete, plausible feature row for it: EOSUSDT
+# carried tg_return_since_open=6.79 with its last candle in May 2025, and the
+# early ranking put it first. Liveness is decided by the immutable label
+# store, which is built from klines and cannot be faked by a ticker.
+PHANTOM_SYMBOL_FILTER_ENABLED: bool = True
+PHANTOM_MAX_LABEL_AGE_DAYS: int = 14
+
 # Goal 2 (signal entry as early as possible) cannot be tracked through the
 # clock-hour lead: it scored a perfect 20:05 catch at 0.17 and an idle 02:00
 # buy at 0.92. Move-relative lead measures against the +2.5% crossing.

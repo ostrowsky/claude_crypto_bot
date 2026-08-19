@@ -678,6 +678,7 @@ TREND_15M_QUALITY_PRICE_EDGE_MAX_PCT = 3.20             # was 2.40
 TREND_15M_QUALITY_PRICE_EDGE_MAX_BULL_DAY_PCT = 4.00
 ```
 
+
 **Rule:** If a filter blocks >80% of eventual top gainers — it's broken. Verify via `bot_events.jsonl`.
 
 ### Bull-day relaxation (2026-04-13)
@@ -891,7 +892,23 @@ Runtime token storage: `.runtime\bot_bg_runner.cmd` (runtime-generated, gitignor
 
 ## 14. Watchlist
 
-~105 Binance USDT perpetual futures coins. File: `files/watchlist.json`.
+102 Binance USDT coins. File: `files/watchlist.json`.
+
+**Delisted entries were removed 2026-08-19** (`RNDRUSDT`, `EOSUSDT`, `ACAUSDT`;
+backup at `files/watchlist.pre_phantom_cleanup.json`). This is not an exception
+to the rule above — the rule forbids **expanding**, and these three had not
+printed a candle since 2024-07, 2025-05 and 2026-02. `RNDR` was renamed to
+`RENDER` and both halves were listed, so the dead half cost a slot and nothing
+else.
+
+They were not inert. `/api/v3/ticker/24hr` **keeps answering for delisted pairs**
+with a non-zero volume, so the snapshot built full feature rows for them:
+`EOSUSDT` carried `tg_return_since_open = 6.79` with no candle since May 2025,
+and the early ranking put it **first**. Three of ten picks were phantoms.
+`phantom_filter.is_live()` now guards against the next rename — liveness comes
+from the immutable label store, which is built from klines and cannot be faked
+by a ticker. It fails OPEN: if more than 25% of the universe looks stale that is
+a broken store, not a dead market, so the filter stands down and says so.
 
 **IMMUTABLE — DO NOT EXPAND.** These are the specific coins the user has access to for trading. Adding other symbols is pointless regardless of backtest results. If a top-gainer today is not in this list — that's expected and acceptable, not a bug to fix.
 

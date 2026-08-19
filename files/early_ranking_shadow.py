@@ -130,6 +130,17 @@ def write_today(k: int = DEFAULT_K) -> dict[str, Any]:
         feats["symbol"] = sym
         scored.append((sym, model.predict(feats).prob_top20))
 
+    # A phantom cannot be named: a delisted pair still answers the ticker
+    # endpoint, so it arrives with a full feature row and can outrank live
+    # coins — three of the first ten picks were dead tickers. A name that can
+    # never be graded is a wasted slot out of ten.
+    import phantom_filter as PFIL
+    live_syms, dropped = PFIL.filter_live(
+        [s for s, _ in scored], enabled=PFIL.enabled(),
+        max_age_days=PFIL.max_age_days())
+    live_set = set(live_syms)
+    scored = [(s, p) for s, p in scored if s in live_set]
+
     picks = build_list(scored, k)
     if picks is None:
         return {"written": False, "reason": "empty universe"}
@@ -145,7 +156,13 @@ def write_today(k: int = DEFAULT_K) -> dict[str, Any]:
         "utc_day": day,
         "written_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "k": k,
-        "universe": len(rows),
+        "universe": len(scored),
+        "universe_before_filter": len(rows),
+        # What the filter removed travels with the list: a filter that silently
+        # shrinks its input turns a coverage number into something other than
+        # what it says.
+        "dropped_stale": dropped["stale"],
+        "dropped_unknown": dropped["unknown"],
         "picks": picks,
         # Provenance travels with the list: a list graded against a model that
         # later trained on the same days would flatter itself.

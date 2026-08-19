@@ -115,7 +115,7 @@ class TestTheTwoDefectsTheFirstLiveRunHad(unittest.TestCase):
 
     def test_snapshots_are_keyed_by_symbol_not_appended(self):
         # The dataset carries TWO 00 UTC snapshots per day, so appending put
-        # every coin in twice: universe read 210 for a 105-coin watchlist and a
+        # every coin in twice: universe read 210 for a one-entry-per-coin watchlist and a
         # "top-10" was really a top-5.
         self.assertIn("by_day[dt.strftime(\"%Y-%m-%d\")][sym]", self.src)
         self.assertIn("defaultdict(dict)", self.src)
