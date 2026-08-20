@@ -173,3 +173,42 @@ more winners than it saves.
   stays off.
 - The bandit is now the binding gate (UCB SKIP ≈ 1.8 against ENTER ≈ 1.3). If
   entries stay at zero, that is the next thing to measure, not this gate.
+
+## CatBoost added as a third candidate family (2026-08-20)
+
+On the operator's instruction the trainer now selects the best of three families
+rather than two. `CatBoostModel` (300 trees, depth 4) sits beside the hand-written
+logistic and MLP; it serialises as a base64 native blob inside the JSON payload
+and is cached by blob hash, because `predict_proba_from_payload` runs for every
+candidate on every poll. A missing or broken install degrades to the previous
+two-family selection and prints why — the trainer runs unattended at 02:30 and an
+ImportError there would leave no model at all.
+
+**First real selection, on 37 339 rows** — score is the project's own
+`selected_ret5_avg × (0.35 + coverage) + 0.15 × precision`:
+
+| family | selected r5 | coverage | precision | score |
+|---|---|---|---|---|
+| logistic | 0.1412% | 0.023 | 0.488 | 0.126 |
+| **mlp (winner)** | 0.6605% | 0.008 | 0.578 | **0.323** |
+| catboost | −0.0191% | 0.057 | 0.432 | 0.057 |
+
+**CatBoost came last.** It is the widest selector of the three (coverage 0.057)
+and its selected rows average slightly negative. Adding it did not improve the
+choice on this split; it added an option that lost.
+
+Two things worth stating plainly rather than filing as a win:
+
+1. **The winner covers 0.8% of validation rows.** This criterion rewards a narrow,
+   high-precision selector, and on a single validation split a narrow selector
+   wins easily by luck. Adding a third family gives that lottery one more ticket
+   — the selection is now over three candidates on one split, with no out-of-fold
+   check.
+2. **The chosen model is worse than the rules baseline on the test set**:
+   `ret5_avg_delta −0.1387`, `win_rate_delta −0.0424`, `coverage_delta −0.9925`.
+   That was true before this change too, and it is the more important finding of
+   the two.
+
+So the family selection is now a three-way choice as requested, and the honest
+reading is that the selection *criterion*, not the roster of families, is what
+limits this model.

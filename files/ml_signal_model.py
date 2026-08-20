@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import math
 from dataclasses import dataclass
@@ -367,6 +368,108 @@ class LogisticModel:
         return {"type": "logistic", "weights": self.w.tolist(), "bias": self.b}
 
 
+class CatBoostModel:
+    """Third candidate family, alongside logistic and MLP.
+
+    Added 2026-08-20. The other two are hand-written gradient descent on 60
+    standardised features; neither can express an interaction. A gradient-boosted
+    tree can, which matters here because the failure that motivated this work was
+    the model scoring an entire market regime near zero -- a shape a linear model
+    has no way to condition on.
+
+    Kept deliberately small (300 depth-4 trees): the training set is ~18k rows of
+    the bot's own candidates and the selection that follows compares three
+    families on ONE validation split, so a high-variance member would win by luck
+    often enough to matter. Selection pressure is the reason to be conservative
+    with capacity, not the model's own fit.
+
+    Serialised as a base64 native blob inside the JSON payload; loading is cached
+    by blob hash because the live path scores every candidate on every poll.
+    """
+
+    def __init__(self, n_features: int, iterations: int = 300, depth: int = 4,
+                 learning_rate: float = 0.05, seed: int = 42) -> None:
+        self.n_features = n_features
+        self.iterations = iterations
+        self.depth = depth
+        self.learning_rate = learning_rate
+        self.seed = seed
+        self.model = None
+
+    def fit(self, X: np.ndarray, y: np.ndarray,
+            sample_weight: Optional[np.ndarray] = None) -> "CatBoostModel":
+        from catboost import CatBoostClassifier
+        self.model = CatBoostClassifier(
+            iterations=self.iterations, depth=self.depth,
+            learning_rate=self.learning_rate, verbose=0,
+            random_seed=self.seed, allow_writing_files=False,
+        )
+        self.model.fit(np.asarray(X, dtype=float),
+                       np.asarray(y, dtype=int),
+                       sample_weight=(None if sample_weight is None
+                                      else np.asarray(sample_weight, dtype=float)))
+        return self
+
+    def predict_proba(self, X: np.ndarray) -> np.ndarray:
+        if self.model is None:
+            return np.full(len(X), 0.5, dtype=float)
+        return np.asarray(self.model.predict_proba(np.asarray(X, dtype=float))[:, 1],
+                          dtype=float)
+
+    def to_dict(self) -> dict:
+        import base64
+        import os
+        import tempfile
+        if self.model is None:
+            raise RuntimeError("CatBoostModel.to_dict() before fit()")
+        fd, path = tempfile.mkstemp(suffix=".cbm")
+        os.close(fd)
+        try:
+            self.model.save_model(path, format="cbm")
+            with io.open(path, "rb") as fh:
+                blob = base64.b64encode(fh.read()).decode("ascii")
+        finally:
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
+        return {"type": "catboost", "blob": blob}
+
+
+_CATBOOST_CACHE: Dict[str, object] = {}
+
+
+def _load_catboost(blob: str):
+    """Deserialise once per distinct blob.
+
+    predict_proba_from_payload runs for every candidate on every poll; rebuilding
+    the booster each time would put model loading on the hot path.
+    """
+    import base64
+    import hashlib
+    import os
+    import tempfile
+    key = hashlib.sha1(blob.encode("ascii")).hexdigest()
+    cached = _CATBOOST_CACHE.get(key)
+    if cached is not None:
+        return cached
+    from catboost import CatBoostClassifier
+    fd, path = tempfile.mkstemp(suffix=".cbm")
+    os.close(fd)
+    try:
+        with io.open(path, "wb") as fh:
+            fh.write(base64.b64decode(blob))
+        m = CatBoostClassifier()
+        m.load_model(path, format="cbm")
+    finally:
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+    _CATBOOST_CACHE[key] = m
+    return m
+
+
 class MLPModel:
     def __init__(
         self,
@@ -477,6 +580,9 @@ def predict_proba_from_payload(payload: dict, rec: dict) -> float:
         z = float(x @ w + b)
         z = max(-35.0, min(35.0, z))
         return float(1.0 / (1.0 + math.exp(-z)))
+    if model["type"] == "catboost":
+        return float(_load_catboost(model["blob"]).predict_proba(
+            x.reshape(1, -1))[0][1])
     if model["type"] == "mlp":
         W1 = np.asarray(model["W1"], dtype=float)
         b1 = np.asarray(model["b1"], dtype=float)
@@ -782,6 +888,13 @@ def train_and_evaluate(
         "logistic": LogisticModel(X_train.shape[1]).fit(X_train, bundle.y_train, sample_weight=sample_weight),
         "mlp": MLPModel(X_train.shape[1]).fit(X_train, bundle.y_train, sample_weight=sample_weight),
     }
+    # CatBoost is optional at runtime: a missing or broken install must degrade
+    # to the previous two-family selection, never break the nightly retrain.
+    try:
+        models["catboost"] = CatBoostModel(X_train.shape[1]).fit(
+            X_train, bundle.y_train, sample_weight=sample_weight)
+    except Exception as exc:  # pragma: no cover - environment dependent
+        print("[ml] catboost unavailable, selecting from logistic/mlp only: %s" % exc)
 
     validation: Dict[str, dict] = {}
     best_name = ""
