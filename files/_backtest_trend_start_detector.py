@@ -348,6 +348,9 @@ def start_bars(sym: str, run_pct: float, give_back: float, window: int,
     return out
 
 
+FUND_FEATS = ["funding", "funding_mean6", "funding_vs_mean6", "funding_range6"]
+
+
 def build(symbols: list, args):
     """Feature matrix + metadata, as numpy arrays rather than a list of dicts.
 
@@ -361,6 +364,10 @@ def build(symbols: list, args):
     tf = args.tf
     sc = window_scale(args)
     warm = WARMUP * sc
+    feat_names = list(FEATS)
+    if args.funding:
+        import _backtest_funding_start_vs_middle as FU
+        feat_names = feat_names + FUND_FEATS
     Xs, ys, syms_i, iis, tss, days, closes = [], [], [], [], [], [], []
     names = []
     for si, sym in enumerate(symbols):
@@ -382,7 +389,13 @@ def build(symbols: list, args):
             if y is None:
                 continue
             f = feats[i]
-            keep_x.append([f[k] for k in FEATS])
+            if args.funding:
+                fu = FU.feats_at(sym, bars[i][0])
+                if fu is None:
+                    continue
+                f = dict(f)
+                f.update({k: fu[k] for k in FUND_FEATS})
+            keep_x.append([f[k] for k in feat_names])
             keep_y.append(y)
             keep_i.append(i)
         if not keep_x:
@@ -497,11 +510,25 @@ def main() -> None:
     ap.add_argument("--give-back", type=float, default=GIVE_BACK_PCT)
     ap.add_argument("--horizon", type=int, default=0,
                     help="bars the run must complete within; 0 = to resolution")
+    ap.add_argument("--funding", action="store_true",
+                    help="add funding-rate features. Funding is the only "
+                         "alternative source Binance serves deep enough to meet "
+                         "the max-period standard (420d vs 30d for open interest, "
+                         "taker flow and long/short ratios; the order book has no "
+                         "history at all). On the narrow start-vs-middle question "
+                         "it scored AUC 0.606 (z 2.71) -- weak, and the only thing "
+                         "that has scored above null there at all.")
     ap.add_argument("--trend-grid", choices=("1h", "15m", "same"), default="1h",
                     help="grid the TARGET trends are defined on, independent of "
                          "--tf. Default 1h holds the population fixed at the 342 "
                          "trends the committed results were scored against, so a "
                          "15m run changes only the detector's resolution.")
+    ap.add_argument("--funding-universe", action="store_true",
+                    help="restrict to symbols that HAVE funding history, without "
+                         "using it. Required for any price-vs-funding A/B: 8 of "
+                         "99 symbols have no funding, and dropping them silently "
+                         "removed 21 trends from the denominator and turned a "
+                         "population change into a fake +13pp of recall (TH-04).")
     ap.add_argument("--match-1h-universe", action="store_true",
                     help="restrict to symbols the 1h experiments could use. "
                          "The 15m backfill covers 101 symbols against 99 on 1h "
@@ -547,6 +574,13 @@ def main() -> None:
     import numpy as np
 
     symbols = UP.watchlist()
+    if args.funding_universe or args.funding:
+        import _backtest_funding_start_vs_middle as _FU
+        keep = [s for s in symbols if _FU.funding(s)[0]]
+        print("universe restricted to the %d symbols that have funding history "
+              "(dropped %d) -- both arms of an A/B must use this"
+              % (len(keep), len(symbols) - len(keep)))
+        symbols = keep
     if args.match_1h_universe:
         keep = [s for s in symbols if len(load_bars(s, "1h")) >= WARMUP + 50]
         print("universe restricted to the %d symbols the 1h runs used "
@@ -646,7 +680,7 @@ def main() -> None:
         # Suppress rather than re-rank: an alert on a bar at RSI 80 is a
         # confirmation whatever its score, and letting it keep the budget slot
         # would hide the cost this flag exists to measure.
-        rsi_col = Xte[:, FEATS.index("rsi")]
+        rsi_col = Xte[:, FEATS.index("rsi")]   # rsi keeps its index in both sets
         probs = np.where(rsi_col >= args.max_rsi, 0.0, probs)
         alive = int((probs > 0).sum())
         print()

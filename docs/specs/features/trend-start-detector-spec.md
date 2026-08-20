@@ -371,3 +371,78 @@ pre-refactor script (`git show 10fd3d4:...`) on the same cache also returned
 0.6725 / 13.62× / 87.2% / 45% — identical. The refactor is neutral; the 0.6944
 belonged to an earlier snapshot of a 1h cache the live bot keeps appending to.
 A remembered number from a moving dataset is not a baseline.
+
+## Alternative data: what exists, what was tested, what must be collected
+
+The 1h and 15m negatives pointed outside price and volume. Every alternative
+source Binance serves was probed for how far back it actually reaches
+(2026-08-20), because a source that cannot cover the max period cannot be
+validated to this project's standard:
+
+| source | history | step | status |
+|---|---|---|---|
+| **funding rate** | **420 days** | 8h | testable now; backfilled for 93 symbols |
+| open interest | 30 days, HTTP 400 beyond | 5m-4h | collection only |
+| taker buy/sell volume | 30 days | 1h | collection only |
+| long/short ratios (3 kinds) | 30 days | 1h | collection only |
+| order book depth | **none — live snapshot only** | — | collection only |
+
+Thirty days holds roughly two dozen +20% trends; a result on that is
+indistinguishable from noise. So those sources are **untestable today** and the
+only useful action is to start accumulating them — the §0 rule 1 case, where
+work blocked by missing data becomes data-collection work.
+
+### Funding: a real narrow signal that does not translate
+
+Restricted to bars already INSIDE a +20% trend, asking only "is this the first
+6h or later", funding features alone score **AUC 0.6059, null 0.5238 ± 0.0303,
+z = 2.71** on a time split. The medians move the way the hypothesis predicted:
+
+```
+                    START    MIDDLE   NON-TREND
+funding (bp)        0.212     0.500       0.493
+funding_mean6       0.020     0.314       0.266
+```
+
+Non-trend funding matches the MIDDLE, not the start — so the separation is
+"trend beginnings are unusual", not merely "trends are unusual". That is the
+first thing in this whole line of work to score above null on the start-vs-
+middle question at all.
+
+It does not survive contact with the detector. Matched universes, both arms on
+the same 91 symbols and the same 73 holdout trends:
+
+| | AUC | lift@0.5% | caught | ahead | into |
+|---|---|---|---|---|---|
+| price only | 0.8514 | 23.14× | 52 (71.2%) | 17.28% | 47% |
+| price + funding | 0.8439 | 25.87× | 53 (72.6%) | 17.40% | 40% |
+
+AUC slightly **down**, one extra trend caught, and `into` 40% against 47% — the
+same price-only configuration has printed 42%, 45%, 46% and 47% across data
+snapshots, so 40% sits inside the observed run-to-run spread. **Funding does not
+measurably help the detector.** The narrow signal is real and does not convert
+into earlier alerts.
+
+### Two attractive numbers destroyed by their own base checks
+
+Recorded because both looked like findings and cost nothing but the check:
+
+1. **`4h_leader_watch` firing at `into` 13%** — the best earliness figure this
+   project has produced, and computed on **n = 3**. The rule catches 3 of 342
+   trends (0.9% recall) and fires 0.62 times per symbol-year. Its forward edge
+   is real (44% of fires exceed +5% against 21% for a random bar) but it is a
+   rare high-precision alert with negligible coverage. Two components are dead
+   weight: dropping the 4h context score entirely changes nothing (71 fires vs
+   78, identical metrics), and the bare strength gate — up 10% today on 3x
+   volume — beats the full rule on forward move (6.06% vs 4.19% median) while
+   entering at `into` 65% instead of 13%.
+2. **Funding scoring AUC 0.846 on start-vs-middle** — from a RANDOM split.
+   Funding posts every 8h, so every bar in an 8h window of one symbol carries
+   the same value and adjacent hours of one trend land on both sides of the cut;
+   the model memorises (symbol, funding value) → label. A time split gives
+   0.6059. The leakage was worth 0.24 of AUC (TH-03).
+
+A third confound was caught in the A/B itself: 8 of 99 symbols have no funding
+history, and dropping them silently removed 21 trends from the denominator,
+turning a population change into a fake +13pp of recall. `--funding-universe`
+now forces both arms onto the same symbol set (TH-04).
