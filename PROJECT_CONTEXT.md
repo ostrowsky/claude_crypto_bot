@@ -194,7 +194,7 @@ decoupling (сам расчёт декоплинга и shadow-логирова�
 | `files/daily_learning.py` | Оркестратор ежедневного обучения |
 | `files/rl_headless_worker.py` | Фоновый RL worker (обучение ранкера) |
 | `files/ml_candidate_ranker.py` | CatBoost ранкер кандидатов |
-| `files/ml_signal_model.py` | CatBoost классификатор сигналов |
+| `files/ml_signal_model.py` | Signal classifier. Trains logistic, MLP and CatBoost and keeps whichever wins on validation — **not** CatBoost-only, as this line said until 2026-08-20. Currently MLP wins. |
 | `files/top_gainer_critic.py` | Оценка качества предсказания top gainers |
 | `files/train_top_gainer.py` | Обучение top_gainer_model |
 | `files/indicators.py` | Технические индикаторы |
@@ -781,3 +781,18 @@ BANDIT_REGIME_INTERACTION_ENABLED = False     # RM-22 Step B (neutral, OFF)
 - Bot token хранится в `.runtime\bot_bg_runner.cmd` (runtime-generated)
 - При тестировании скриптов из Python запускать из `files\`, не из корня
 - Unicode в логах — cp1251 на Windows, использовать ASCII-only в `.bat`
+
+## Truth rule 13 — never assert without proof
+
+13. **Never assert without proof — verify, then speak.** A claim about what
+    is running, what a flag does, or why something behaves as it does is not
+    knowledge until it has been checked against the system itself. Three
+    failures on 2026-08-20 alone: "the version banner is just stale git
+    metadata" (asserted twice before checking process start time against file
+    mtime — it was stale, but only proving it made the answer worth anything),
+    "segment routing is now off" (the flag was set in a function the live path
+    never reaches; the live median proba had not moved), and a top-40 ranking
+    computed on the futures universe and presented as the operator's spot
+    screen. The cost of checking is a single command; the cost of not checking
+    is a wrong diagnosis acted on. If a check is impossible, say the claim is
+    unverified rather than stating it flat.
