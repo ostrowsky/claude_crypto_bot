@@ -1,7 +1,7 @@
 # Trend-start detector: catching the move, not the close
 
 - **Slug:** `trend-start-detector`
-- **Status:** evidence 2026-08-20 — POSITIVE on WHICH coin, NEGATIVE on WHEN; nothing deployed
+- **Status:** evidence 2026-08-20 — POSITIVE on WHICH coin; NEGATIVE on WHEN at 1h AND 15m; nothing deployed
 - **Created:** 2026-08-19
 - **Truth-harness invariants:** TH-01 (base rate and lift beside every ratio),
   TH-03 (holdout split by time), TH-06 (the population the bot actually sees —
@@ -278,3 +278,96 @@ supposedly different labels**.
 `test_trend_start_detector.py` now asserts the function is called and its result
 used. The failure is kept in this file because a spec that records only what was
 intended is the failure mode the whole document exists to prevent.
+
+## Resolution was not the constraint either — 15m, and it is WORSE
+
+The 1h negative result carried one honest escape: a median caught trend runs 7
+hours, so its opening hour is one observation in seven and may simply have had
+no shape to describe. 419 days of 15m klines for the whole watchlist were
+backfilled to close that escape (`_backfill_watchlist_15m_419d.py`, 101 symbols,
+40 224 bars each, 747 MB). The escape is now closed, in the unhelpful direction.
+
+| run | rows | AUC | lift@0.5% | alerts | caught | ahead | **into** |
+|---|---|---|---|---|---|---|---|
+| 1h reference | 958 452 | 0.8379 | 22.2× | 1 419 | **59.6%** | 17.07% | **42%** |
+| 15m, native windows | 3 912 901 | 0.8674 | 20.4× | 5 724 | 42.2% | 14.12% | **52%** |
+| 15m, windows ×4 | 3 877 261 | 0.8340 | 18.6× | 5 677 | 37.2% | 15.47% | **48%** |
+
+The alert budget is a share of BARS, and 15m has four times as many, so both 15m
+runs fired **four times more alerts in absolute terms** — and still caught fewer
+of the same trends, and landed later inside each. Native windows let the
+features react 4× faster in wall-clock time; scaled windows (×4) give them the
+same physical horizon the 1h run had. Neither helps.
+
+Worth noting against §0a rule 11: **15m-native has the best AUC of the three
+(0.8674) and the worst timing (52%)**. Separation improved while the thing that
+matters got worse — the same pattern that killed the +5% target earlier in this
+spec, and another reason AUC cannot be the acceptance metric here.
+
+### The target was held fixed, on purpose
+
+A finer grid does not resample the ZigZag population, it replaces it: at a 2%
+give-back the 15m grid finds **99** trends where 1h finds **342**, because a
+give-back is now detected on intra-hour lows the hourly bar hides, so runs are
+cut before reaching +20%. The survivors are the unusually smooth ones (median
+10.8h vs 7.0h). Widening the give-back to 3% restores the count (351) and still
+not the population — those run a median 18.8h.
+
+No parameter makes them identical, so the experiment does not try. `--trend-grid`
+holds the target on the 1h grid — the same 342 trends every committed number was
+scored against — and only the detector's input resolution varies. The universe is
+likewise pinned to the 99 symbols the 1h runs used (`--match-1h-universe`); the
+15m backfill covers 101, and letting BAKE and MKR in would have put a population
+change inside a resolution comparison.
+
+## Verdict on earliness: it is the features, not the model, the label, or the grid
+
+Five independent attacks, all agreeing:
+
+| attack | into the move |
+|---|---|
+| forward label, 1h | 48% |
+| start label, 1h, windows 1/2/3/6h | 40-46%, flat in the window width |
+| RSI < 65 constraint | 32%, at the cost of 75% of all catches |
+| RSI < 55 constraint | 20%, at the cost of 96% |
+| **15m resolution, native and scaled** | **52% and 48%, with 4× the alerts** |
+
+**On price and volume alone, the start of a strong trend is not separable from
+its middle at any resolution tested.** The information that identifies a trend
+arrives with the trend's own momentum; asking for it earlier does not relocate
+the signal, it discards it.
+
+What survives, unchanged and strong: the detector answers **which coin** —
+AUC 0.82-0.87, lift 18-61×, stable across four time cuts, four label widths and
+two timeframes. It does not answer **when**.
+
+The next honest step is not another model or another grid. It is data of a
+different kind — order book depth and imbalance, funding rates, liquidation
+flow, exchange inflows — none of which this repo currently records. That is a
+collection task before it is a modelling one (§0 rule 1).
+
+## Engineering defects found while building this, recorded so they are not repeated
+
+Each of these would have produced either a crash or quietly wrong numbers:
+
+- **The window scaling reached only half of each range.** Replacements ran with
+  `n=1`, so `lo24` was scaled and `hi24` left at 23 bars; `base_range_24` would
+  have divided a `24*sc`-bar high by a 24-bar low. A test now scans the whole of
+  `feature_table` for surviving literal lookbacks.
+- **An `int8` label overflowed inside `auc()`** — `len(y) - sum(y)` with a numpy
+  int8 sum. The memory win was in the 22 float columns; the label is int64 now.
+- **A numpy array was tested for truth** (`if ps:`) in the null loop.
+- **The dict-per-row dataset needed 6.8 GB against 2.3 GB free** and could not
+  run at 15m at all. Columns brought it to ~700 MB.
+- **`min_duration_bars` had to scale with the timeframe** — `4` means "four
+  hours" on 1h and would have meant one hour on 15m.
+
+### The refactor was proven neutral rather than assumed to be
+
+Converting the dataset to columns changed the 1h AUC from a remembered 0.6944 to
+0.6725, and `float32` storage was the obvious suspect. It was wrong: float64
+reproduced 0.6725 **exactly**, digit for digit. Running the committed
+pre-refactor script (`git show 10fd3d4:...`) on the same cache also returned
+0.6725 / 13.62× / 87.2% / 45% — identical. The refactor is neutral; the 0.6944
+belonged to an earlier snapshot of a 1h cache the live bot keeps appending to.
+A remembered number from a moving dataset is not a baseline.

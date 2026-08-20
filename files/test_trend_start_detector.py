@@ -22,6 +22,7 @@ if str(HERE) not in sys.path:
 import _backtest_trend_start_detector as TD  # noqa: E402
 
 SRC = (HERE / "_backtest_trend_start_detector.py").read_text(encoding="utf-8")
+NL = chr(10)
 
 
 def bar(i, close, high=None, low=None, vol=100.0):
@@ -138,8 +139,12 @@ class TestTheRandomBaselineExists(unittest.TestCase):
 
 class TestSplitIsByTime(unittest.TestCase):
     def test_the_cut_is_a_day_boundary_and_train_is_strictly_earlier(self):
-        self.assertIn('train = [r for r in rows if r["_day"] < cut]', SRC)
-        self.assertIn('test = [r for r in rows if r["_day"] >= cut]', SRC)
+        # The dataset is now numpy columns, so the split is a mask on the day
+        # column -- but it must still be a DAY boundary with train strictly
+        # earlier, which is the property this test exists to hold.
+        self.assertIn('Xtr, mtr = sub(meta["day"] < cut)', SRC)
+        self.assertIn('Xte, test = sub(meta["day"] >= cut)', SRC)
+        self.assertIn('cut = days[int(len(days) * 0.7)]', SRC)
 
     def test_the_null_is_refit_across_seeds(self):
         self.assertIn("shuffle=True", SRC)
@@ -184,10 +189,75 @@ class TestEarlinessConstraint(unittest.TestCase):
     its slot and hide the cost."""
 
     def test_high_rsi_bars_are_suppressed_not_reranked(self):
-        self.assertIn('0.0 if r["rsi"] >= args.max_rsi else p', SRC)
+        self.assertIn('np.where(rsi_col >= args.max_rsi, 0.0, probs)', SRC)
+        self.assertIn('rsi_col = Xte[:, FEATS.index("rsi")]', SRC)
 
     def test_it_reports_how_much_of_the_universe_it_removed(self):
         self.assertIn("test bars remain eligible", SRC)
+
+
+class TestTimeframeIsAppliedEverywhereOrNowhere(unittest.TestCase):
+    """The 15m run must move the WHOLE experiment onto the 15m grid.
+
+    Features on 15m while trends are still detected on 1h would score a fine
+    grid against a coarse label, and every catch would be credited or denied by
+    a mismatch rather than by the model.
+    """
+
+    def test_features_labels_and_trends_all_read_the_same_loader(self):
+        # CS.bars inside load_bars IS the 1h branch; what must not exist is a
+        # second, unrouted call that ignores --tf.
+        self.assertEqual(SRC.count("CS.bars(sym)"), 1,
+                         "a code path still reads 1h bars without going "
+                         "through load_bars")
+        self.assertIn("def load_bars(sym: str, tf: str)", SRC)
+        self.assertIn("b = load_bars(sym, tf)", SRC)
+
+    def test_trend_detection_uses_the_timeframe(self):
+        self.assertIn("def trends_tf(", SRC)
+        self.assertNotIn("UP.trends_for(sym, args.run", SRC)
+
+    def test_min_duration_scales_with_the_timeframe(self):
+        # min_bars=4 means "four hours" on 1h. Left at 4 bars on 15m it would
+        # admit one-hour trends and change the population being scored, so the
+        # comparison would no longer be about resolution.
+        self.assertIn('min_duration_bars=4 * (4 if tf == "15m" else 1)', SRC)
+
+    def test_warmup_scales_with_the_feature_windows(self):
+        # WARMUP exists so MA99 is meaningful; scaling the windows without it
+        # would train on bars whose longest average is still filling up.
+        self.assertIn("warm = WARMUP * sc", SRC)
+        self.assertIn("range(warm,", SRC)
+
+
+class TestWindowScalingIsHonest(unittest.TestCase):
+    def test_the_1h_path_is_unchanged_by_default(self):
+        # sc defaults to 1, so every committed 1h number stays reproducible.
+        self.assertIn("return max(1, int(args.window_scale or 1))", SRC)
+
+    def test_a_high_and_its_low_use_the_same_window(self):
+        """Scaling one side of a range and not the other is silent corruption.
+
+        The first patch did exactly that -- lo24 scaled, hi24 left at 23 bars --
+        so base_range_24 would have divided a 24*sc-bar high by a 24-bar low and
+        the feature would have been a ratio of two different windows.
+        """
+        import re as _re
+        body = SRC.split("def feature_table")[1].split(NL + "def ")[0]
+        self.assertEqual(_re.findall(r"i - [0-9]+\)", body), [],
+                         "an unscaled literal lookback survives")
+
+    def test_scaling_reaches_every_lookback_not_just_the_averages(self):
+        for frag in ("_sma_series(closes, 25*sc)", "_ema_series(closes, 12*sc)",
+                     "_rsi_series(closes, 14*sc)", "_atr_pct_series(bars, 14*sc)",
+                     "_sma_series(vols, 20*sc)", "rsi[max(0, i - 6*sc)]",
+                     "closes[i - 12*sc]", "max(-1, i - 200*sc)"):
+            self.assertIn(frag, SRC, "unscaled lookback left behind: %s" % frag)
+
+    def test_the_15m_cache_is_a_separate_file_from_the_committed_ones(self):
+        # Folding 15m into CS.bars would silently change what every earlier
+        # result was computed on.
+        self.assertIn('"%s_15m_419d.csv" % sym', SRC)
 
 
 if __name__ == "__main__":

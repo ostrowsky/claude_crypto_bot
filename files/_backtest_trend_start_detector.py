@@ -42,6 +42,7 @@ Spec: docs/specs/features/trend-start-detector-spec.md
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import math
 import random
@@ -165,18 +166,91 @@ FEATS = ["close_vs_ma25", "close_vs_ma99", "ma25_vs_ma99",
          "atr_pct", "ret_3", "ret_6", "ret_12", "dist_high_50"]
 
 
-def feature_table(bars: list) -> list:
-    """One dict per bar, using only information available at that bar."""
+HISTORY = Path(__file__).resolve().parent.parent / "history"
+_BARS15: dict = {}
+
+
+def bars_15m(sym: str) -> list:
+    """419 days of 15m bars, the same window the 1h experiments used.
+
+    Kept separate from CS.bars rather than folded into it: the 1h results are
+    already committed against that loader, and silently changing what it returns
+    would make every earlier number irreproducible.
+    """
+    if sym in _BARS15:
+        return _BARS15[sym]
+    out = []
+    fp = HISTORY / ("%s_15m_419d.csv" % sym)
+    if fp.exists():
+        import csv as _csv
+        from datetime import datetime as _dt
+        with io.open(fp, encoding="utf-8") as fh:
+            for r in _csv.DictReader(fh):
+                try:
+                    out.append((_dt.fromisoformat(r["ts"]), float(r["open"]),
+                                float(r["high"]), float(r["low"]),
+                                float(r["close"]), float(r.get("volume") or 0)))
+                except (KeyError, ValueError, TypeError):
+                    continue
+    _BARS15[sym] = out
+    return out
+
+
+def load_bars(sym: str, tf: str) -> list:
+    return bars_15m(sym) if tf == "15m" else CS.bars(sym)
+
+
+def trends_tf(sym: str, run_pct: float, give_back: float, tf: str) -> list:
+    """The trends to be caught -- ALWAYS defined on the grid `tf` names.
+
+    Measured across the watchlist, the ZigZag population is not merely
+    resampled by a finer grid, it is replaced: at a 2% give-back the 15m grid
+    finds 99 trends where 1h finds 342, because a give-back is now detected on
+    intra-hour lows the hourly bar hides, so runs are cut before reaching +20%.
+    The survivors are the unusually smooth ones (median 10.8h vs 7.0h). Widening
+    the give-back to 3% restores the COUNT (351) and still not the population --
+    those trends run a median 18.8h.
+
+    No parameter makes the two identical, so the experiment does not try. The
+    TARGET is held fixed on the 1h grid (see --trend-grid) and only the
+    detector's input resolution varies, which is the question actually being
+    asked (TH-04).
+
+    min_duration is scaled with the timeframe: `min_bars=4` means "at least four
+    hours" on 1h, and leaving it at 4 bars on 15m would admit one-hour trends.
+    """
+    b = load_bars(sym, tf)
+    if len(b) < 100:
+        return []
+    rows = [{"ts": r[0], "open": r[1], "high": r[2], "low": r[3],
+             "close": r[4], "volume": r[5]} for r in b]
+    try:
+        from zigzag_labeler import detect_uptrends
+        return detect_uptrends(rows, symbol=sym, swing_pct=run_pct,
+                               max_drawdown_pct=give_back,
+                               min_duration_bars=4 * (4 if tf == "15m" else 1))
+    except Exception:
+        return []
+
+
+def feature_table(bars: list, sc: int = 1) -> list:
+    """One dict per bar, using only information available at that bar.
+
+    `sc` multiplies every lookback. All windows here are counted in BARS, so on
+    15m bars an unscaled MA99 spans one day where the 1h version spanned four.
+    sc=4 restores the physical time span, isolating the resolution change from
+    a change in what the features look at.
+    """
     closes = [b[4] for b in bars]
     vols = [b[5] for b in bars]
-    ma25, ma99 = _sma_series(closes, 25), _sma_series(closes, 99)
-    ema12, ema26 = _ema_series(closes, 12), _ema_series(closes, 26)
+    ma25, ma99 = _sma_series(closes, 25*sc), _sma_series(closes, 99*sc)
+    ema12, ema26 = _ema_series(closes, 12*sc), _ema_series(closes, 26*sc)
     macd = [a - b for a, b in zip(ema12, ema26)]
-    signal = _ema_series(macd, 9)
+    signal = _ema_series(macd, 9*sc)
     hist = [m - s for m, s in zip(macd, signal)]
-    rsi = _rsi_series(closes)
-    atr = _atr_pct_series(bars)
-    vol20 = _sma_series(vols, 20)
+    rsi = _rsi_series(closes, 14*sc)
+    atr = _atr_pct_series(bars, 14*sc)
+    vol20 = _sma_series(vols, 20*sc)
 
     since_cross = 999
     out = []
@@ -185,11 +259,11 @@ def feature_table(bars: list) -> list:
             since_cross = 0
         else:
             since_cross = min(since_cross + 1, 999)
-        lo24 = min(closes[max(0, i - 23):i + 1])
-        hi24 = max(closes[max(0, i - 23):i + 1])
-        lo48 = min(closes[max(0, i - 47):i + 1])
-        hi48 = max(closes[max(0, i - 47):i + 1])
-        w50 = closes[max(0, i - 49):i + 1]
+        lo24 = min(closes[max(0, i - (24*sc-1)):i + 1])
+        hi24 = max(closes[max(0, i - (24*sc-1)):i + 1])
+        lo48 = min(closes[max(0, i - (48*sc-1)):i + 1])
+        hi48 = max(closes[max(0, i - (48*sc-1)):i + 1])
+        w50 = closes[max(0, i - (50*sc-1)):i + 1]
         hi50 = max(w50)
         since_high = len(w50) - 1 - max(range(len(w50)), key=lambda j: w50[j])
         c = closes[i]
@@ -199,7 +273,7 @@ def feature_table(bars: list) -> list:
         # measures how TIGHT a fixed window was, never how LONG the quiet
         # lasted.
         bib = 0
-        for j in range(i, max(-1, i - 200), -1):
+        for j in range(i, max(-1, i - 200*sc), -1):
             if abs(closes[j] / c - 1) > 0.03:
                 break
             bib += 1
@@ -208,7 +282,7 @@ def feature_table(bars: list) -> list:
         bvol = vols[max(0, i - bib):i + 1] or [vols[i]]
         med_bvol = sorted(bvol)[len(bvol) // 2] or 1.0
         out.append({
-            "bars_in_base": float(min(bib, 200)),
+            "bars_in_base": float(min(bib, 200*sc)),
             "base_tightness": ((hi48 / lo48 - 1) * 100 / atr[i]) if atr[i] else 0.0,
             "vol_now_vs_base": vols[i] / med_bvol,
             "dist_base_high": (c / bhigh - 1) * 100 if bhigh else 0.0,
@@ -217,20 +291,20 @@ def feature_table(bars: list) -> list:
             "ma25_vs_ma99": (ma25[i] / ma99[i] - 1) * 100 if ma99[i] else 0.0,
             "macd_hist": hist[i] / c * 100 if c else 0.0,
             "macd_hist_d1": (hist[i] - hist[i - 1]) / c * 100 if i and c else 0.0,
-            "bars_since_macd_cross": float(min(since_cross, 100)),
+            "bars_since_macd_cross": float(min(since_cross, 100*sc)),
             "rsi": rsi[i],
-            "rsi_d6": rsi[i] - rsi[max(0, i - 6)],
+            "rsi_d6": rsi[i] - rsi[max(0, i - 6*sc)],
             "vol_ratio": vols[i] / vol20[i] if vol20[i] else 1.0,
-            "vol_ratio_3": (sum(vols[max(0, i - 2):i + 1]) / 3) / vol20[i]
+            "vol_ratio_3": (sum(vols[max(0, i - (3*sc-1)):i + 1]) / (3*sc)) / vol20[i]
                             if vol20[i] else 1.0,
             # The quiet base the operator's charts both show before the move.
             "base_range_24": (hi24 / lo24 - 1) * 100 if lo24 else 0.0,
             "base_range_48": (hi48 / lo48 - 1) * 100 if lo48 else 0.0,
             "bars_since_high_50": float(since_high),
             "atr_pct": atr[i],
-            "ret_3": (c / closes[i - 3] - 1) * 100 if i >= 3 else 0.0,
-            "ret_6": (c / closes[i - 6] - 1) * 100 if i >= 6 else 0.0,
-            "ret_12": (c / closes[i - 12] - 1) * 100 if i >= 12 else 0.0,
+            "ret_3": (c / closes[i - 3*sc] - 1) * 100 if i >= 3*sc else 0.0,
+            "ret_6": (c / closes[i - 6*sc] - 1) * 100 if i >= 6*sc else 0.0,
+            "ret_12": (c / closes[i - 12*sc] - 1) * 100 if i >= 12*sc else 0.0,
             "dist_high_50": (c / hi50 - 1) * 100 if hi50 else 0.0,
         })
     return out
@@ -238,7 +312,14 @@ def feature_table(bars: list) -> list:
 
 # ------------------------------------------------------------------ build ---
 
-def start_bars(sym: str, run_pct: float, give_back: float, window: int) -> dict:
+def window_scale(args) -> int:
+    """1 unless asked otherwise. On 15m, sc=4 gives the features the same
+    physical horizon the 1h run had; sc=1 lets them react four times faster."""
+    return max(1, int(args.window_scale or 1))
+
+
+def start_bars(sym: str, run_pct: float, give_back: float, window: int,
+               tf: str = "1h", grid: str = "1h") -> dict:
     """bar-index -> 1 for the first `window` bars of each qualifying uptrend.
 
     The forward label ("from here, +X% before a give-back") is satisfied just as
@@ -251,10 +332,10 @@ def start_bars(sym: str, run_pct: float, give_back: float, window: int) -> dict:
     part that does the work -- without it the model is free to keep scoring the
     middle and lose nothing.
     """
-    bars = CS.bars(sym)
+    bars = load_bars(sym, tf)
     idx = {b[0]: i for i, b in enumerate(bars)}
     out = {}
-    for t in UP.trends_for(sym, run_pct, give_back, 4):
+    for t in trends_tf(sym, run_pct, give_back, grid):
         st = UP.attr(t, "start_ts", "start", "low_ts")
         en = UP.attr(t, "end_ts", "end", "high_ts")
         if st is None or en is None:
@@ -267,53 +348,93 @@ def start_bars(sym: str, run_pct: float, give_back: float, window: int) -> dict:
     return out
 
 
-def build(symbols: list, args) -> list:
-    rows = []
+def build(symbols: list, args):
+    """Feature matrix + metadata, as numpy arrays rather than a list of dicts.
+
+    A dict per row costs ~1.7 KB. On 1h that is 1.6 GB and merely large; on 15m
+    the same experiment is 3.97 M rows and 6.8 GB, against 2.3 GB of free RAM --
+    it does not run at all. float32 columns bring the same data to ~350 MB, so
+    the resolution question can actually be asked.
+    """
+    import numpy as np
+
+    tf = args.tf
+    sc = window_scale(args)
+    warm = WARMUP * sc
+    Xs, ys, syms_i, iis, tss, days, closes = [], [], [], [], [], [], []
+    names = []
     for si, sym in enumerate(symbols):
-        bars = CS.bars(sym)
-        if len(bars) < WARMUP + HORIZON + 50:
+        bars = load_bars(sym, tf)
+        if len(bars) < warm + HORIZON * sc + 50:
             continue
-        feats = feature_table(bars)
+        feats = feature_table(bars, sc)
         tail = HORIZON if args.horizon <= 0 else args.horizon
-        starts = (start_bars(sym, args.run, args.give_back, args.start_window)
+        grid = args.tf if args.trend_grid == "same" else args.trend_grid
+        starts = (start_bars(sym, args.run, args.give_back, args.start_window,
+                             args.tf, grid)
                   if args.label == "start" else None)
-        for i in range(WARMUP, len(bars) - tail):
+        keep_x, keep_y, keep_i = [], [], []
+        for i in range(warm, len(bars) - tail):
             if starts is not None:
                 y = starts.get(i, 0)
             else:
                 y = will_run(bars, i, args.run, args.give_back, args.horizon)
             if y is None:
                 continue
-            r = dict(feats[i])
-            r["_y"] = y
-            r["_sym"] = sym
-            r["_i"] = i
-            r["_ts"] = bars[i][0]
-            r["_day"] = bars[i][0].strftime("%Y-%m-%d")
-            r["_close"] = bars[i][4]
-            rows.append(r)
-        if (si + 1) % 25 == 0:
-            print("  built %d/%d symbols, %d rows" % (si + 1, len(symbols), len(rows)))
-    return rows
+            f = feats[i]
+            keep_x.append([f[k] for k in FEATS])
+            keep_y.append(y)
+            keep_i.append(i)
+        if not keep_x:
+            continue
+        sidx = len(names)
+        names.append(sym)
+        # float64, not float32: the 6.8 GB came from ~1.7 KB of dict overhead
+        # per row, not from the width of the numbers. Narrowing to float32 also
+        # shifted the 1h AUC 0.6944 -> 0.6725, which would have put a storage
+        # artefact inside a resolution comparison. float64 still costs 700 MB
+        # for the whole 15m dataset.
+        Xs.append(np.asarray(keep_x, dtype=np.float64))
+        # int64, not int8: the memory win is in the 22 float32 feature columns,
+        # and an int8 label makes `len(y) - sum(y)` overflow inside auc().
+        ys.append(np.asarray(keep_y, dtype=np.int64))
+        syms_i.append(np.full(len(keep_x), sidx, dtype=np.int32))
+        iis.append(np.asarray(keep_i, dtype=np.int32))
+        tss.append(np.asarray([bars[i][0].timestamp() for i in keep_i],
+                              dtype=np.int64))
+        days.append(np.asarray([int(bars[i][0].strftime("%Y%m%d")) for i in keep_i],
+                               dtype=np.int32))
+        closes.append(np.asarray([bars[i][4] for i in keep_i], dtype=np.float64))
+        if len(names) % 25 == 0:
+            print("  built %d/%d symbols, %d rows"
+                  % (len(names), len(symbols), sum(len(a) for a in ys)))
+    if not Xs:
+        return None, None
+    meta = {"y": np.concatenate(ys), "sym": np.concatenate(syms_i),
+            "i": np.concatenate(iis), "ts": np.concatenate(tss),
+            "day": np.concatenate(days), "close": np.concatenate(closes),
+            "names": names}
+    return np.concatenate(Xs), meta
 
 
-def fit(train, test, seed=0, shuffle=False):
+def fit(Xtr, ytr, Xte, seed=0, shuffle=False):
     from catboost import CatBoostClassifier
-    y = [r["_y"] for r in train]
+    import numpy as np
+    y = np.asarray(ytr)
     if shuffle:
-        y = y[:]
-        random.Random(seed).shuffle(y)
-    if len(set(y)) < 2:
+        y = y.copy()
+        np.random.RandomState(seed).shuffle(y)
+    if len(np.unique(y)) < 2:
         return None, None
     m = CatBoostClassifier(iterations=400, depth=6, learning_rate=0.05,
                            verbose=0, random_seed=seed, allow_writing_files=False)
-    m.fit([[r[f] for f in FEATS] for r in train], y)
-    return list(m.predict_proba([[r[f] for f in FEATS] for r in test])[:, 1]), m
+    m.fit(Xtr, y)
+    return m.predict_proba(Xte)[:, 1], m
 
 
 # ------------------------------------------------- which trends were caught ---
 
-def catch_report(test, probs, thr, args, top_n_examples=25):
+def catch_report(meta, probs, thr, args, top_n_examples=25):
     """Fire an alert wherever p >= thr, then ask which real trends it caught.
 
     A ranking metric cannot answer "which trends would we have caught", so this
@@ -321,24 +442,34 @@ def catch_report(test, probs, thr, args, top_n_examples=25):
     each move the first alert landed -- an alert at 80% of the way up is a
     catch by any hit-rate metric and worthless to act on.
     """
-    alerts = defaultdict(list)
-    for r, p in zip(test, probs):
-        if p >= thr:
-            alerts[r["_sym"]].append((r["_ts"], r["_close"], p))
-    for s in alerts:
-        alerts[s].sort()
+    from datetime import datetime as _dt
+    import numpy as np
 
-    first_day = min(r["_day"] for r in test)
+    tf = args.tf
+    names = meta["names"]
+    hot = np.nonzero(probs >= thr)[0]
+    alerts = defaultdict(list)
+    for j in hot:
+        alerts[names[meta["sym"][j]]].append(
+            (_dt.fromtimestamp(int(meta["ts"][j]), tz=timezone.utc),
+             float(meta["close"][j]), float(probs[j])))
+    for k in alerts:
+        alerts[k].sort()
+
+    first_day = int(meta["day"].min())
+    present = sorted(set(int(v) for v in np.unique(meta["sym"])))
     caught, missed, rows = 0, 0, []
-    for sym in sorted(set(r["_sym"] for r in test)):
-        bars = CS.bars(sym)
-        for t in UP.trends_for(sym, args.run, args.give_back, 4):
+    for sidx in present:
+        sym = names[sidx]
+        bars = load_bars(sym, tf)
+        grid = args.tf if args.trend_grid == "same" else args.trend_grid
+        for t in trends_tf(sym, args.run, args.give_back, grid):
             st = UP.attr(t, "start_ts", "start", "low_ts")
             en = UP.attr(t, "end_ts", "end", "high_ts")
             gain = UP.attr(t, "gain_pct", "gain")
             if st is None or en is None or gain is None:
                 continue
-            if st.strftime("%Y-%m-%d") < first_day:
+            if int(st.strftime("%Y%m%d")) < first_day:
                 continue
             hit = next(((ts, px, p) for ts, px, p in alerts.get(sym, [])
                         if st <= ts <= en), None)
@@ -347,13 +478,13 @@ def catch_report(test, probs, thr, args, top_n_examples=25):
                 continue
             caught += 1
             ts, px, p = hit
-            peak = max((b[2] for b in bars if st <= b[0] <= en), default=px)
+            peak = max((bb[2] for bb in bars if st <= bb[0] <= en), default=px)
             ahead = (peak / px - 1) * 100 if px else 0.0
             into = (1 - ahead / gain) * 100 if gain else 0.0
             rows.append({"sym": sym, "start": st, "end": en, "gain": gain,
                          "alert": ts, "ahead": ahead, "into": into, "p": p})
 
-    n_alerts = sum(len(v) for v in alerts.values())
+    n_alerts = int(len(hot))
     inside = len(rows)
     return {"caught": caught, "missed": missed, "rows": rows,
             "n_alerts": n_alerts,
@@ -366,6 +497,22 @@ def main() -> None:
     ap.add_argument("--give-back", type=float, default=GIVE_BACK_PCT)
     ap.add_argument("--horizon", type=int, default=0,
                     help="bars the run must complete within; 0 = to resolution")
+    ap.add_argument("--trend-grid", choices=("1h", "15m", "same"), default="1h",
+                    help="grid the TARGET trends are defined on, independent of "
+                         "--tf. Default 1h holds the population fixed at the 342 "
+                         "trends the committed results were scored against, so a "
+                         "15m run changes only the detector's resolution.")
+    ap.add_argument("--match-1h-universe", action="store_true",
+                    help="restrict to symbols the 1h experiments could use. "
+                         "The 15m backfill covers 101 symbols against 99 on 1h "
+                         "(BAKE, MKR), and letting two extra symbols in would "
+                         "put a population change inside a resolution comparison.")
+    ap.add_argument("--tf", choices=("1h", "15m"), default="1h",
+                    help="bar grid for features, labels AND trend detection")
+    ap.add_argument("--window-scale", type=int, default=None,
+                    help="multiply every feature lookback. Default 1 for 1h and "
+                         "for 15m-native; pass 4 with --tf 15m to give the "
+                         "features the same physical horizon as the 1h run.")
     ap.add_argument("--max-rsi", type=float, default=None,
                     help="forbid alerts on bars whose RSI is already above this. "
                          "Measures the PRICE of earliness: the budget can only be "
@@ -397,14 +544,27 @@ def main() -> None:
     print("population: every bar of every watchlist symbol -- NOT the bot's entries")
     print("=" * 96)
 
+    import numpy as np
+
     symbols = UP.watchlist()
-    rows = build(symbols, args)
-    if len(rows) < 20000:
-        print("only %d rows" % len(rows))
+    if args.match_1h_universe:
+        keep = [s for s in symbols if len(load_bars(s, "1h")) >= WARMUP + 50]
+        print("universe restricted to the %d symbols the 1h runs used "
+              "(dropped %d)" % (len(keep), len(symbols) - len(keep)))
+        symbols = keep
+    X, meta = build(symbols, args)
+    if X is None or len(X) < 20000:
+        print("only %d rows" % (0 if X is None else len(X)))
         return
 
-    base_all = sum(r["_y"] for r in rows) / len(rows)
-    days = sorted(set(r["_day"] for r in rows))
+    yall = meta["y"]
+    base_all = float(yall.mean())
+    days = sorted(set(int(v) for v in np.unique(meta["day"])))
+
+    def sub(mask):
+        """A view of the dataset restricted to `mask`, metadata kept aligned."""
+        m = {k: (v if k == "names" else v[mask]) for k, v in meta.items()}
+        return X[mask], m
 
     if args.stability:
         # One split is one observation. A result that only exists at 70/30 is a
@@ -416,52 +576,52 @@ def main() -> None:
         print("-" * 78)
         for frac in [float(x) for x in args.cuts.split(",")]:
             c = days[int(len(days) * frac)]
-            tr = [r for r in rows if r["_day"] < c]
-            te = [r for r in rows if r["_day"] >= c]
-            if not tr or not te:
+            Xtr, mtr = sub(meta["day"] < c)
+            Xte, mte = sub(meta["day"] >= c)
+            if not len(Xtr) or not len(Xte):
                 continue
-            pp, _ = fit(tr, te)
+            pp, _ = fit(Xtr, mtr["y"], Xte)
             if pp is None:
                 continue
-            yy = [r["_y"] for r in te]
+            yy = mte["y"]
             aa = CS.auc(yy, pp)
             nn = []
             for sd in range(3):
-                qq, _ = fit(tr, te, seed=200 + sd, shuffle=True)
-                if qq:
+                qq, _ = fit(Xtr, mtr["y"], Xte, seed=200 + sd, shuffle=True)
+                if qq is not None:
                     nn.append(CS.auc(yy, qq))
             nmean = sum(nn) / len(nn) if nn else float("nan")
             nsdev = ((sum((v - nmean) ** 2 for v in nn) / max(len(nn) - 1, 1)) ** 0.5
                      if len(nn) > 1 else float("nan"))
             oo = sorted(range(len(pp)), key=lambda i: -pp[i])
             kk = max(1, int(len(oo) * args.alert_rate))
-            rr = catch_report(te, pp, pp[oo[kk - 1]], args)
+            rr = catch_report(mte, pp, pp[oo[kk - 1]], args)
             tt = rr["caught"] + rr["missed"]
             print("%-12s%8d%9d%9.4f%9.4f%8.2f%10d%9.1f%%" % (
-                c, len(tr), len(te), sum(yy) / len(yy), aa,
+                c, len(Xtr), len(Xte), float(yy.mean()), aa,
                 (aa - nmean) / nsdev if nsdev else float("nan"),
                 tt, 100.0 * rr["caught"] / tt if tt else 0))
         return
     cut = days[int(len(days) * 0.7)]
-    train = [r for r in rows if r["_day"] < cut]
-    test = [r for r in rows if r["_day"] >= cut]
+    Xtr, mtr = sub(meta["day"] < cut)
+    Xte, test = sub(meta["day"] >= cut)
     print()
     print("rows %d  (%d symbols, %d days)  base rate %.4f"
-          % (len(rows), len(set(r["_sym"] for r in rows)), len(days), base_all))
-    print("time cut %s: train %d / test %d" % (cut, len(train), len(test)))
+          % (len(X), len(meta["names"]), len(days), base_all))
+    print("time cut %s: train %d / test %d" % (cut, len(Xtr), len(Xte)))
 
-    probs, model = fit(train, test)
+    probs, model = fit(Xtr, mtr["y"], Xte)
     if probs is None:
         print("degenerate labels")
         return
-    yte = [r["_y"] for r in test]
-    base = sum(yte) / len(yte)
+    yte = test["y"]
+    base = float(yte.mean())
     a = CS.auc(yte, probs)
 
     nulls = []
     for s in range(5):
-        ps, _ = fit(train, test, seed=100 + s, shuffle=True)
-        if ps:
+        ps, _ = fit(Xtr, mtr["y"], Xte, seed=100 + s, shuffle=True)
+        if ps is not None:
             nulls.append(CS.auc(yte, ps))
     nm = sum(nulls) / len(nulls) if nulls else float("nan")
     nsd = (sum((v - nm) ** 2 for v in nulls) / max(len(nulls) - 1, 1)) ** 0.5 \
@@ -476,9 +636,9 @@ def main() -> None:
     print()
     print("%-10s%12s%10s%10s" % ("top slice", "precision", "base", "lift"))
     for frac in (0.005, 0.01, 0.02, 0.05, 0.10):
-        order = sorted(range(len(probs)), key=lambda i: -probs[i])
+        order = np.argsort(-probs)
         k = max(1, int(len(order) * frac))
-        prec = sum(test[i]["_y"] for i in order[:k]) / k
+        prec = float(yte[order[:k]].mean())
         print("%-10s%12.4f%10.4f%10.2fx" % (
             "%.1f%%" % (frac * 100), prec, base, prec / base if base else 0))
 
@@ -486,16 +646,16 @@ def main() -> None:
         # Suppress rather than re-rank: an alert on a bar at RSI 80 is a
         # confirmation whatever its score, and letting it keep the budget slot
         # would hide the cost this flag exists to measure.
-        probs = [0.0 if r["rsi"] >= args.max_rsi else p
-                 for r, p in zip(test, probs)]
-        alive = sum(1 for p in probs if p > 0)
+        rsi_col = Xte[:, FEATS.index("rsi")]
+        probs = np.where(rsi_col >= args.max_rsi, 0.0, probs)
+        alive = int((probs > 0).sum())
         print()
         print("EARLINESS CONSTRAINT: alerts forbidden at RSI >= %.0f "
               "-- %d of %d test bars remain eligible (%.1f%%)"
               % (args.max_rsi, alive, len(probs), 100.0 * alive / len(probs)))
-    order = sorted(range(len(probs)), key=lambda i: -probs[i])
+    order = np.argsort(-probs)
     k = max(1, int(len(order) * args.alert_rate))
-    thr = probs[order[k - 1]]
+    thr = float(probs[order[k - 1]])
     print()
     print("=" * 96)
     print("WHICH TRENDS WOULD HAVE BEEN CAUGHT  (alert budget %.1f%% of bars, "
