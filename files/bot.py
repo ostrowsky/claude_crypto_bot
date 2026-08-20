@@ -297,6 +297,47 @@ def _publish_ui_snapshot() -> None:
     )
 
 
+def _live_flags_line() -> str:
+    """What this process is ACTUALLY running, read from the loaded config.
+
+    The build string is git HEAD of the working tree. On 2026-08-20 it read
+    `a041af9 · 08-19` for hours while the process ran a config edited one minute
+    before startup — the changes were committed through a separate worktree, so
+    HEAD never moved. A version line that cannot be trusted during an incident is
+    worse than none, so the flags that actually decide behaviour are printed here.
+    """
+    try:
+        seg = "on" if getattr(config, "ML_GENERAL_USE_SEGMENT_WHEN_AVAILABLE", True) else "off"
+        floor = float(getattr(config, "ML_GENERAL_HARD_BLOCK_MIN", 0.0))
+        floor_b = float(getattr(config, "ML_GENERAL_HARD_BLOCK_BULL_DAY_MIN", floor))
+        bandit = "on" if getattr(config, "BANDIT_ENABLED", False) else "off"
+        rot = "on" if getattr(config, "ROTATION_ENABLED", False) else "off"
+        return ("ml floor %.2f/%.2f - segments %s - bandit %s - rotation %s"
+                % (floor, floor_b, seg, bandit, rot))
+    except Exception:
+        return "flags unavailable"
+
+
+def _config_stamp() -> str:
+    """Mtime of the config this process loaded — the honest 'version'."""
+    try:
+        import datetime as _dt
+        import os as _os
+        cp = _os.path.join(_os.path.dirname(_os.path.abspath(config.__file__)), "config.py")
+        return _dt.datetime.fromtimestamp(_os.path.getmtime(cp)).strftime("%m-%d %H:%M")
+    except Exception:
+        return "?"
+
+
+def _leaders_block() -> str:
+    """Never blocks: reads whatever the background refresher last published."""
+    try:
+        import ui_leaders
+        return ui_leaders.render(ui_leaders.get_cached(), ui_leaders.cache_age_sec())
+    except Exception:
+        return "_лидеры дня недоступны_"
+
+
 def _main_menu_text() -> str:
     snap = _ui_snapshot_now()
     status = "▶️ запущен" if snap.running else "⏹ остановлен"
@@ -307,11 +348,13 @@ def _main_menu_text() -> str:
         _build_str = "—"
     return (
         f"👋 *Crypto Trend Bot*\n"
-        f"🔖 `{_build_str}`\n\n"
+        f"🔖 `{_build_str}` · cfg `{_config_stamp()}`\n"
+        f"⚙️ `{_live_flags_line()}`\n\n"
         f"Мониторинг: {status}\n"
         f"Монет в списке: *{snap.wl_count}*\n"
         f"Монет «в игре» сегодня: *{snap.hot_count}*\n"
-        f"Открытых сигналов: *{snap.pos_count}*"
+        f"Открытых сигналов: *{snap.pos_count}*\n\n"
+        f"*Лидеры дня по движению:*\n{_leaders_block()}"
     )
 
 
@@ -1934,6 +1977,24 @@ async def _post_init(app: Application) -> None:
     )
     log.info("UI snapshot keeper started (ttl=%.1fs)",
              float(getattr(config, "UI_SNAPSHOT_TTL_SEC", 5.0)))
+
+    # ── daily-leaders refresher ───────────────────────────────────────────
+    # Own daemon thread on its own cadence, NOT the 5s snapshot keeper: this one
+    # makes an HTTP call, and the render path has a hard deadline. The menu reads
+    # whatever this last published and never waits for it.
+    try:
+        import ui_leaders
+
+        ui_leaders.start(
+            watchlist_fn=lambda: config.load_watchlist(),
+            held_fn=lambda: list(state.positions.keys()),
+            limit=int(getattr(config, "UI_LEADERS_COUNT", 8)),
+            interval=float(getattr(config, "UI_LEADERS_REFRESH_SEC", 60.0)),
+        )
+        log.info("daily-leaders refresher started (every %.0fs)",
+                 float(getattr(config, "UI_LEADERS_REFRESH_SEC", 60.0)))
+    except Exception as e:
+        log.warning("daily-leaders refresher not started: %s", e)
 
     # ── Event-loop lag detector ────────────────────────────────────────────
     # Goal: surface "event loop held by heavy task" symptoms in the log.

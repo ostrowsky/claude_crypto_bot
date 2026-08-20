@@ -17,6 +17,16 @@ SEND_DISCOVERY_NOTIFICATIONS: bool = False
 SEND_SERVICE_NOTIFICATIONS: bool = False
 SEND_AUX_NOTIFICATIONS: bool = False
 ML_ENABLE_GENERAL_RANKING: bool = True
+# ── status panel: the day's leaders ───────────────────────────────────────────
+# The panel used to report "Открытых сигналов: 0" and nothing else, which on
+# 2026-08-20 was accurate and useless: three watchlist coins were in Binance's
+# daily top-20 and finding out why none was taken required reading the event log.
+# It now lists the watchlist's biggest movers by MOVE (high vs open, the project's
+# target) with the gate that last rejected each. Refreshed on its own daemon
+# thread -- the render path has a hard deadline and must never wait on HTTP.
+UI_LEADERS_COUNT: int = 8
+UI_LEADERS_REFRESH_SEC: float = 60.0
+
 ML_GENERAL_USE_SEGMENT_WHEN_AVAILABLE: bool = False
 # 2026-08-20: OFF. THIS is the switch the live path reads -- monitor.py's
 # _select_ml_payload picks the segment model here, BEFORE predict_proba_from_payload

@@ -237,6 +237,13 @@ def log_blocked(sym: str, tf: str, price: float, reason: str,
     unchanged. New callers should pass `reason_code` and `gate` for
     structured aggregation downstream.
     """
+    # Feed the status panel: which gate last rejected this symbol. An in-memory
+    # dict write only -- this runs on the hot path for every gate on every poll.
+    try:
+        import ui_leaders
+        ui_leaders.note_block(sym, reason_code, reason)
+    except Exception:
+        pass
     rec: Dict[str, Any] = {
         "event":       "blocked",
         "sym":         sym,
