@@ -17,7 +17,20 @@ SEND_DISCOVERY_NOTIFICATIONS: bool = False
 SEND_SERVICE_NOTIFICATIONS: bool = False
 SEND_AUX_NOTIFICATIONS: bool = False
 ML_ENABLE_GENERAL_RANKING: bool = True
-ML_GENERAL_USE_SEGMENT_WHEN_AVAILABLE: bool = True
+ML_GENERAL_USE_SEGMENT_WHEN_AVAILABLE: bool = False
+# 2026-08-20: OFF. THIS is the switch the live path reads -- monitor.py's
+# _select_ml_payload picks the segment model here, BEFORE predict_proba_from_payload
+# is ever called, so a flag inside that function (ML_SIGNAL_SEGMENT_ROUTING_ENABLED)
+# does nothing for the bot. Setting only that one was the first attempt and the
+# live median proba did not move (0.0445 after, 0.0569 before).
+# Why off: segment models train on subsets as small as 160 rows and survive on a
+# validation bar a small sample clears by luck. The deployed trend|bull draw scored
+# 08-20's candidates at a median 0.0713 (6% above floor) where the global model gave
+# 0.2509 (69%) -- that, not the retrain and not the threshold, produced a day with
+# ZERO admits while XRP ran +19%, ORDI +18.8% and ENA +17.7% after being blocked.
+# Walk-forward says routing earns nothing on ordinary days: routed vs global medians
+# 0.4406/0.4441, 0.4394/0.4402, 0.4230/0.4309, 0.4350/0.4328 over four folds.
+# Rollback = True.
 ML_GENERAL_NEUTRAL_PROBA: float = 0.50
 ML_GENERAL_SCORE_WEIGHT: float = 0.0
 # Hard block entries outside the profitable ml_proba zone (0.55-0.65 from backtest analysis)
@@ -28,9 +41,34 @@ ML_GENERAL_HARD_BLOCK_ENABLED: bool = True
 # leaving money on the table (impulse_speed win=73%, trend win=80%, impulse
 # win=100% in the ml<0.35 bucket). Live effect: BTC blocked 34x/90min today
 # with ml proba 0.26-0.32 while clearly trending up.
-ML_GENERAL_HARD_BLOCK_MIN: float = 0.28   # block if ml_proba < this
+ML_GENERAL_HARD_BLOCK_MIN: float = 0.10   # block if ml_proba < this
+# 2026-08-20: 0.28 -> 0.10 and 0.22 -> 0.10. On 08-20 the gate admitted ZERO of
+# 4486 candidates while the market rose: XRP (+19% after the block), ORDI
+# (+18.8%), ENA (+17.7%) were all rejected, and 51% of the 83 blocked coins
+# rose >3%. Walk-forward over 37k labelled rows shows floors in 0.10-0.18 admit
+# ~100% with 100% recall of >=3% and >=5% movers -- historically a no-op, so the
+# risk of lowering is small and the blackout it prevents is total. Replayed on
+# 08-20 itself, 0.10 recovers 4 of the 5 watchlist coins in Binance's spot top-40
+# (ENA 08:00 with +22% still ahead, XRP 09:03 +17%, WIF 07:47 +11%, FET 09:01 +9%).
+# The bull/non-bull gap is collapsed on purpose: the backtest tested ONE floor,
+# and keeping an untested gap would be a second change hiding inside this one.
+# Rollback = restore 0.28 / 0.22.
+ML_SIGNAL_SEGMENT_ROUTING_ENABLED: bool = False
+# 2026-08-20: OFF. Per-segment models are trained on subsets as small as 160 rows
+# and kept whenever they beat the baseline on their OWN validation -- a bar a
+# small sample clears by luck. The deployed `trend|bull` segment was such a draw:
+# on 08-20 it scored that day's candidates at a median 0.0713 (6% above the
+# floor) where the global model gave 0.2509 (69% above). It, not the nightly
+# retrain and not the threshold, is what produced the blackout.
+# Walk-forward shows routing earns nothing on ordinary days: median routed vs
+# global proba came to 0.4406/0.4441, 0.4394/0.4402, 0.4230/0.4309, 0.4350/0.4328
+# across four folds. Near-zero upside, total downside -- so it is off.
+# Caveat kept in the open: those folds did NOT reproduce the blackout (`trend|bull`
+# survived selection in only one of four), so this is validated as "routing adds
+# nothing", not as "this fix is proven against the failure".
+# Rollback = True.
 ML_GENERAL_HARD_BLOCK_MAX: float = 1.01   # disabled: high-confidence signals must never be blocked (was 0.65)
-ML_GENERAL_HARD_BLOCK_BULL_DAY_MIN: float = 0.22  # looser floor on bull days (was 0.28, kept gap from non-bull)
+ML_GENERAL_HARD_BLOCK_BULL_DAY_MIN: float = 0.10  # was 0.22; see the note above
 ML_ENABLE_TREND_NONBULL_FILTER: bool = True
 ML_TREND_NONBULL_SEGMENT_KEY: str = "trend|nonbull"
 ML_TREND_NONBULL_MIN_PROBA: float = 0.35

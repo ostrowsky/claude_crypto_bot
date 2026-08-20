@@ -438,13 +438,27 @@ class MLPModel:
         }
 
 
+def _segment_routing_enabled() -> bool:
+    """Per-segment routing, switchable at runtime.
+
+    Off since 2026-08-20: see ML_SIGNAL_SEGMENT_ROUTING_ENABLED in config.py.
+    Imported late and defaulting to False-on-error so a config import problem
+    degrades to the global model rather than to a blackout.
+    """
+    try:
+        import config
+        return bool(getattr(config, "ML_SIGNAL_SEGMENT_ROUTING_ENABLED", False))
+    except Exception:
+        return False
+
+
 def predict_proba_from_payload(payload: dict, rec: dict) -> float:
     # Per-segment routing: if the payload contains segment-specific models
     # under `segment_model_payloads` AND the current rec's (signal_type, regime)
     # segment passed the training-time quality gate, use that model.
     # Falls back to the global model for unknown/filtered-out segments.
     seg_map = payload.get("segment_model_payloads") or {}
-    if seg_map:
+    if seg_map and _segment_routing_enabled():
         seg_key = f"{rec.get('signal_type')}|{'bull' if rec.get('is_bull_day') else 'nonbull'}"
         seg_payload = seg_map.get(seg_key)
         if seg_payload:
