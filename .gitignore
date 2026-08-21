@@ -91,3 +91,5 @@ skills/*/__pycache__/
 .claude/*
 !.claude/skills/
 !.claude/skills/**
+files/positioning_history.jsonl
+.runtime/positioning_recorder.log
