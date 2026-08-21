@@ -212,3 +212,55 @@ Two things worth stating plainly rather than filing as a win:
 So the family selection is now a three-way choice as requested, and the honest
 reading is that the selection *criterion*, not the roster of families, is what
 limits this model.
+
+## The bandit gate, disabled the next morning (2026-08-21)
+
+With ml_zone fixed the portfolio was still 0/10 through a third straight day of a
+market-wide rally — ENA +43%, XTZ +30%, CELO +28%. The block mix had simply moved
+on: `ml_zone` appeared in **zero** of 3909 rejections, and the bandit accounted
+for **2720 of them (70%)**. ENA, XRP and ORDI were each rejected by
+`trend_quality` alone; CRV, BCH and XTZ by the bandit alone.
+
+### The section-7 test, applied to every gate at once
+
+`_backtest_gate_overblocking.py`, 13 332 decisions deduplicated to one row per
+symbol-hour-gate since 2026-06-01, forward peak measured 8h out. The
+deduplication is load-bearing: 98 rejections of CRV in one day is one opinion
+about CRV, not 98, and without collapsing them a chatty gate weights itself up.
+
+| gate / outcome | n | median | >3% | >5% |
+|---|---|---|---|---|
+| ALL CANDIDATES (pool) | 12 993 | 1.14% | 21% | 10% |
+| ml_zone | 3 920 | 1.18% | 23% | 11% |
+| trend_quality | 2 248 | 1.20% | 23% | 11% |
+| mode_range_quality | 2 241 | **0.80%** | **12%** | 6% |
+| trend_chop | 1 611 | 1.15% | 19% | 9% |
+| **entries the bot TOOK** | 1 454 | **1.41%** | **25%** | 12% |
+| **bandit rejects** | 636 | **1.52%** | 24% | **12%** |
+| impulse_guard | 588 | 1.38% | 26% | 12% |
+
+**The bandit's rejects outperform the bot's own entries** — 1.52% against 1.41%.
+It is not filtering the worse half, it is removing the better one. That is the
+section-7 condition stated exactly.
+
+`mode_range_quality` is the only gate doing real work: its rejects run 0.80%
+against a 1.14% pool and clear 3% only 12% of the time against 21%. It was left
+alone deliberately — changing two gates at once would make neither attributable.
+`trend_quality` sits at 1.20% against the 1.14% pool: useless rather than
+harmful, and also untouched for the same reason.
+
+### Deployed
+
+`BANDIT_ENABLED = False`. Trail bandit and offline training are untouched; only
+the enter/skip veto stops applying. Rollback = `True`.
+
+Within one minute of the restart the bot took **nine entries** — ALGO, APT, INJ,
+EGLD, ZRO, LDO, ARB, XTZ, SNX — and `BANDIT SKIP` vanished from the block mix.
+
+### Honest limit
+
+That 636-row reject sample predates the ml_zone fix, when the bandit only ever
+saw candidates ml_zone had already passed. It now sees the full flow, so its live
+behaviour may differ from the sample that convicted it. This is why the change is
+a flag rather than a rewrite, and why the next thing to measure is what those
+nine entries actually did.

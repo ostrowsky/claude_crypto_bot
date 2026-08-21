@@ -226,7 +226,27 @@ RL_WORKER_ENABLE_COLLECTOR: bool = False
 BOT_ENABLE_DATA_COLLECTOR: bool = False
 
 # ── RL: Contextual Bandit + Exit Policy ──────────────────────────────────────
-BANDIT_ENABLED: bool = True               # adaptive trail_k/max_hold via LinUCB
+BANDIT_ENABLED: bool = False
+# 2026-08-21: OFF. Section-7 test over 13 332 deduplicated symbol-hour decisions
+# since 2026-06-01, forward peak measured 8h out:
+#
+#   all candidates (pool)   median 1.14%   >3% 21%   >5% 10%
+#   entries the bot TOOK    median 1.41%   >3% 25%   >5% 12%
+#   candidates the BANDIT REJECTED   median 1.52%   >3% 24%   >5% 12%
+#
+# The bandit's rejects outperform the bot's own entries. It is not filtering the
+# worse half, it is removing the better one. With ml_zone fixed on 08-20 the
+# bandit became 70% of all blocks (2720 of 3909) and the portfolio stayed at 0/10
+# through a third straight day of a market-wide rally -- ENA +43%, XTZ +30%,
+# CELO +28% -- with CRV, BCH and XTZ rejected by the bandit alone.
+#
+# Caveat kept in the open: that 636-row reject sample predates the ml_zone fix,
+# when the bandit only saw candidates ml_zone had already passed. It now sees the
+# full flow, so its live behaviour may differ from the sample that convicted it.
+# This is why the change is a flag and not a rewrite.
+#
+# Rollback = True. Trail bandit and offline training are untouched; only the
+# enter/skip veto stops applying.
 BANDIT_ALPHA: float = 1.5                 # UCB exploration coefficient
 # RM-22 Step B: explicit regime-interaction features (bull_day x BTC trend) in
 # the LinUCB context. A linear bandit cannot otherwise represent that
