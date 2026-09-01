@@ -1454,6 +1454,54 @@ async def cmd_why(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(_safe_truncate(text), parse_mode=ParseMode.MARKDOWN)
 
 
+# The blue "Menu" button in Telegram is populated by setMyCommands. Until
+# 2026-09-01 the bot never called it, so the button was empty and every command
+# had to be typed from memory. Keep this list in step with the handlers
+# registered in main(); test_bot_commands.py fails if they drift apart.
+BOT_COMMANDS: tuple = (
+    ("start",     "Открыть главное меню"),
+    ("menu",      "Открыть меню"),
+    ("positions", "Показать открытые позиции"),
+    ("why",       "Объяснить последнее решение"),
+    ("test",      "Проверить состояние бота"),
+)
+
+
+async def cmd_positions(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    """Команда /positions — то же, что кнопка «Позиции».
+
+    Renders through _positions_message_html so the command and the button can
+    never disagree about what the portfolio contains.
+    """
+    msg = update.effective_message
+    if msg is None:
+        return
+    log.info("command /positions from %s", msg.chat_id)
+    await _reply_text_with_retry(
+        msg,
+        _positions_message_html(),
+        parse_mode=ParseMode.HTML,
+        reply_markup=kb_menu_state_inline(),
+    )
+
+
+async def _register_bot_commands(app: Application) -> None:
+    """Publish BOT_COMMANDS to Telegram so the Menu button lists them.
+
+    Failure here must never block startup: an empty menu is a cosmetic loss,
+    a bot that will not start is not.
+    """
+    try:
+        from telegram import BotCommand
+        await app.bot.set_my_commands(
+            [BotCommand(c, d) for c, d in BOT_COMMANDS]
+        )
+        log.info("bot commands published to the Menu button: %s",
+                 ", ".join("/" + c for c, _ in BOT_COMMANDS))
+    except Exception as e:
+        log.warning("set_my_commands failed (menu button stays empty): %s", e)
+
+
 async def cmd_test(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     """Команда /test — диагностика состояния бота и мониторинга."""
     from datetime import datetime, timezone
@@ -1791,6 +1839,7 @@ async def _run_post_init_scan(app: Application, notify_service: bool, watchlist_
 
 async def _post_init(app: Application) -> None:
     """При старте: уведомляет пользователей и автоматически запускает анализ+мониторинг."""
+    await _register_bot_commands(app)
     state.auto_reanalyze_task = _track_background_task(
         asyncio.create_task(_auto_reanalyze(app)),
         "auto_reanalyze",
@@ -2227,6 +2276,7 @@ def main() -> None:
     app.add_handler(CommandHandler("start", cmd_start, block=False))
     app.add_handler(CommandHandler("menu",  cmd_show_menu, block=False))
     app.add_handler(CommandHandler("hide",  cmd_hide_menu, block=False))
+    app.add_handler(CommandHandler("positions", cmd_positions, block=False))
     app.add_handler(CommandHandler("why",   cmd_why))
     app.add_handler(CommandHandler("test",  cmd_test))
     app.add_handler(CallbackQueryHandler(btn, block=False))
