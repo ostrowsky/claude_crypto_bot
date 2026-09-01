@@ -677,7 +677,31 @@ TRAIL_MIN_BUFFER_PCT_IMPULSE_SPEED: float = 0.015  # 1.5% — ROLLED BACK 2026-0
 TRAIL_MIN_BUFFER_PCT_STRONG_TREND:  float = 0.015
 TRAIL_MIN_BUFFER_PCT_IMPULSE:       float = 0.012  # 1.2% min buffer
 TRAIL_MIN_BUFFER_PCT_TREND:         float = 0.0    # disabled — narrow stops work for trend
-TRAIL_MIN_BUFFER_PCT_ALIGNMENT:     float = 0.0
+TRAIL_MIN_BUFFER_PCT_ALIGNMENT:     float = 0.08   # 8% — was 0.0 (2026-09-01)
+# Width sweep over 1323 real alignment entries since 2026-03-01, forward path
+# replayed bar by bar (_backtest_trail_width_sweep.py). Realized mean per trade:
+#   1.0% -> +0.295   2.0% -> +0.191   4.0% -> +0.343   6.0% -> +0.565   8.0% -> +0.631
+# and no stop at all gives +0.551, so 8% beats even holding. The profile is
+# monotone: alignment is the one mode that wants a wide stop.
+#
+# Trigger: FILUSDT 2026-09-01. Entered 08:32 at 0.6939 -- eight hours BEFORE the
+# run -- stopped out 12:48 at 0.7034 for +1.37% on a ~1.5% effective trail, and
+# the coin then reached 0.7848, +13.10% from entry. A tenth of a move the bot had
+# correctly identified early.
+#
+# Why this sweep is worth acting on: it independently reproduces a known live
+# outcome it was not told about. In June the impulse_speed buffer was widened
+# 1.5% -> 8% on a backtest and ROLLED BACK after a live regression. The same
+# sweep says impulse_speed at 8% yields -0.206 against +0.212 at 1.5% -- it would
+# have predicted that rollback.
+#
+# Limits, stated because that June case is the precedent: the sweep replays a
+# PURE percentage trail while the live rule is max(trail_k*ATR, this floor), it
+# uses a fixed 48-bar horizon where max_hold is chosen by the trail bandit, and
+# it only sees entries the gates admitted (TH-06). A backtest-positive widening
+# has failed live here before.
+#
+# Rollback = 0.0.
 TRAIL_MIN_BUFFER_PCT_RETEST:        float = 0.0    # retest by design uses tight stop
 TRAIL_MIN_BUFFER_PCT_BREAKOUT:      float = 0.0    # breakout by design uses tight stop
 TRAIL_MIN_BUFFER_PCT_DEFAULT:       float = 0.0    # other modes — no floor
@@ -1238,7 +1262,7 @@ CLONE_SIGNAL_GUARD_ENABLED: bool = True
 CLONE_SIGNAL_GUARD_TF: tuple = ("15m",)
 CLONE_SIGNAL_GUARD_MODES: tuple = ("impulse_speed", "breakout", "retest", "alignment", "trend")
 CLONE_SIGNAL_GUARD_WINDOW_BARS: int = 8
-CLONE_SIGNAL_GUARD_MAX_SIMILAR: int = 15  # was 4 — 116 blocks in recent events: FLUX/ORDI blocked by clone guard  # scout:07.06.2026 was 15
+CLONE_SIGNAL_GUARD_MAX_SIMILAR: int = 17  # was 4 — 116 blocks in recent events: FLUX/ORDI blocked by clone guard  # scout:23.08.2026 was 17
 CLONE_SIGNAL_GUARD_MAX_SAME_GROUP: int = 1
 CLONE_SIGNAL_GUARD_OVERRIDE_SCORE: float = 90.0
 CLONE_SIGNAL_GUARD_OVERRIDE_RANKER_FINAL: float = 0.50
