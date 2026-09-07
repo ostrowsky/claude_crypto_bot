@@ -102,9 +102,25 @@ class TestFloorsWereLoweredTogether(unittest.TestCase):
     """The backtest tested ONE floor. Leaving the bull/non-bull gap in place
     would smuggle a second, untested change in alongside this one."""
 
-    def test_both_floors_are_ten_percent(self):
-        self.assertAlmostEqual(config.ML_GENERAL_HARD_BLOCK_MIN, 0.10, places=6)
-        self.assertAlmostEqual(config.ML_GENERAL_HARD_BLOCK_BULL_DAY_MIN, 0.10, places=6)
+    def test_the_floors_follow_the_label_in_use(self):
+        """The number is not the invariant; the COUPLING is.
+
+        0.10 was derived on the ret_5>0 scale, where the model's output sat in a
+        narrow 0.37-0.55 band. The peak label spreads it to 0.08-0.32, and 0.15
+        there admits 43.8% while keeping 86% of the >=3% movers. A floor frozen
+        at 0.10 while the label moved is exactly the 2026-08-20 failure, so the
+        test asserts they move together rather than pinning either alone.
+        """
+        expected = 0.15 if config.ML_PEAK_LABEL_ENABLED else 0.10
+        self.assertAlmostEqual(config.ML_GENERAL_HARD_BLOCK_MIN, expected, places=6)
+        self.assertAlmostEqual(config.ML_GENERAL_HARD_BLOCK_BULL_DAY_MIN,
+                               expected, places=6)
+
+    def test_the_two_floors_stay_equal(self):
+        # The backtest measured ONE floor; keeping an untested bull/non-bull gap
+        # would smuggle a second change in alongside.
+        self.assertAlmostEqual(config.ML_GENERAL_HARD_BLOCK_MIN,
+                               config.ML_GENERAL_HARD_BLOCK_BULL_DAY_MIN, places=6)
 
     def test_the_upper_cap_still_lets_confident_signals_through(self):
         # 1.01 means "no upper bound". A cap below 1.0 once blocked exactly the

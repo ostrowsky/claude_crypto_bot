@@ -1,12 +1,17 @@
 # Training label: the size of the move ahead, not its sign
 
 - **Slug:** `peak-training-label`
-- **Status:** MEASURED 2026-09-07 — **positive and stable; not yet switched**
+- **Status:** DEPLOYED 2026-09-07 (live restart 21:31, verified in place)
 - **Truth-harness invariants:** TH-01 (base rate beside every ratio), TH-03
   (time split, four cuts), TH-06 (the bot's own candidates), TH-10, TH-11 (the
   proxy is graded against the real outcome, not against itself), TH-13
-- **Flags:** none yet — nothing is switched by this document
-- **Rollback:** not applicable; this is measurement
+- **Flags:** `ML_PEAK_LABEL_ENABLED = True`, `ML_PEAK_LABEL_HORIZON = 5`, `ML_PEAK_LABEL_THRESHOLD_PCT = 2.0`, `ML_PEAK_LABEL_MIN_RESOLVED = 0.60`
+- **Rollback:** `ML_PEAK_LABEL_ENABLED = False`, restart, retrain. The ml
+  floors are DERIVED from this flag (`0.15 if enabled else 0.10`), so they
+  revert with it and cannot be left behind — which is the failure mode this
+  coupling exists to prevent. Previous artifacts kept as
+  `ml_signal_model.pre_peak_label.json`, `bandit_entry_state.pre_peak_label.json`,
+  `ml_candidate_ranker.pre_peak_label.json`.
 
 ## The defect
 
@@ -129,3 +134,69 @@ down before anything is switched rather than after.
   depend on how the label is defined.
 - 7 963 of 45 075 rows could not be resolved against klines and were dropped;
   they are older rows outside the cached window, so the sample tilts recent.
+
+## Deployment, 2026-09-07
+
+### Maximum-period backtest
+
+The evidence above IS the maximum-period backtest: every labelled candidate the
+bot has produced, 45 075 rows of which 37 112 resolve against klines, spanning
+2026-03-24 to 2026-09-06, evaluated at four time cuts. No sub-window was chosen.
+
+### Shadow / canary decision
+
+**No shadow period.** A shadow run of a training label would have to train a
+second model, score it in parallel and wait for outcomes — which is exactly what
+the four-cut walk-forward already did, on 37 112 rows instead of a day's worth.
+Shadow adds nothing the replay has not given.
+
+What replaces it is a **24-hour watch with the rollback trigger fixed in advance**
+(below), and the fact that the ml floor is one gate of several: `trend_quality`,
+`trend_chop`, `mode_range_quality` and rotation all still apply, so a wrong call
+here shows up as a changed candidate mix rather than as unguarded trading.
+
+### Acceptance and rollback trigger, set before the fact
+
+Read after 24 hours of live decisions:
+
+- **Keep** if `ml_zone` admits between 30% and 60% of candidates, and the coins
+  it admits show a higher forward peak than those it rejects.
+- **Roll back** if `ml_zone` admits under 10% (a blackout is re-forming) or over
+  90% (the gate is inert again and the floor is wrong for the new scale), or if a
+  watchlist coin reaching the day's Binance top-20 is rejected by `ml_zone`
+  alone.
+
+Stated now so the decision cannot be re-argued from whichever number looks better
+tomorrow.
+
+### Verified in place, not assumed
+
+After the restart the deployed model reproduces the backtest:
+
+| | measured in backtest | live payload |
+|---|---|---|
+| p10 / median / p90 | 0.0829 / 0.1317 / 0.3011 | 0.0837 / 0.1352 / 0.3167 |
+| admit at 0.15 | 41.6% | 43.8% |
+| avg peak admitted | 1.70% | 1.66% |
+| recall of ≥3% movers | 84% | 86% |
+
+`label_version = peak5_2.0`, and no `ML LABEL MISMATCH` line appeared in the log.
+
+### Stale-artifact detection
+
+The ranker consumes `ml_proba` as a feature and the bandit as context element 0;
+both were fitted to the old distribution. The payload now carries
+`label_version`, and `monitor._check_label_version` logs one loud line if the
+deployed model answers a different question than config expects. The bandit is
+independently disabled (see `_backtest_gate_overblocking.py`), so its stale state
+is not in the live path today, but the archived copy and the warning mean
+re-enabling it cannot happen silently.
+
+### Known incomplete
+
+The training-time selection criterion still scores families and thresholds by
+`selected_ret5_avg` — the **close**. That is why the retrain reported negative
+numbers for all three families: they were graded on the outcome the label no
+longer targets. Family choice is therefore still decided by a metric pointing the
+old way. It is deliberately not bundled here so the label change can be read on
+its own.

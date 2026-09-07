@@ -51,7 +51,35 @@ ML_GENERAL_HARD_BLOCK_ENABLED: bool = True
 # leaving money on the table (impulse_speed win=73%, trend win=80%, impulse
 # win=100% in the ml<0.35 bucket). Live effect: BTC blocked 34x/90min today
 # with ml proba 0.26-0.32 while clearly trending up.
-ML_GENERAL_HARD_BLOCK_MIN: float = 0.10   # block if ml_proba < this
+# ── training label: size of the move, not its sign ───────────────────────────
+# ONE flag controls the label AND the floors that depend on it. They cannot be
+# rolled back separately, and that is the point: the 2026-08-20 blackout happened
+# because a model shifted its output scale while a fixed floor stayed put.
+#
+# Evidence (docs/specs/features/peak-training-label-spec.md), 37 112 candidates,
+# both models graded against the SAME truth -- each row's real forward peak:
+#
+#   cut     OLD AUC   NEW AUC   OLD top-decile   NEW top-decile   (base 1.06%)
+#   50/50    0.3261    0.8024            0.79%            2.65%
+#   60/40    0.2994    0.8046            0.72%            2.72%
+#   70/30    0.2758    0.8102            0.69%            2.81%
+#   80/20    0.2672    0.8056            0.67%            3.08%
+#
+# The old label `ret_5 > 0` is INVERTED at every cut: its most confident decile
+# does worse than picking at random. Median forward peak is +0.59% while median
+# close is -0.10%, so a close-based label teaches the model to predict the
+# giving-back, and momentum is what precedes that.
+#
+# ROLLBACK = ML_PEAK_LABEL_ENABLED = False, then restart and retrain. The floors
+# follow this flag automatically; nothing else has to be remembered.
+ML_PEAK_LABEL_ENABLED: bool = True
+ML_PEAK_LABEL_HORIZON: int = 5          # bars ahead; same horizon as ret_5 was
+ML_PEAK_LABEL_THRESHOLD_PCT: float = 2.0  # base rate 13.9%, 5142 positives
+# Refuse to train on the new label if the kline join resolves less than this
+# share of rows -- a thin join would silently bias training toward recent data.
+ML_PEAK_LABEL_MIN_RESOLVED: float = 0.60
+
+ML_GENERAL_HARD_BLOCK_MIN: float = 0.15 if ML_PEAK_LABEL_ENABLED else 0.10   # block if ml_proba < this
 # 2026-08-20: 0.28 -> 0.10 and 0.22 -> 0.10. On 08-20 the gate admitted ZERO of
 # 4486 candidates while the market rose: XRP (+19% after the block), ORDI
 # (+18.8%), ENA (+17.7%) were all rejected, and 51% of the 83 blocked coins
@@ -78,7 +106,7 @@ ML_SIGNAL_SEGMENT_ROUTING_ENABLED: bool = False
 # nothing", not as "this fix is proven against the failure".
 # Rollback = True.
 ML_GENERAL_HARD_BLOCK_MAX: float = 1.01   # disabled: high-confidence signals must never be blocked (was 0.65)
-ML_GENERAL_HARD_BLOCK_BULL_DAY_MIN: float = 0.10  # was 0.22; see the note above
+ML_GENERAL_HARD_BLOCK_BULL_DAY_MIN: float = 0.15 if ML_PEAK_LABEL_ENABLED else 0.10  # was 0.22; see the note above
 ML_ENABLE_TREND_NONBULL_FILTER: bool = True
 ML_TREND_NONBULL_SEGMENT_KEY: str = "trend|nonbull"
 ML_TREND_NONBULL_MIN_PROBA: float = 0.35

@@ -97,7 +97,37 @@ def _load_ml_general_payload() -> Optional[dict]:
     return raw
 
 
+_LABEL_VERSION_WARNED = False
+
+
+def _check_label_version(payload: dict) -> None:
+    """Shout once if the deployed model was trained on a different label.
+
+    The floors, the ranker's ml_proba feature and the bandit's context are all
+    calibrated to one output distribution. On 2026-08-20 a shifted distribution
+    under an unchanged floor produced a day with zero admits, so a mismatch here
+    is worth a loud line in the log rather than silence.
+    """
+    global _LABEL_VERSION_WARNED
+    if _LABEL_VERSION_WARNED or not isinstance(payload, dict):
+        return
+    try:
+        from ml_signal_model import label_version
+        want = label_version()
+    except Exception:
+        return
+    got = str(payload.get("label_version") or "ret5_positive")
+    if got != want:
+        _LABEL_VERSION_WARNED = True
+        log.warning(
+            "ML LABEL MISMATCH: deployed model was trained on '%s' but config "
+            "expects '%s'. Floors, ranker feature and bandit context are "
+            "calibrated to the config's label -- retrain before trusting "
+            "ml_proba (or set ML_PEAK_LABEL_ENABLED back).", got, want)
+
+
 def _select_ml_payload(signal_type: str, is_bull_day: bool) -> Optional[dict]:
+    _check_label_version(_load_ml_general_payload() or {})
     if getattr(config, "ML_GENERAL_USE_SEGMENT_WHEN_AVAILABLE", True):
         segment_key = f"{signal_type}|{'bull' if is_bull_day else 'nonbull'}"
         segment_payload = _load_ml_segment_payloads().get(segment_key)

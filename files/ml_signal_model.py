@@ -273,18 +273,116 @@ def load_training_rows(path: Path, min_ts: Optional[datetime] = None) -> List[di
     return rows
 
 
+_PEAK_IDX: Dict[str, tuple] = {}
+
+
+def _peak_bars(sym: str, tf: str):
+    """Klines for the row's timeframe, with a timestamp index built once."""
+    key = "%s|%s" % (sym, tf)
+    got = _PEAK_IDX.get(key)
+    if got is None:
+        try:
+            import _backtest_trend_start_detector as _TD
+            bars = _TD.bars_15m(sym) if tf == "15m" else _TD.load_bars(sym, "1h")
+        except Exception:
+            bars = []
+        got = (bars, {b[0]: i for i, b in enumerate(bars)})
+        _PEAK_IDX[key] = got
+    return got
+
+
+def _peak_ahead(sym: str, tf: str, when, horizon: int) -> Optional[float]:
+    """Highest high over the `horizon` bars AFTER `when`, as % of that close.
+
+    Strictly after: the bar the features describe must never contribute its own
+    high to the label it is trained against.
+    """
+    bars, idx = _peak_bars(sym, tf)
+    i = idx.get(when)
+    if i is None or i + horizon >= len(bars):
+        return None
+    entry = bars[i][4]
+    if entry <= 0:
+        return None
+    fut = bars[i + 1: i + 1 + horizon]
+    if len(fut) < horizon:
+        return None
+    return (max(b[2] for b in fut) / entry - 1.0) * 100.0
+
+
+def _peak_label_series(rows: List[dict]) -> tuple:
+    """(peaks, n_resolved) aligned to `rows`; None where klines cannot resolve.
+
+    Training on the peak label depends on the kline cache. If the join is thin
+    the surviving rows skew recent, so the caller refuses rather than training on
+    a quietly biased subset.
+    """
+    import config as _cfg
+    horizon = int(getattr(_cfg, "ML_PEAK_LABEL_HORIZON", 5))
+    out: List[Optional[float]] = []
+    n_ok = 0
+    for rec in rows:
+        ts = rec.get("_dt")
+        if ts is None:
+            try:
+                ts = _parse_ts(rec["ts_signal"])
+            except Exception:
+                ts = None
+        p = None
+        if ts is not None:
+            p = _peak_ahead(str(rec.get("sym") or ""), str(rec.get("tf") or "1h"),
+                            ts, horizon)
+        out.append(p)
+        if p is not None:
+            n_ok += 1
+    return out, n_ok
+
+
 def build_dataset(rows: List[dict], positive_ret_threshold: float = 0.0) -> DatasetBundle:
     feature_names = safe_feature_names()
     X = np.zeros((len(rows), len(feature_names)), dtype=float)
     y = np.zeros(len(rows), dtype=float)
     r = np.zeros(len(rows), dtype=float)
 
+    # Peak label: "was there a move of at least T%", not "did the close end up".
+    # ret_5 > 0 is INVERTED against the goal -- AUC 0.27-0.33 at four time cuts,
+    # its top decile averaging 0.69% against a 1.06% coin-blind base. See
+    # docs/specs/features/peak-training-label-spec.md.
+    import config as _cfg
+    use_peak = bool(getattr(_cfg, "ML_PEAK_LABEL_ENABLED", False))
+    peaks: List[Optional[float]] = []
+    if use_peak:
+        peaks, n_ok = _peak_label_series(rows)
+        share = n_ok / max(1, len(rows))
+        floor = float(getattr(_cfg, "ML_PEAK_LABEL_MIN_RESOLVED", 0.60))
+        if share < floor:
+            print("[ml] peak label: only %.0f%% of rows resolved against klines "
+                  "(need %.0f%%) -- falling back to ret_5>0 for this run"
+                  % (100 * share, 100 * floor))
+            use_peak = False
+        else:
+            print("[ml] peak label active: %d/%d rows resolved (%.0f%%), "
+                  "horizon %d bars, threshold %.1f%%"
+                  % (n_ok, len(rows), 100 * share,
+                     int(getattr(_cfg, "ML_PEAK_LABEL_HORIZON", 5)),
+                     float(getattr(_cfg, "ML_PEAK_LABEL_THRESHOLD_PCT", 2.0))))
+    thr_pct = float(getattr(_cfg, "ML_PEAK_LABEL_THRESHOLD_PCT", 2.0))
+
     for idx, rec in enumerate(rows):
         fmap = build_feature_dict(rec)
         X[idx] = np.array([_safe_float(fmap.get(name)) for name in feature_names], dtype=float)
         ret_5 = _safe_float((rec.get("labels") or {}).get("ret_5"))
         r[idx] = ret_5
-        y[idx] = 1.0 if ret_5 > positive_ret_threshold else 0.0
+        if use_peak:
+            pk = peaks[idx]
+            # Unresolvable rows keep the old label rather than being dropped:
+            # dropping them would change the population between the two modes
+            # and make the A/B incomparable (TH-04).
+            y[idx] = (1.0 if (pk is not None and pk >= thr_pct)
+                      else (0.0 if pk is not None
+                            else (1.0 if ret_5 > positive_ret_threshold else 0.0)))
+        else:
+            y[idx] = 1.0 if ret_5 > positive_ret_threshold else 0.0
 
     n = len(rows)
     train_end = max(1, int(n * 0.7))
@@ -1030,6 +1128,24 @@ def save_json(path: Path, payload: dict) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def label_version() -> str:
+    """Identifies WHICH question the model was trained to answer.
+
+    Stamped into the payload so a model trained on one label can be detected
+    when it is being consumed by code calibrated to another. Everything that
+    eats ml_proba -- the ranker's feature, the bandit's context -- was fitted to
+    a distribution, and the distribution moves with the label.
+    """
+    try:
+        import config as _cfg
+        if bool(getattr(_cfg, "ML_PEAK_LABEL_ENABLED", False)):
+            return "peak%d_%.1f" % (int(getattr(_cfg, "ML_PEAK_LABEL_HORIZON", 5)),
+                                    float(getattr(_cfg, "ML_PEAK_LABEL_THRESHOLD_PCT", 2.0)))
+    except Exception:
+        pass
+    return "ret5_positive"
+
+
 def build_live_model_payload(report: dict) -> dict:
     """
     Assemble the live payload written to ml_signal_model.json.
@@ -1039,6 +1155,7 @@ def build_live_model_payload(report: dict) -> dict:
     are dropped so the global model handles those segments instead.
     """
     payload = dict(report.get("model_payload", {}))
+    payload["label_version"] = label_version()
     segment_payloads = report.get("segment_model_payloads") or {}
     segment_reports = report.get("segment_reports") or {}
 
