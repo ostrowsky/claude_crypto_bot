@@ -348,7 +348,11 @@ def retrain_ml_signal_model() -> Dict:
             "--model-out", str(files_dir / "ml_signal_model.json"),
             "--report-out", str(files_dir / "ml_signal_report.json"),
         ]
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+        # 1800, not 600: the peak label resolves every row against klines, and
+        # on 2026-09-08 that pushed the first post-switch run past the old limit
+        # (measured warm: 221s, of which 146s was kline I/O). The peak cache below
+        # removes most of that cost; this margin covers a cold cache under load.
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
         if proc.returncode != 0:
             log.error("ml_signal_model retrain failed: %s", proc.stderr[-500:])
             return {"status": "error", "stderr": proc.stderr[-500:]}
@@ -594,6 +598,15 @@ async def run_full_cycle(
 
     # Step 5: Report
     report_text = build_progress_report(collect_result, train_result, model_result)
+    # A retrain that fails logs an ERROR and the cycle carries on, so a stalled
+    # model can sit unnoticed for weeks (it sat one day on 2026-09-08 only
+    # because someone asked). Printing the freshness table into the nightly
+    # report puts every learning input's age in front of whoever reads it.
+    try:
+        import artifact_freshness  # noqa: PLC0415
+        report_text += chr(10) * 2 + artifact_freshness.render(artifact_freshness.check())
+    except Exception as exc:
+        log.error("artifact freshness check failed: %s", exc)
     log.info("\n%s", report_text)
 
     # Save report

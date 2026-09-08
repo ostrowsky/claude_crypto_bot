@@ -241,8 +241,8 @@ decoupling promote-to-scan skipped (decoupling scoring/shadow logging untouched)
 | `.runtime/tg_send_dedup.json` | Telegram dedup state |
 | `.runtime/learning_progress.jsonl` | Daily learning metrics history |
 | `files/top_gainer_dataset.jsonl` (~147 MB) | Features of ALL watchlist coins × N daily snapshots |
-| `files/critic_dataset.jsonl` (~139 MB) | Bot signals with outcomes (nested: `decision.action`, `decision.reason_code`, `labels.ret_5`, `labels.label_5`) |
-| `files/bot_events.jsonl` (~98 MB) | All bot events (entry / blocked / exit) |
+| `files/critic_dataset.jsonl` (~185 MB) | Bot signals with outcomes (nested: `decision.action`, `decision.reason_code`, `labels.ret_5`, `labels.label_5`) |
+| `files/bot_events.jsonl` (~150 MB) | All bot events (entry / blocked / exit) |
 | `files/ml_dataset.jsonl` (~115 MB) | Raw ML training data |
 
 ### Tests / backtests
@@ -865,7 +865,11 @@ Live rules include: `ranker_hard_veto`, `correlation_guard`, `ml_proba_zone`, `t
 
 ### Important flags
 ```python
-BANDIT_ENABLED = True
+BANDIT_ENABLED = False   # OFF since 2026-09-07: _backtest_gate_overblocking.py
+                         # showed the entry bandit's REJECTS outperforming its
+                         # own entries, and its LinUCB state is calibrated to the
+                         # pre-peak-label ml_proba scale. Rollback = True, but not
+                         # before the state is rebuilt on the new scale.
 ML_GENERAL_HARD_BLOCK_MAX = 1.01              # 1.01 = no upper cap
 TOP_GAINER_CRITIC_ENABLED = True
 RL_TRAIN_TELEGRAM_REPORTS_ENABLED = False           # live: off

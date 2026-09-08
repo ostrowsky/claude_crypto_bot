@@ -108,5 +108,110 @@ class TestScopeIsStated(unittest.TestCase):
                       ) if "bot's" in LABEL else self.assertIn("population", LABEL)
 
 
+class TestPeakCacheIsSafeToTrust(unittest.TestCase):
+    """The cache exists because labelling re-read 4.9M bars nightly and blew the
+    600s retrain timeout on 2026-09-08. It must never invent or freeze a value."""
+
+    def setUp(self):
+        import ml_signal_model as M
+        self.M = M
+        self._prev = M._PEAK_CACHE
+        M._PEAK_CACHE = {}
+
+    def tearDown(self):
+        self.M._PEAK_CACHE = self._prev
+
+    def test_an_unresolved_row_is_not_cached(self):
+        """A row whose forward window has not closed returns None. Caching that
+        None would freeze it as a permanent non-answer once the bars arrive."""
+        M = self.M
+        bars = [bar(i, 100.0) for i in range(3)]
+        M._PEAK_IDX["NOCACHEUSDT|1h"] = (bars, {b[0]: i for i, b in enumerate(bars)})
+        try:
+            rows = [{"sym": "NOCACHEUSDT", "tf": "1h", "_dt": bars[-1][0],
+                     "ts_signal": bars[-1][0].isoformat()}]
+            out, n_ok = M._peak_label_series(rows)
+            self.assertEqual(n_ok, 0)
+            self.assertIsNone(out[0])
+            self.assertEqual(M._PEAK_CACHE, {})
+        finally:
+            M._PEAK_IDX.pop("NOCACHEUSDT|1h", None)
+
+    def test_a_resolved_row_is_cached_and_reused(self):
+        M = self.M
+        bars = [bar(0, 100.0)] + [bar(i, 100.0, high=110.0) for i in range(1, 12)]
+        M._PEAK_IDX["CACHEUSDT|1h"] = (bars, {b[0]: i for i, b in enumerate(bars)})
+        try:
+            rows = [{"sym": "CACHEUSDT", "tf": "1h", "_dt": bars[0][0],
+                     "ts_signal": bars[0][0].isoformat()}]
+            out, n_ok = M._peak_label_series(rows)
+            self.assertEqual(n_ok, 1)
+            self.assertEqual(len(M._PEAK_CACHE), 1)
+            # second pass must reach the same answer with the klines gone
+            M._PEAK_IDX.pop("CACHEUSDT|1h")
+            again, n2 = M._peak_label_series(rows)
+            self.assertEqual(n2, 1)
+            self.assertAlmostEqual(again[0], out[0], places=9)
+        finally:
+            M._PEAK_IDX.pop("CACHEUSDT|1h", None)
+
+    def test_the_key_carries_the_horizon(self):
+        # Changing ML_PEAK_LABEL_HORIZON must not read back a value computed for
+        # a different horizon -- that would silently mislabel the whole dataset.
+        self.assertIn('"%s|%s|%s|%d"',
+                      (HERE / "ml_signal_model.py").read_text(encoding="utf-8"))
+
+
+class TestFamilySelectionGradesOnTheGoal(unittest.TestCase):
+    """The old criterion led with selected_ret5_avg -- the CLOSE -- and on
+    2026-09-08 picked catboost (top-decile peak 2.95%) over logistic (4.12%)."""
+
+    def setUp(self):
+        import ml_signal_model as M
+        import config
+        self.M, self.config = M, config
+        self._prev = config.ML_PEAK_LABEL_ENABLED
+
+    def tearDown(self):
+        self.config.ML_PEAK_LABEL_ENABLED = self._prev
+
+    def _metrics(self, auc, ret5, cov=0.2, prec=0.3):
+        return {"auc": auc, "selected_ret5_avg": ret5,
+                "coverage": cov, "precision": prec}
+
+    def test_with_the_peak_label_the_better_ranker_wins(self):
+        self.config.ML_PEAK_LABEL_ENABLED = True
+        good = self._metrics(auc=0.857, ret5=0.22)     # logistic, 2026-09-08
+        bad = self._metrics(auc=0.809, ret5=0.586)     # catboost: higher close
+        self.assertGreater(self.M._family_score(good), self.M._family_score(bad))
+
+    def test_with_the_flag_off_the_old_criterion_returns(self):
+        self.config.ML_PEAK_LABEL_ENABLED = False
+        good = self._metrics(auc=0.857, ret5=0.22)
+        bad = self._metrics(auc=0.809, ret5=0.586)
+        self.assertLess(self.M._family_score(good), self.M._family_score(bad))
+
+    def test_a_missing_auc_falls_back_rather_than_crashing(self):
+        self.config.ML_PEAK_LABEL_ENABLED = True
+        m = self._metrics(auc=None, ret5=0.5)
+        self.assertIsInstance(self.M._family_score(m), float)
+
+
+class TestTheStallCanBeSeenNextTime(unittest.TestCase):
+    def test_the_retrain_timeout_covers_a_cold_cache(self):
+        src = (HERE / "daily_learning.py").read_text(encoding="utf-8")
+        self.assertIn("timeout=1800", src)
+
+    def test_the_gate_model_has_a_declared_freshness_interval(self):
+        import artifact_freshness as AF
+        names = {a.name for a in AF.ARTIFACTS}
+        self.assertIn("ml_signal_model", names,
+                      "the artifact the ml gate depends on must declare an interval")
+
+    def test_the_nightly_report_prints_the_freshness_table(self):
+        src = (HERE / "daily_learning.py").read_text(encoding="utf-8")
+        self.assertIn("artifact_freshness.render(artifact_freshness.check())", src)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

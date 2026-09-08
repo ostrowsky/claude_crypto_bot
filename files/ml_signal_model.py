@@ -275,6 +275,39 @@ def load_training_rows(path: Path, min_ts: Optional[datetime] = None) -> List[di
 
 _PEAK_IDX: Dict[str, tuple] = {}
 
+# Resolving the peak label re-read 4.9M kline bars for 5386 rows on every nightly
+# run -- 146s of the 221s total, and the reason the 2026-09-08 retrain hit the
+# 600s limit and left the gate model a day stale. The values are immutable once
+# their forward window has closed, so they are memoised here.
+#
+# A sidecar rather than a `peak_5` field inside ml_dataset.jsonl (which is what
+# the spec's step 1 proposed): that file is 115MB and rewriting it in full is the
+# exact pathology that froze the event loop in 2026-08-04. This file is small,
+# rewritten atomically, and can be deleted at any time -- it rebuilds from klines.
+_PEAK_CACHE_FILE = ROOT / "peak_label_cache.json"
+_PEAK_CACHE: Optional[Dict[str, float]] = None
+
+
+def _peak_cache() -> Dict[str, float]:
+    global _PEAK_CACHE
+    if _PEAK_CACHE is None:
+        try:
+            _PEAK_CACHE = json.loads(_PEAK_CACHE_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            _PEAK_CACHE = {}
+    return _PEAK_CACHE
+
+
+def _peak_cache_save(cache: Dict[str, float]) -> None:
+    try:
+        tmp = _PEAK_CACHE_FILE.with_name(_PEAK_CACHE_FILE.name + ".part")
+        tmp.write_text(json.dumps(cache), encoding="utf-8")
+        tmp.replace(_PEAK_CACHE_FILE)
+    except Exception as exc:
+        # A cache that cannot be written must not stop training -- the klines
+        # are still there and the next run simply pays the full cost again.
+        print("[ml] peak cache not saved: %s" % exc)
+
 
 def _peak_bars(sym: str, tf: str):
     """Klines for the row's timeframe, with a timestamp index built once."""
@@ -321,6 +354,9 @@ def _peak_label_series(rows: List[dict]) -> tuple:
     horizon = int(getattr(_cfg, "ML_PEAK_LABEL_HORIZON", 5))
     out: List[Optional[float]] = []
     n_ok = 0
+    cache = _peak_cache()
+    n_hit = 0
+    n_new = 0
     for rec in rows:
         ts = rec.get("_dt")
         if ts is None:
@@ -330,11 +366,27 @@ def _peak_label_series(rows: List[dict]) -> tuple:
                 ts = None
         p = None
         if ts is not None:
-            p = _peak_ahead(str(rec.get("sym") or ""), str(rec.get("tf") or "1h"),
-                            ts, horizon)
+            sym = str(rec.get("sym") or "")
+            tf = str(rec.get("tf") or "1h")
+            key = "%s|%s|%s|%d" % (sym, tf, ts.isoformat(), horizon)
+            p = cache.get(key)
+            if p is None:
+                p = _peak_ahead(sym, tf, ts, horizon)
+                # Only a RESOLVED peak is cached. A row whose forward window has
+                # not closed yet returns None, and must stay uncached so it is
+                # recomputed once the bars arrive -- caching the None would
+                # freeze it as a permanent non-answer.
+                if p is not None:
+                    cache[key] = p
+                    n_new += 1
+            else:
+                n_hit += 1
         out.append(p)
         if p is not None:
             n_ok += 1
+    if n_new:
+        _peak_cache_save(cache)
+    print("[ml] peak labels: %d from cache, %d computed from klines" % (n_hit, n_new))
     return out, n_ok
 
 
@@ -710,6 +762,39 @@ def roc_auc_score_np(y_true: np.ndarray, y_score: np.ndarray) -> Optional[float]
     return float(auc)
 
 
+
+def _family_score(metrics: dict) -> float:
+    """Rank the candidate families by the thing the label is trying to predict.
+
+    The old score led with `selected_ret5_avg` -- the average five-bar CLOSE of
+    the rows a family selects. Under the peak label that is the wrong exam: the
+    label asks "was there a move of at least T%", and a run that is given back
+    still counts. Measured on the 2026-09-08 holdout (n=463, base rate 12.1%):
+
+        family     AUC(peak>=3%)   top-decile peak
+        logistic          0.8571             4.12%
+        catboost          0.8090             2.95%
+        mlp               0.7791             3.75%
+        no model              --             1.36%
+
+    The old criterion picked catboost -- the family whose most confident decile
+    moves LEAST of the three. AUC against the peak label is threshold-free and
+    measures ordering directly, which is what a gate needs.
+
+    Falls back to the close-based score whenever the peak label is off, so the
+    rollback switch stays a single flag.
+    """
+    try:
+        import config as _cfg
+        use_peak = bool(getattr(_cfg, "ML_PEAK_LABEL_ENABLED", False))
+    except Exception:
+        use_peak = False
+    if use_peak and metrics.get("auc") is not None:
+        return float(metrics["auc"]) + 0.15 * float(metrics["precision"])
+    return (float(metrics["selected_ret5_avg"]) * (0.35 + float(metrics["coverage"]))
+            + 0.15 * float(metrics["precision"]))
+
+
 def evaluate_predictions(
     y_true: np.ndarray,
     y_score: np.ndarray,
@@ -1002,7 +1087,7 @@ def train_and_evaluate(
         val_score = model.predict_proba(X_val)
         threshold, metrics = find_best_threshold(bundle.y_val, val_score, bundle.r_val)
         validation[name] = metrics
-        score = metrics["selected_ret5_avg"] * (0.35 + metrics["coverage"]) + 0.15 * metrics["precision"]
+        score = _family_score(metrics)
         if score > best_score:
             best_score = score
             best_name = name

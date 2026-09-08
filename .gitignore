@@ -93,3 +93,4 @@ skills/*/__pycache__/
 !.claude/skills/**
 files/positioning_history.jsonl
 .runtime/positioning_recorder.log
+peak_label_cache.json

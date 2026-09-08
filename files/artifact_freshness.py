@@ -62,6 +62,12 @@ ARTIFACTS: tuple[Artifact, ...] = (
              "retrained nightly by daily_learning.py"),
     Artifact("ml_candidate_ranker", "files/ml_candidate_ranker.json", 6,
              "RL worker retrains hourly"),
+    # Added 2026-09-08. Its nightly retrain had succeeded 19 nights running and
+    # then timed out on the 20th, leaving the ml gate scoring on a day-old model
+    # -- and nothing noticed, because the one artifact the gate depends on was
+    # the one artifact with no declared interval.
+    Artifact("ml_signal_model", "files/ml_signal_model.json", 36,
+             "the ml_zone gate model; retrained nightly by daily_learning.py"),
     Artifact("learning_progress", ".runtime/learning_progress.jsonl", 36,
              "one row per nightly cycle; this is the file trend reports read"),
     Artifact("metrics_daily", ".runtime/metrics_daily.jsonl", 36,

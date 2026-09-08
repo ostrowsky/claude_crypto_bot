@@ -192,11 +192,58 @@ independently disabled (see `_backtest_gate_overblocking.py`), so its stale stat
 is not in the live path today, but the archived copy and the warning mean
 re-enabling it cannot happen silently.
 
-### Known incomplete
+### Follow-up, 2026-09-08: the nightly retrain, and the criterion that was left
 
-The training-time selection criterion still scores families and thresholds by
-`selected_ret5_avg` — the **close**. That is why the retrain reported negative
-numbers for all three families: they were graded on the outcome the label no
-longer targets. Family choice is therefore still decided by a metric pointing the
-old way. It is deliberately not bundled here so the label change can be read on
-its own.
+Three defects surfaced on the first night after deployment, all downstream of the
+label change and all now closed.
+
+**1. The nightly retrain timed out and the gate model went a day stale.**
+`ml_signal_model retrain` had succeeded 19 nights running and failed on the 20th
+— `timed out after 600 seconds`, 03:40:05. The cycle logs an ERROR and carries
+on, so nothing surfaced it. Cause, measured rather than assumed: resolving the
+peak label re-reads klines that the old `ret_5 > 0` label never touched.
+
+```
+import module          1.3s
+read ml_dataset.jsonl 14.1s   5386 rows
+PEAK LABELLING       145.9s   198 symbol-tf pairs, 4.9M bars   <- new cost
+train 3 families      ~60s
+```
+
+**2. Fix: a peak-label cache** (`files/peak_label_cache.json`). A resolved peak
+is immutable once its forward window has closed, so it is memoised. Measured:
+labelling 146s -> 1.8s, full retrain 3m41s -> 1m55s. `build_dataset` runs eight
+times per retrain (global + 7 segments), so the saving multiplies.
+
+A sidecar, NOT a `peak_5` field inside `ml_dataset.jsonl` as step 1 above
+proposed: that file is 115MB and rewriting it in full is the pathology that froze
+the event loop on 2026-08-04. The cache is small, written atomically, and
+rebuilds from klines if deleted. An UNRESOLVED row is never cached, so a row
+whose window has not closed is recomputed once the bars arrive.
+`daily_learning.py` timeout also raised 600 -> 1800 as margin for a cold cache.
+
+**3. The selection criterion was picking the WORST family.** This is the item
+previously listed as known-incomplete, and it turned out to be live-affecting
+rather than cosmetic: with the retrain fixed, that night's run would have
+replaced the deployed logistic model with catboost. Graded on the goal's own
+terms (holdout n=463, base rate 12.1%):
+
+| family | AUC (peak >= 3%) | top-decile forward peak |
+|---|---|---|
+| **logistic** (deployed) | **0.8571** | **4.12%** |
+| catboost (old criterion's pick) | 0.8090 | 2.95% |
+| mlp | 0.7791 | 3.75% |
+| no model | — | 1.36% |
+
+The old score led with `selected_ret5_avg` — the average five-bar CLOSE of the
+selected rows — which is the exam the label no longer sits. catboost won it by
+selecting 5.4% of rows at `ret5=+0.5856%`; its most confident decile moves least
+of the three. `_family_score` now leads with AUC against the peak label
+(threshold-free, measures ordering) whenever `ML_PEAK_LABEL_ENABLED` is on, and
+falls back to the close-based score when it is off — so rollback stays one flag.
+Verified end-to-end: the retrain now chooses `logistic`.
+
+**Freshness.** `artifact_freshness.py` declared every learning input except the
+one the gate depends on. `ml_signal_model.json` now carries a 36h interval, and
+the nightly report prints the freshness table — a lapse like night 20's is
+visible the next morning instead of on the day someone happens to ask.

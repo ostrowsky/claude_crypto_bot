@@ -751,7 +751,8 @@ scope, success metric, rollback и план верификации. В commit bo
 ## Конфигурационные флаги (важные)
 
 ```python
-BANDIT_ENABLED = True                         # LinUCB gate on/off
+BANDIT_ENABLED = False                        # LinUCB gate on/off — OFF since
+                                              # 2026-09-07, see CLAUDE.md section 11
 ML_GENERAL_HARD_BLOCK_MAX = 1.01             # 1.01 = нет верхнего порога (снять верхний кап)
 TOP_GAINER_CRITIC_ENABLED = True
 RL_TRAIN_TELEGRAM_REPORTS_ENABLED = True
