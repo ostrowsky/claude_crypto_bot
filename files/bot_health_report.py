@@ -1575,23 +1575,47 @@ def _render_agent_block() -> str | None:
     """Is the LLM agent actually being used for hypotheses, and to what effect?
 
     Without this the operator cannot tell whether "no ideas" means the agent
-    reviewed everything and found nothing, or was never called at all — the
+    reviewed everything and found nothing, or was never called at all -- the
     latter was true for 11 days in August (the weekly task refused to start on
-    battery)."""
+    battery).
+
+    A call that came back with an error is an ATTEMPT, not a call. Until
+    2026-09-18 both were counted the same way, so "last call 09-06" was printed
+    while every call since 08-30 had failed on an exhausted API credit balance:
+    the agent had been out of the loop for weeks and this block said otherwise."""
     calls_path = PL.PIPELINE / "claude_calls.jsonl"
     calls = [c for c in PL.iter_jsonl(calls_path) if isinstance(c, dict)]
     if not calls:
         return None
     from collections import Counter
-    purposes = Counter(str(c.get("purpose") or "?") for c in calls)
-    last_ts = str(calls[-1].get("ts") or "")[:10]
-    gen = purposes.get("weekly_generation", 0)
-    adv = purposes.get("approval_advice", 0)
-    crit = purposes.get("blind_critique", 0)
-    return ("🤖 <b>Агент (LLM) в контуре гипотез</b>\n"
-            f"  последний вызов {last_ts} · всего {len(calls)}: "
-            f"генерация {gen}, оценка одобрения {adv}, слепая критика {crit}")
-
+    ok = [c for c in calls if not c.get("error")]
+    failed = [c for c in calls if c.get("error")]
+    purposes = Counter(str(c.get("purpose") or "?") for c in ok)
+    last_ok = str(ok[-1].get("ts") or "")[:10] if ok else "никогда"
+    lines = ["🤖 <b>Агент (LLM) в контуре гипотез</b>",
+             f"  последний УСПЕШНЫЙ вызов {last_ok} · успешных {len(ok)}: "
+             f"генерация {purposes.get('weekly_generation', 0)}, "
+             f"оценка одобрения {purposes.get('approval_advice', 0)}, "
+             f"слепая критика {purposes.get('blind_critique', 0)}"]
+    streak = 0
+    for c in reversed(calls):
+        if not c.get("error"):
+            break
+        streak += 1
+    if streak:
+        err = str(failed[-1].get("error") or "")
+        low = err.lower()
+        if "credit balance" in low:
+            why = "закончились кредиты Anthropic API — пополнить в Plans & Billing"
+        elif "401" in err or "authentication" in low:
+            why = "ключ API отклонён"
+        elif "429" in err or "rate limit" in low:
+            why = "лимит запросов"
+        else:
+            why = err[:120]
+        lines.append(f"  ❌ агент НЕ работает: {streak} вызова(ов) подряд с ошибкой, "
+                     f"последний {str(failed[-1].get('ts') or '')[:10]} — {why}")
+    return chr(10).join(lines)
 
 def _render_telegram_legacy(r: dict) -> str:
     """Short Telegram summary — single screen."""

@@ -313,6 +313,11 @@ Rules you MUST follow:
  6. Be conservative: a smaller, reversible change is better than a sweeping one.
  7. Output AT MOST 3 hypotheses. Fewer is fine if the rules above leave little room.
  8. Do not duplicate hypotheses already proposed by the rule layer (passed in).
+ 9. Propose ONLY config_keys listed in validatable_config_keys, and take "from"
+    from the value given there. Any other key is rejected automatically by L3
+    as unvalidatable -- the event log does not record what it is compared
+    against, so no replay can test it. Keys that do not exist in config.py are
+    dropped before L3 ever sees them.
 """
 
 _CLAUDE_SCHEMA_HINT = (
@@ -322,6 +327,16 @@ _CLAUDE_SCHEMA_HINT = (
     '"risk": str, "rollback": str, '
     '"validation_required": [str], "source_flag": str}]}'
 )
+
+
+def _validatable_with_values() -> dict:
+    """{config_key: live value} for every key the L3 replay validator can test."""
+    try:
+        import config as _cfg
+        import pipeline_replay_validator as RV
+        return {k: getattr(_cfg, k) for k in RV.validatable_keys() if hasattr(_cfg, k)}
+    except Exception:
+        return {}
 
 
 def _claude_augment(
@@ -363,6 +378,9 @@ def _claude_augment(
             "config_keys_locked": dnt.get("config_keys_locked", []),
             "gates":              [g["name"] for g in dnt.get("gates", [])],
         },
+        # Added 2026-09-18: without this, L2 proposed keys L3 had no way to
+        # test and the queue never drained (11 weeks, 0 automatic verdicts).
+        "validatable_config_keys": _validatable_with_values(),
     }
 
     res = CC.call_claude_json(

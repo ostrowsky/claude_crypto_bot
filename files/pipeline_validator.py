@@ -269,20 +269,35 @@ PREFIX_VALIDATORS = [
 
 
 def dispatch(hyp: dict) -> dict:
+    """Rule-name validators first; anything they cannot decide goes to the
+    config_key replay validator.
+
+    Until 2026-09-18 a rule name with no registered validator returned
+    `pending_manual_validation` and waited forever: eleven weekly runs
+    (2026-06-21 .. 09-06) produced zero automatic verdicts, and the one
+    queued hypothesis had waited a month. L2 invents rule names freely but
+    always supplies config_key + diff, so the fallback keys on those. It never
+    parks: an unknown key or one the event log cannot replay is REJECTED with
+    the reason, and thin data is `needs_data`, re-run on the next pass.
+    """
     rule = hyp.get("rule", "")
+    primary = None
     if rule in VALIDATORS:
-        return VALIDATORS[rule](hyp)
-    for prefix, fn in PREFIX_VALIDATORS:
-        if rule.startswith(prefix):
-            return fn(hyp)
-    return {
-        "verdict": "pending_manual_validation",
-        "reason": f"no validator registered for rule='{rule}'",
-        "manual_steps": [
-            f"Add a validator for rule '{rule}' to files/pipeline_validator.py",
-            f"Register it in VALIDATORS or PREFIX_VALIDATORS",
-        ],
-    }
+        primary = VALIDATORS[rule](hyp)
+    else:
+        for prefix, fn in PREFIX_VALIDATORS:
+            if rule.startswith(prefix):
+                primary = fn(hyp)
+                break
+    if primary is not None and primary.get("verdict") != "pending_manual_validation":
+        return primary
+    import pipeline_replay_validator as RV
+    out = RV.validate(hyp)
+    if primary is not None:
+        out["superseded"] = {"validator": primary.get("validator"),
+                             "verdict": primary.get("verdict"),
+                             "reason": primary.get("reason")}
+    return out
 
 
 # ---------------------------------------------------------------------------
