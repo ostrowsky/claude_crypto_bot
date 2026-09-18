@@ -137,6 +137,67 @@ async def backfill(symbols: list[str], tf: str, days: int,
     return cached, skipped
 
 
+LONG_SUFFIX = {"15m": "15m_419d", "1h": "1h_365d"}
+STEP = {"15m": timedelta(minutes=15), "1h": timedelta(hours=1)}
+
+
+def extend_long_store(sym: str, tf: str = "15m") -> tuple[int, str]:
+    """Append bars from the rolling <sym>_15m.csv onto the long <sym>_15m_419d.csv.
+
+    Added 2026-09-18. The long file was a one-off 419-day backfill that ended
+    2026-08-20, while this task rewrites a separate ROLLING 30-day file. Every
+    15m reader that wants history (the backtests, and the peak TRAINING label in
+    ml_signal_model) reads the long file -- so from 08-20 on they silently saw
+    nothing: the peak label resolved 48% of August's 15m rows and 0% of
+    September's, and those rows fell back to the old inverted ret_5>0 label.
+    Extending the long file daily makes it a growing store and fixes both.
+
+    Append-only: bars at or before the long file's last timestamp are never
+    rewritten, so earlier results computed on it stay reproducible. A gap
+    between the two files is reported, not papered over -- it means the rolling
+    window has moved past the long file's end and the bars in between must be
+    re-fetched (Binance serves historical klines, so nothing is lost for good).
+    Returns (bars appended, status).
+    """
+    long_p = HISTORY_DIR / f"{sym}_{LONG_SUFFIX[tf]}.csv"
+    roll_p = HISTORY_DIR / f"{sym}_{tf}.csv"
+    if not long_p.exists() or not roll_p.exists():
+        return 0, "missing"
+    long_lines = io.open(long_p, encoding="utf-8").read().splitlines()
+    if len(long_lines) < 2:
+        return 0, "empty"
+    last_ts = long_lines[-1].split(",", 1)[0]
+    roll_lines = io.open(roll_p, encoding="utf-8").read().splitlines()[1:]
+    new = [ln for ln in roll_lines if ln and ln.split(",", 1)[0] > last_ts]
+    if not new:
+        return 0, "current"
+    status = "ok"
+    try:
+        gap = (datetime.fromisoformat(new[0].split(",", 1)[0])
+               - datetime.fromisoformat(last_ts))
+        if gap > STEP[tf]:
+            status = "GAP %s" % gap
+    except ValueError:
+        status = "unparsed"
+    tmp = long_p.with_name(long_p.name + ".part")
+    with io.open(tmp, "w", encoding="utf-8", newline=chr(10)) as f:
+        f.write(chr(10).join(long_lines + new) + chr(10))
+    tmp.replace(long_p)
+    return len(new), status
+
+
+def extend_all(symbols: list[str], tf: str = "15m") -> None:
+    added = gaps = 0
+    for sym in symbols:
+        n, st = extend_long_store(sym, tf)
+        added += n
+        if st.startswith("GAP"):
+            gaps += 1
+            print(f"  [extend] {sym}: {st} before the appended bars -- re-fetch that span")
+    print(f"[extend] long {tf} store: {added} bars appended across {len(symbols)} "
+          f"symbols, {gaps} with a gap")
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--days", type=int, default=30)
@@ -145,6 +206,8 @@ def main():
                    help="comma-separated subset; default = full watchlist")
     p.add_argument("--skip-existing", action="store_true",
                    help="skip if cache already covers the window and is < 6h old")
+    p.add_argument("--extend-only", action="store_true",
+                   help="only append the rolling file onto the long store (15m, 1h)")
     args = p.parse_args()
 
     if args.symbols:
@@ -152,7 +215,10 @@ def main():
     else:
         syms = load_watchlist()
 
-    asyncio.run(backfill(syms, args.tf, args.days, args.skip_existing))
+    if not args.extend_only:
+        asyncio.run(backfill(syms, args.tf, args.days, args.skip_existing))
+    if args.tf in LONG_SUFFIX:
+        extend_all(syms, args.tf)
 
 
 if __name__ == "__main__":
