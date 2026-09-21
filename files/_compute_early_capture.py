@@ -239,6 +239,8 @@ def main():
     # label, and substituting the loader would turn a change of provenance into
     # what looks like a change in the bot (TH-04).
     res_imm = None
+    imm_reason = None          # why the immutable value is missing, when it is
+    imm_store_last_day = None
     if getattr(config, "NS_IMMUTABLE_LABELS_ENABLED", False):
         try:
             import immutable_labels as IL
@@ -248,12 +250,22 @@ def main():
             # an easier one and mints 20 winners a day regardless of the market.
             imm_all, imm_eod = IL.winners_by_day(top_n=20, watchlist=watchlist,
                                                  rank_before_filter=True)
+            imm_store_last_day = max((k[0] for k in imm_all), default=None)
             imm_all = {k for k in imm_all if k[0] >= cut_dt.strftime("%Y-%m-%d")}
             imm = {k for k in imm_all if k[0] in full_days}
             if imm:
                 res_imm = compute_north_star(imm, imm_eod, first_entry,
                                              pnl_pairs, "top20_immutable")
+            else:
+                # 2026-08-30 .. 2026-09-21 this branch fell through with no
+                # message: the store ended 2026-08-16, the 14-day window moved
+                # past it, and `primary = res_imm or res_top20` below published
+                # the leaky rolling-24h value under the same job.
+                imm_reason = ("no winner-days with immutable labels inside the "
+                              f"window (label store ends {imm_store_last_day}, "
+                              f"window starts {cut_dt.strftime('%Y-%m-%d')})")
         except Exception as exc:                      # never break the daily run
+            imm_reason = f"immutable labels unavailable: {exc}"
             print(f"[immutable labels unavailable: {exc}]")
 
     # Goal 2 (signal entry as early as possible) measured against the MOVE.
@@ -338,6 +350,18 @@ def main():
     # series stays reconstructable (TH-04).
     primary = res_imm or res_top20
     versioned = "NS_EarlyCapture_top20_v2" if res_imm else "NS_EarlyCapture_top20"
+    # The honest metric was ENABLED but could not be computed. Say so in the
+    # artifact and on the console: the fallback value carries the leaky label
+    # (CLAUDE.md section 1) and must not be read as progress. The metric NAME is
+    # unchanged for backward compatibility, so this flag is the signal.
+    degraded = bool(getattr(config, "NS_IMMUTABLE_LABELS_ENABLED", False)) and res_imm is None
+    if degraded:
+        print(chr(10) + "!" * 78)
+        print("!! PRIMARY METRIC DEGRADED: NS_EarlyCapture_top20_v2 was NOT computed.")
+        print("!! " + str(imm_reason))
+        print("!! The value below uses the LEAKY rolling-24h label -- not evidence of progress.")
+        print("!! Refresh the store: files/build_global_labels.py --days 30")
+        print("!" * 78)
     metric = {
         "metric": versioned,
         # Which top-20 `n` counts. The recall denominator changed once already
@@ -349,6 +373,9 @@ def main():
                         "top20_within_watchlist_from_top_gainer_dataset"),
         "label_provenance": ("immutable_later_eod_klines" if res_imm
                              else "rolling_24h_same_snapshot"),
+        "primary_degraded": degraded,
+        "primary_degraded_reason": imm_reason if degraded else None,
+        "immutable_store_last_day": imm_store_last_day,
         "days_window": args.days,
         "days_full": len(full_days),
         "days_down_or_partial": args.days - len(full_days),

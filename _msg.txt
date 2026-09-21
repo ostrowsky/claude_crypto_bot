@@ -1,0 +1,50 @@
+fix(learning): the label store froze on 08-16 -- training and the north star ran on stale data for a month
+
+Asked to check whether the learning loop works and moves the target metric.
+It runs every night, but two consumers of the immutable label store degraded
+without a single error, because the store was built once (2026-08-17), ends
+2026-08-16, and nothing ever extended it:
+
+  * top_gainer training logged "immutable labels: 106507/..." kept rows
+    IDENTICAL on every one of 34 nights (08-18..09-21) while dropped rows grew
+    17 019 -> 26 534: the model retrained daily on frozen data.
+  * the North Star's primary value needs winner-days inside its 14-day window;
+    from 08-30 there were none, and `primary = res_imm or res_top20` published
+    the leaky rolling-24h value under the same job. metrics_daily shows
+    label_provenance flipping and NS_EarlyCapture_top20_v2 becoming
+    byte-identical to legacy. CLAUDE.md section 1 called v2 primary; for three
+    weeks it was not, and nothing said so.
+
+Fix:
+  * daily_learning.refresh_label_store() runs build_global_labels.py --days 30
+    before anything trains on the labels. The builder never touches an existing
+    (symbol, day) record and skips an unfinished day, so it is idempotent.
+  * artifact_freshness declares the store (36h) -- it was the one learning input
+    with no declared cadence.
+  * the metric no longer substitutes silently: primary_degraded /
+    primary_degraded_reason / immutable_store_last_day in the artifact and a
+    console banner naming the leaky label. Quiet when the flag is off.
+  * store refilled in place today: 17 020 records written, 12 024 skipped as
+    existing, ends 2026-09-20 at 483-491 symbols/day.
+
+Verified: v2 primary again = 0.092 (n=39, coverage 0.72); training join
+106 507 -> 138 789 rows (+30%, on the raw dataset before the phantom filter).
+
+Before/after the peak-label switch on immutable labels, non-overlapping 10-day
+windows: 0.1256 -> 0.0918, difference -0.034, bootstrap over days 95% interval
+[-0.119, +0.056] -- no improvement and no harm distinguishable; far under the
+0.25 floor.
+
+Also removed: the pending-decision resolver, which raised (21,21) vs (18,18) on
+every night since 2026-06-01 (99+ nights, 7 892 decisions never resolved), used
+the leaky top-gainer reward, and would have been erased by the nightly bandit
+rebuild anyway. The buffer writer in should_enter rewrote a growing JSON on
+every decision.
+
+Not fixed, found on the way: nine watchlist symbols have no candles since
+2026-08-12 (TON, MKR, LRC, MDT, OXT, BAKE, PYR, TRU, SNT) -- the pre-existing
+failure of test_phantom_symbol_filter, not touched here (watchlist is immutable).
+
+TH-03, TH-04, TH-05, TH-08, TH-11, TH-12, TH-13. 14 tests.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>

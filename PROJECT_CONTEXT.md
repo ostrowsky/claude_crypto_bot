@@ -541,7 +541,7 @@ Grace period backtest (2026-04-20): не помогает — проблема �
 
 | Задача | Время | Действие |
 |--------|-------|----------|
-| `CryptoBot_DailyLearning_EOD` | 02:30 local (00:30 UTC) | Полный цикл обучения: snapshot → resolve → train bandit → retrain model → report |
+| `CryptoBot_DailyLearning_EOD` | 02:30 local (00:30 UTC) | Полный цикл обучения: snapshot → **обновление хранилища неизменяемых меток** → train bandit → retrain model → report. Шаг с метками добавлен 2026-09-21: хранилище собрали один раз (2026-08-17) и не продлевали, из-за чего первичная метрика North Star и обучение `top_gainer` молча деградировали (см. `docs/specs/features/label-store-refresh-spec.md`). Шага «resolve pending bandit decisions» больше нет. |
 | `CryptoBot_IntradaySnapshot` | 08:30, 14:30, 20:30 local | Сбор фич для top_gainer_dataset (intraday snapshot) |
 | `CryptoBot_KlinesBackfill_Daily` | 06:00 local | Обновление `history/<sym>_15m.csv` (`--days 30 --tf 15m`) |
 | `CryptoBot_KlinesBackfill_1h_Daily` | 06:20 local | Обновление `history/<sym>_1h.csv` (`--days 60 --tf 1h`) — **добавлена 2026-08-17** |

@@ -265,6 +265,48 @@ async def collect_today_snapshot(
     }
 
 
+# ── Step 1b: keep the immutable label store current ─────────────────────────
+
+def refresh_label_store() -> Dict:
+    """Append the newly CLOSED UTC days to the immutable label store.
+
+    Added 2026-09-21. The store was built once, on 2026-08-17, and ends at
+    2026-08-16; nothing ever extended it. Two things read it and both degraded
+    without a single error:
+
+      * top_gainer training joins immutable labels onto the dataset, and kept
+        exactly 106 507 rows on every one of 34 nights while 26 534 newer rows
+        were dropped -- the model retrained daily on frozen data;
+      * the North Star's primary value needs winner-days inside its 14-day
+        window. From 2026-08-30 there were none, and `primary = res_imm or
+        res_top20` quietly published the old rolling-24h metric under the same
+        job (see _compute_early_capture.py).
+
+    build_global_labels.py never touches an existing (symbol, day) record and
+    skips an unfinished day, so re-running over a 30-day window is idempotent:
+    it only appends what has newly closed. Best effort -- a failure is logged
+    and the cycle continues, and the freshness table then reports the store as
+    stale instead of the cycle pretending it worked.
+    """
+    try:
+        import subprocess, sys
+        from pathlib import Path
+        files_dir = Path(__file__).resolve().parent
+        cmd = [sys.executable, str(files_dir / "build_global_labels.py"), "--days", "30"]
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=1800,
+                              encoding="utf-8", errors="replace")
+        tail = (proc.stdout or "").strip().splitlines()[-3:]
+        if proc.returncode != 0:
+            log.error("label store refresh failed (exit %s): %s",
+                      proc.returncode, (proc.stderr or "")[-400:])
+            return {"status": "error", "stderr": (proc.stderr or "")[-400:]}
+        log.info("label store refreshed: %s", " | ".join(tail)[:300])
+        return {"status": "ok", "tail": tail}
+    except Exception as e:
+        log.error("label store refresh exception: %s", e)
+        return {"status": "error", "error": str(e)}
+
+
 # ── Step 2: Resolve bandit + train ──────────────────────────────────────────
 
 def resolve_and_train(top_gainer_syms: List[str]) -> Dict:
@@ -272,20 +314,14 @@ def resolve_and_train(top_gainer_syms: List[str]) -> Dict:
     Resolve pending decisions, then run full offline training.
     Returns combined results.
     """
-    from contextual_bandit import resolve_pending_decisions
     from offline_rl import run_offline_training
 
     results = {}
 
-    # Resolve pending bandit decisions with actual top gainers
-    try:
-        n_resolved = resolve_pending_decisions(top_gainer_syms)
-        results["resolved_pending"] = n_resolved
-        log.info("Resolved %d pending decisions", n_resolved)
-    except Exception as e:
-        log.error("Resolve pending failed: %s", e)
-        results["resolved_pending"] = 0
-        results["resolve_error"] = str(e)
+    # 2026-09-21: the "resolve pending bandit decisions" step was removed. It
+    # raised (21,21) vs (18,18) on every one of 99+ nights since 2026-06-01 and
+    # never resolved a single decision; the entry bandit is rebuilt from the
+    # dataset each night, so nothing it wrote would have survived anyway.
 
     # Refresh impulse_speed regime-curtail state (auto-revive): pause the mode
     # while its trailing realized pnl is negative, re-enable when positive.
@@ -495,10 +531,6 @@ def build_progress_report(
 
     lines.append("")
 
-    # Resolved pending
-    n_resolved = train_result.get("resolved_pending", 0)
-    lines.append(f"Pending decisions resolved: {n_resolved}")
-
     # Model retrain
     if model_result.get("status") == "ok":
         lines.append("")
@@ -578,6 +610,9 @@ async def run_full_cycle(
     # Step 1: Collect
     async with aiohttp.ClientSession() as session:
         collect_result = await collect_today_snapshot(session)
+
+    # Step 1b: extend the immutable label store BEFORE anything trains on it
+    label_result = refresh_label_store()
 
     # Step 2+3: Resolve + Train
     top20 = collect_result.get("top20", [])

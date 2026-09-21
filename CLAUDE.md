@@ -427,7 +427,7 @@ To re-run: `pyembed\python.exe files\analyze_blocked_gates.py` from repo root.
 
 | Task | Time | Action |
 |------|------|--------|
-| `CryptoBot_DailyLearning_EOD` | 02:30 local (00:30 UTC) | Full cycle: snapshot → resolve → train bandit → retrain model → report |
+| `CryptoBot_DailyLearning_EOD` | 02:30 local (00:30 UTC) | Full cycle: snapshot → **refresh immutable label store** → train bandit → retrain model → report. The label store step was added 2026-09-21: it had been built once (2026-08-17), never extended, and the North Star's primary value plus `top_gainer` training both degraded silently (see `docs/specs/features/label-store-refresh-spec.md`). The old "resolve pending bandit decisions" step is gone. |
 | `CryptoBot_IntradaySnapshot` | 08:30 / 14:30 / 20:30 local | Feature snapshot → `top_gainer_dataset` |
 | `CryptoBot_KlinesBackfill_Daily` | 06:00 local | `history/<sym>_15m.csv` refresh (`--days 30 --tf 15m`) |
 | `CryptoBot_KlinesBackfill_1h_Daily` | 06:20 local | `history/<sym>_1h.csv` refresh (`--days 60 --tf 1h`) — **added 2026-08-17** |

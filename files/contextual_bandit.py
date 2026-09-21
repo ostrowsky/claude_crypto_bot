@@ -87,7 +87,6 @@ _REGIME_INTERACTION_START = 18
 # State files
 ENTRY_STATE_FILE = Path("bandit_entry_state.json")
 STATE_FILE = Path("bandit_state.json")  # trail bandit
-PENDING_FILE = Path("bandit_pending.json")
 
 
 def extract_context(
@@ -381,10 +380,14 @@ def should_enter(
     info["arm_name"] = ENTRY_ARMS[arm]["name"]
     info["sym"] = sym
 
-    # Store for delayed reward resolution at EOD
-    if sym:
-        _store_pending_decision(sym, mode, tf, arm, x.tolist())
-
+    # The delayed-reward buffer that used to be written here was removed on
+    # 2026-09-21. Its EOD resolver crashed every night from 2026-06-01 (contexts
+    # stored at 18 features, bandit at 21 -> "operands could not be broadcast"),
+    # so 7 892 decisions were never resolved -- and its reward was "the coin is a
+    # top gainer", the leaky label the offline path replaced on 2026-08-13. The
+    # entry bandit is rebuilt from scratch every night from the dataset
+    # (BANDIT_REBUILD_ON_TRAIN), which would have erased anything it added. It
+    # also rewrote the whole growing JSON file on every decision.
     return enter, info
 
 
@@ -450,82 +453,6 @@ def feedback_entry_decision(
     bandit.update(context, arm, reward)
     if bandit.total_updates % 10 == 0:
         bandit.save(ENTRY_STATE_FILE)
-
-
-def resolve_pending_decisions(top_gainer_syms: List[str]) -> int:
-    """
-    Resolve all pending entry/skip decisions with top gainer data.
-    Called at EOD when the top gainer list is available.
-
-    Args:
-        top_gainer_syms: list of symbol names (e.g. ["TRUUSDT", "AXLUSDT"])
-
-    Returns number of resolved decisions.
-    """
-    pending = _load_pending_decisions()
-    if not pending:
-        return 0
-
-    # Normalize: accept both "TRU" and "TRUUSDT"
-    top_set = set()
-    for s in top_gainer_syms:
-        top_set.add(s.upper())
-        top_set.add(s.upper().replace("USDT", ""))
-
-    bandit = get_entry_bandit()
-    resolved = 0
-
-    for dec in pending:
-        sym = dec.get("sym", "")
-        arm = dec.get("arm", 1)
-        ctx = dec.get("context")
-        if ctx is None:
-            continue
-
-        x = np.array(ctx, dtype=np.float64)
-        is_top = sym.upper() in top_set or sym.upper().replace("USDT", "") in top_set
-
-        if arm == 1:  # ENTER
-            reward = 1.0 if is_top else -0.05
-        else:  # SKIP
-            reward = -1.0 if is_top else 0.0
-
-        bandit.update(x, arm, reward)
-        resolved += 1
-
-    bandit.save(ENTRY_STATE_FILE)
-    _clear_pending_decisions()
-    log.info("Resolved %d pending bandit decisions (%d top gainers)",
-             resolved, len(top_gainer_syms))
-    return resolved
-
-
-# ── Pending decisions buffer ─────────────────────────────────────────────────
-
-def _store_pending_decision(
-    sym: str, mode: str, tf: str, arm: int, context_list: list,
-) -> None:
-    pending = _load_pending_decisions()
-    pending.append({
-        "sym": sym, "mode": mode, "tf": tf, "arm": arm,
-        "context": context_list,
-        "ts": datetime.now(timezone.utc).isoformat(),
-    })
-    PENDING_FILE.write_text(json.dumps(pending), encoding="utf-8")
-
-
-def _load_pending_decisions() -> list:
-    if PENDING_FILE.exists():
-        try:
-            return json.loads(PENDING_FILE.read_text(encoding="utf-8"))
-        except Exception:
-            pass
-    return []
-
-
-def _clear_pending_decisions() -> None:
-    if PENDING_FILE.exists():
-        PENDING_FILE.write_text("[]", encoding="utf-8")
 
 
 # ── Trail K selection API (legacy, still used) ──────────────────────────────

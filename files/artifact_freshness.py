@@ -66,6 +66,14 @@ ARTIFACTS: tuple[Artifact, ...] = (
     # then timed out on the 20th, leaving the ml gate scoring on a day-old model
     # -- and nothing noticed, because the one artifact the gate depends on was
     # the one artifact with no declared interval.
+    # Added 2026-09-21. Built once on 2026-08-17 and never extended, so it ended
+    # 2026-08-16 while two consumers degraded without an error: top_gainer
+    # training kept the same 106 507 rows for 34 nights, and the North Star's
+    # primary value fell back to the leaky label from 2026-08-30. A new record
+    # is appended every night, so this file should never be older than a day.
+    Artifact("label_store", ".runtime/labels/move_events_v1.jsonl", 36,
+             "immutable later-EOD labels; appended nightly by daily_learning.py "
+             "(refresh_label_store); training and the North Star both read it"),
     Artifact("ml_signal_model", "files/ml_signal_model.json", 36,
              "the ml_zone gate model; retrained nightly by daily_learning.py"),
     Artifact("learning_progress", ".runtime/learning_progress.jsonl", 36,
