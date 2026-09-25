@@ -43,7 +43,17 @@ lead, and it rests on three trades.
 
 Not applicable (не применимо): nothing changes. Maximum-period evidence above.
 
-## Open
+## Pre-registered re-test (written 2026-09-25, before any new data exists)
 
-The daily_range 10 → 20 band could be re-read later as a single pre-registered
-test (no grid), with the same trailed outcome.
+The daily_range 10 -> 20 band is the only lead this measurement produced, and it
+rests on three trades. It is re-read ONCE, on rows logged after 2026-09-25 only,
+never on the rows above:
+
+- change tested: `TREND_15M_QUALITY_DAILY_RANGE_MAX` 10 -> 20, nothing else;
+- method: this backtest, unchanged; control = trend/15m entries of the same period;
+- read no earlier than when the new band holds n >= 100 rows;
+- accept only if ALL hold: trailed mean minus control > 0 with the 95% interval
+  excluding zero; band median >= control median; mean without its 3 best trades
+  still > control mean.
+
+Anything else is a refutation, recorded here.
