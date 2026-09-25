@@ -74,6 +74,11 @@ ARTIFACTS: tuple[Artifact, ...] = (
     Artifact("label_store", ".runtime/labels/move_events_v1.jsonl", 36,
              "immutable later-EOD labels; appended nightly by daily_learning.py "
              "(refresh_label_store); training and the North Star both read it"),
+    # Added 2026-09-25: hourly timing for EarlyCapture@move_lead. Appended
+    # nightly with a one-day lag (the 1h store refreshes at 06:20 local).
+    Artifact("label_store_intraday", ".runtime/labels/move_events_1h_v1.jsonl", 60,
+             "hourly timing labels for the move-relative North Star; "
+             "appended nightly from the long 1h kline store"),
     Artifact("ml_signal_model", "files/ml_signal_model.json", 36,
              "the ml_zone gate model; retrained nightly by daily_learning.py"),
     Artifact("learning_progress", ".runtime/learning_progress.jsonl", 36,

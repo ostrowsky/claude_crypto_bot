@@ -284,14 +284,9 @@ def main():
     if res_imm is not None and getattr(config, "NS_MOVE_RELATIVE_LEAD_ENABLED", False):
         try:
             import label_store as LS
-            deadlines = {}
-            for r in LS.LabelStore().records():
-                if LS.resolution_of(r) != "1h" or not r.get("early_deadline_ts"):
-                    continue                    # only intraday labels can time
-                day = r["utc_day"]
-                open_ts = datetime.strptime(day, "%Y-%m-%d").replace(tzinfo=timezone.utc)
-                dl = datetime.fromtimestamp(r["early_deadline_ts"] / 1000, timezone.utc)
-                deadlines[(day, r["symbol"])] = (open_ts, dl)
+            # hourly records of the main store (to 2026-08-12) AND the intraday
+            # tier built from the long 1h kline store (2026-08-13 onward)
+            deadlines = LS.intraday_deadlines()
             res_move = compute_north_star(imm, imm_eod, first_entry, pnl_pairs,
                                           "top20_move_lead", lead_mode="move",
                                           deadlines=deadlines)

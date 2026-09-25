@@ -191,10 +191,11 @@ def summarise_universe_build(*, resolved: list, failed: list) -> dict[str, Any]:
 class LabelStore:
     """Append-only, keyed by (symbol, utc_day). A record is written once."""
 
-    def __init__(self, root: Path = DEFAULT_STORE) -> None:
+    def __init__(self, root: Path = DEFAULT_STORE,
+                 filename: str = "move_events_v1.jsonl") -> None:
         self.root = Path(root)
         self.root.mkdir(parents=True, exist_ok=True)
-        self.path = self.root / "move_events_v1.jsonl"
+        self.path = self.root / filename
         self._index: dict[tuple[str, str], dict] | None = None
 
     def _load(self) -> dict[tuple[str, str], dict]:
@@ -241,6 +242,105 @@ class LabelStore:
 
     def records(self) -> list[dict]:
         return list(self._load().values())
+
+
+# ---------------------------------------------------------------------------
+# Intraday tier (added 2026-09-25)
+#
+# The hourly records above stop at 2026-08-12: their source,
+# _hourly_ohlcv_long.json, was never refreshed. Every later day was labelled
+# by build_global_labels from DAILY klines, which by design carry no intraday
+# time -- so the move-relative North Star (EarlyCapture@move_lead) had nothing
+# to score after 08-12. Those daily records are immutable and cannot be
+# upgraded in place, so the timing lives in its own immutable file, built from
+# the long 1h kline store with the same build_day_record, and is read only for
+# timing (`intraday_deadlines`). The ranking keeps using the main store.
+# ---------------------------------------------------------------------------
+INTRADAY_FILE = "move_events_1h_v1.jsonl"
+INTRADAY_BUILDER_VERSION = "label-store-1h-v1"
+HISTORY_DIR = ROOT / "history"
+
+
+def _read_1h_bars(symbol: str, history: Path = HISTORY_DIR) -> list[list]:
+    """Long 1h store UNION the rolling 1h file, rolling wins on overlap.
+    Rows: [open_ts_ms, open, high, low, close, volume]."""
+    merged: dict[int, list] = {}
+    for name in (f"{symbol}_1h_365d.csv", f"{symbol}_1h.csv"):
+        p = history / name
+        if not p.exists():
+            continue
+        for line in p.read_text(encoding="utf-8").splitlines()[1:]:
+            parts = line.split(",")
+            if len(parts) < 6:
+                continue
+            try:
+                ts = int(datetime.fromisoformat(parts[0]).timestamp() * 1000)
+                merged[ts] = [ts] + [float(x) for x in parts[1:6]]
+            except ValueError:
+                continue
+    return [merged[k] for k in sorted(merged)]
+
+
+def build_intraday_from_store(symbols, *, since_day: str,
+                              store_root: Path = DEFAULT_STORE,
+                              history: Path = HISTORY_DIR,
+                              now_ms: int | None = None) -> dict[str, Any]:
+    """Hourly (symbol, UTC day) records for every closed day >= since_day.
+
+    A day is written only once it has closed and holds >= MIN_BARS_COMPLETE
+    hourly bars; a missing or partial day is skipped, never labelled quiet
+    (TH-05). The provenance hash is of that day's own bars, so a rebuild of an
+    unchanged day reproduces the record exactly and a changed one raises.
+    """
+    store = LabelStore(store_root, filename=INTRADAY_FILE)
+    now_ms = int(time.time() * 1000) if now_ms is None else now_ms
+    written = present = skipped_incomplete = skipped_forming = conflicts = 0
+    for symbol in symbols:
+        by_day: dict[int, list[list]] = {}
+        for bar in _read_1h_bars(symbol, history):
+            by_day.setdefault((bar[0] // DAY_MS) * DAY_MS, []).append(bar)
+        for day_start, bars in sorted(by_day.items()):
+            if _utc_day(day_start) < since_day:
+                continue
+            if now_ms < day_start + DAY_MS:
+                skipped_forming += 1
+                continue
+            if len(bars) < MIN_BARS_COMPLETE:
+                skipped_incomplete += 1
+                continue
+            prov = {"source": f"history/{symbol}_1h",
+                    "source_sha256": hashlib.sha256(json.dumps(bars).encode()).hexdigest()}
+            rec = build_day_record(symbol, day_start, bars, provenance=prov)
+            rec["resolution"] = "1h"
+            rec["provenance"]["builder_version"] = INTRADAY_BUILDER_VERSION
+            try:
+                if store.put(rec):
+                    written += 1
+                else:
+                    present += 1
+            except ImmutableLabelError:
+                conflicts += 1
+    return {"written": written, "already_present": present,
+            "skipped_incomplete": skipped_incomplete,
+            "skipped_still_forming": skipped_forming, "conflicts": conflicts,
+            "total_in_tier": len(store.records()), "path": str(store.path)}
+
+
+def intraday_deadlines(store_root: Path = DEFAULT_STORE) -> dict[tuple[str, str], tuple]:
+    """{(utc_day, symbol): (day_open_dt, early_deadline_dt)} from every hourly
+    record -- the original hourly tier of the main store and the intraday tier.
+    A day whose price never crossed +2.5% has no deadline and is left out."""
+    out: dict[tuple[str, str], tuple] = {}
+    for recs in (LabelStore(store_root).records(),
+                 LabelStore(store_root, filename=INTRADAY_FILE).records()):
+        for r in recs:
+            if resolution_of(r) != "1h" or not r.get("early_deadline_ts"):
+                continue
+            day = r["utc_day"]
+            open_dt = datetime.strptime(day, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            dl = datetime.fromtimestamp(r["early_deadline_ts"] / 1000, timezone.utc)
+            out[(day, r["symbol"])] = (open_dt, dl)
+    return out
 
 
 def build_from_klines(source: Path = DEFAULT_SOURCE,

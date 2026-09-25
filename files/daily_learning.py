@@ -301,7 +301,22 @@ def refresh_label_store() -> Dict:
                       proc.returncode, (proc.stderr or "")[-400:])
             return {"status": "error", "stderr": (proc.stderr or "")[-400:]}
         log.info("label store refreshed: %s", " | ".join(tail)[:300])
-        return {"status": "ok", "tail": tail}
+        out = {"status": "ok", "tail": tail}
+        # Intraday tier: hourly timing for the move-relative North Star. Built
+        # from the long 1h store, which the 06:20 task refreshes -- at 02:30 the
+        # day just closed is still partial there, so this tier lags one day.
+        try:
+            import json, io
+            import label_store as LS
+            wl = json.load(io.open(files_dir / "watchlist.json", encoding="utf-8"))
+            wl = wl if isinstance(wl, list) else wl.get("symbols", wl)
+            since = (datetime.now(timezone.utc) - timedelta(days=30)).strftime("%Y-%m-%d")
+            res = LS.build_intraday_from_store(wl, since_day=since)
+            log.info("intraday label tier: %s", {k: v for k, v in res.items() if k != "path"})
+            out["intraday"] = res
+        except Exception as e:
+            log.error("intraday label tier failed: %s", e)
+        return out
     except Exception as e:
         log.error("label store refresh exception: %s", e)
         return {"status": "error", "error": str(e)}
