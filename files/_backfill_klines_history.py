@@ -90,7 +90,13 @@ async def fetch_paginated(session, symbol: str, tf: str,
         if next_start >= end_ms:
             break
         cur = next_start
-    return out
+    # Only CLOSED bars. Binance returns the still-forming bar last; its close_time
+    # (index 6) lies in the future. Until 2026-09-25 it was kept, the daily run
+    # wrote it into the rolling file at 04:00 UTC, and extend_long_store froze it
+    # into the long store -- one bar per symbol per day with ~99% of its volume
+    # missing, which also skewed vol_x for the 20 bars after it.
+    now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+    return [b for b in out if len(b) < 7 or int(b[6]) < now_ms]
 
 
 async def backfill(symbols: list[str], tf: str, days: int,
@@ -152,8 +158,11 @@ def extend_long_store(sym: str, tf: str = "15m") -> tuple[int, str]:
     September's, and those rows fell back to the old inverted ret_5>0 label.
     Extending the long file daily makes it a growing store and fixes both.
 
-    Append-only: bars at or before the long file's last timestamp are never
-    rewritten, so earlier results computed on it stay reproducible. A gap
+    Closed bars are never rewritten, so earlier results stay reproducible. The
+    one exception, since 2026-09-25: an overlapping bar that DIFFERS from the
+    rolling file is replaced, because a closed bar never changes on the exchange
+    -- a difference means it was captured while still forming (see
+    fetch_paginated). A gap
     between the two files is reported, not papered over -- it means the rolling
     window has moved past the long file's end and the bars in between must be
     re-fetched (Binance serves historical klines, so nothing is lost for good).
@@ -166,24 +175,51 @@ def extend_long_store(sym: str, tf: str = "15m") -> tuple[int, str]:
     long_lines = io.open(long_p, encoding="utf-8").read().splitlines()
     if len(long_lines) < 2:
         return 0, "empty"
+    roll_lines = [ln for ln in io.open(roll_p, encoding="utf-8").read().splitlines()[1:] if ln]
+    # A closed bar never changes on the exchange, so an overlapping bar that
+    # differs from the (closed-only) rolling file was captured while still open.
+    # Replace those; everything else in the long file stays byte-identical.
+    roll_by_ts = {ln.split(",", 1)[0]: ln for ln in roll_lines}
+    first_roll = min(roll_by_ts) if roll_by_ts else None
+    replaced = 0
+    if first_roll is not None:
+        for k in range(len(long_lines) - 1, 0, -1):
+            ts = long_lines[k].split(",", 1)[0]
+            if ts < first_roll:
+                break
+            fixed = roll_by_ts.get(ts)
+            if fixed is not None and _bar_differs(long_lines[k], fixed):
+                long_lines[k] = fixed
+                replaced += 1
     last_ts = long_lines[-1].split(",", 1)[0]
-    roll_lines = io.open(roll_p, encoding="utf-8").read().splitlines()[1:]
-    new = [ln for ln in roll_lines if ln and ln.split(",", 1)[0] > last_ts]
-    if not new:
+    new = [ln for ln in roll_lines if ln.split(",", 1)[0] > last_ts]
+    if not new and not replaced:
         return 0, "current"
-    status = "ok"
-    try:
-        gap = (datetime.fromisoformat(new[0].split(",", 1)[0])
-               - datetime.fromisoformat(last_ts))
-        if gap > STEP[tf]:
-            status = "GAP %s" % gap
-    except ValueError:
-        status = "unparsed"
+    status = "ok" if not replaced else "ok, replaced %d unclosed bar(s)" % replaced
+    if new:
+        try:
+            gap = (datetime.fromisoformat(new[0].split(",", 1)[0])
+                   - datetime.fromisoformat(last_ts))
+            if gap > STEP[tf]:
+                status = "GAP %s" % gap
+        except ValueError:
+            status = "unparsed"
     tmp = long_p.with_name(long_p.name + ".part")
     with io.open(tmp, "w", encoding="utf-8", newline=chr(10)) as f:
         f.write(chr(10).join(long_lines + new) + chr(10))
     tmp.replace(long_p)
     return len(new), status
+
+
+def _bar_differs(a: str, b: str) -> bool:
+    """Same timestamp, different OHLCV (compared numerically, not as text:
+    the two files format floats differently)."""
+    try:
+        va = [float(x) for x in a.split(",")[1:6]]
+        vb = [float(x) for x in b.split(",")[1:6]]
+    except ValueError:
+        return a != b
+    return any(abs(x - y) > 1e-12 * max(1.0, abs(y)) for x, y in zip(va, vb))
 
 
 def extend_all(symbols: list[str], tf: str = "15m") -> None:
@@ -194,6 +230,8 @@ def extend_all(symbols: list[str], tf: str = "15m") -> None:
         if st.startswith("GAP"):
             gaps += 1
             print(f"  [extend] {sym}: {st} before the appended bars -- re-fetch that span")
+        elif "replaced" in st:
+            print(f"  [extend] {sym}: {st}")
     print(f"[extend] long {tf} store: {added} bars appended across {len(symbols)} "
           f"symbols, {gaps} with a gap")
 

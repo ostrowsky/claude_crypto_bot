@@ -38,6 +38,7 @@ MONITOR_DIR.mkdir(parents=True, exist_ok=True)
 DEFAULT_CHECK_AFTER_DAYS = 7
 DEFAULT_WINDOW_BEFORE = 7   # days of history reports to take as "before" baseline
 DEFAULT_WINDOW_AFTER = 7    # days of history to take as "after"
+MIN_VALUES_PER_SIDE = 2     # readings of a metric needed on each side to count it
 
 
 # ---------------------------------------------------------------------------
@@ -135,17 +136,25 @@ def evaluate_decision(decision: dict,
             "min_required": "2 each side",
         }
 
+    # A metric the health reports do not carry cannot confirm OR refute the
+    # decision. Until 2026-09-25 such a metric set overall_hit=False, so 9 of the
+    # 11 "misses" behind eleven weeks of hit_rate=0.0 were decisions nobody could
+    # measure -- absence of data scored as failure (CLAUDE.md 0a rule 5). A metric
+    # now needs MIN_VALUES_PER_SIDE readings on each side to count at all.
     per_metric = {}
     overall_hit = True
+    n_measured = 0
     for metric in metric_keys:
         before_vals = [_extract_metric(r, metric) for r in before_window]
         after_vals  = [_extract_metric(r, metric) for r in after_window]
         before_vals = [v for v in before_vals if v is not None]
         after_vals  = [v for v in after_vals  if v is not None]
-        if not before_vals or not after_vals:
-            per_metric[metric] = {"status": "unknown", "reason": "no values found in reports"}
-            overall_hit = False
+        if len(before_vals) < MIN_VALUES_PER_SIDE or len(after_vals) < MIN_VALUES_PER_SIDE:
+            per_metric[metric] = {"status": "unknown",
+                                  "reason": "too few values in reports (before=%d, after=%d, need %d)"
+                                            % (len(before_vals), len(after_vals), MIN_VALUES_PER_SIDE)}
             continue
+        n_measured += 1
         before_median = median(before_vals)
         after_median  = median(after_vals)
         actual_delta  = round(after_median - before_median, 6)
@@ -165,8 +174,17 @@ def evaluate_decision(decision: dict,
         if not in_range:
             overall_hit = False
 
+    if n_measured == 0:
+        return {
+            "verdict": "unmeasurable",
+            "reason": "none of the expected metrics is carried by the health reports",
+            "per_metric": per_metric,
+            "n_before_reports": len(before_window),
+            "n_after_reports":  len(after_window),
+        }
     return {
         "verdict": "hit" if overall_hit else "miss",
+        "n_metrics_measured": n_measured,
         "per_metric": per_metric,
         "n_before_reports": len(before_window),
         "n_after_reports":  len(after_window),
@@ -180,7 +198,7 @@ def evaluate_decision(decision: dict,
 
 def compute_pipeline_metameetrics(decisions: list[dict], outcomes: dict[str, dict]) -> dict:
     """a / (a+b) hit rate, ignoring needs_data/skip."""
-    a = b = needs_data = skipped = 0
+    a = b = needs_data = skipped = unmeasurable = 0
     for d in decisions:
         if d.get("stage") != "approved":
             continue
@@ -188,14 +206,18 @@ def compute_pipeline_metameetrics(decisions: list[dict], outcomes: dict[str, dic
         if v == "hit": a += 1
         elif v == "miss": b += 1
         elif v == "needs_data": needs_data += 1
+        elif v == "unmeasurable": unmeasurable += 1
         else: skipped += 1
     total = a + b
     return {
-        "approved_total":      a + b + needs_data,
+        "approved_total":      a + b + needs_data + unmeasurable,
         "evaluated_total":     total,
         "hits":               a,
         "misses":             b,
         "needs_data":         needs_data,
+        # decisions whose expected metrics the health reports never carry: they
+        # are neither hits nor misses and stay out of hit_rate (TH-05)
+        "unmeasurable":       unmeasurable,
         "skipped":            skipped,
         "hit_rate":           round(a / total, 4) if total > 0 else None,
         "interpretation":     "hit_rate < 0.60 за квартал → pipeline хуже монетки, требует пересмотра",

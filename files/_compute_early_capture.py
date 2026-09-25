@@ -169,6 +169,15 @@ def compute_north_star(winners, eod_ret, first_entry, pnl_pairs, label_name: str
         d, sym = key
         ent = first_entry.get(key)
         coverage = 1.0 if ent else 0.0
+        # A winner-day with no intraday deadline cannot be scored on the move
+        # clock. Until 2026-09-25 it was skipped ONLY when the bot had entered,
+        # so every scored day was a miss: on 2026-09-25 all 50 winner-days in the
+        # window carried daily-resolution labels, the 36 entered ones were
+        # dropped, the 14 misses stayed, and the metric printed 0.000.
+        # Exclusion must not depend on the outcome (TH-05).
+        if lead_mode == "move" and deadlines.get(key, (None, None))[1] is None:
+            skipped_no_deadline += 1
+            continue
         if ent:
             edt, ep = ent
             if lead_mode == "move":
@@ -314,6 +323,11 @@ def main():
     print()
     for r in [res_top20, res_imm, res_move, res_sustained]:
         if r is None: continue
+        if r["n"] == 0:
+            extra = (f" -- {r['winners_without_deadline']} winner-days have no intraday "
+                     f"timing" if r.get("winners_without_deadline") else "")
+            print(f"EarlyCapture@{r['label']:<16}  not computable (n=0{extra})")
+            continue
         print(f"EarlyCapture@{r['label']:<16}  {r['early_capture']:.3f}  "
               f"(n={r['n']}, cov={r['decomp_coverage']:.2f}, "
               f"cap={r['decomp_capture_mean']:.2f}, "
@@ -417,7 +431,8 @@ def main():
     metric["lead_definition"] = primary.get("lead_definition", "clock_hour")
     if res_move:
         metric["move_lead_metric"] = "NS_EarlyCapture_top20_v3"
-        metric["move_lead_early_capture"] = res_move["early_capture"]
+        # None, not 0.0, when nothing could be scored: a zero reads as "always late"
+        metric["move_lead_early_capture"] = res_move["early_capture"] if res_move["n"] else None
         metric["move_lead_n"] = res_move["n"]
         metric["move_lead_mean"] = res_move["decomp_time_lead_mean"]
         # Winner-days whose label has no +2.5% crossing time. Counted, because a

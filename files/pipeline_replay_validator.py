@@ -129,6 +129,13 @@ def _ml_blocks(e, cfg):
     p = _num(e, "ml_proba")
     if p is None:
         return None
+    # Until the 2026-09-25 logging fix, blocks at trend_quality and later wrote
+    # the candidate RANKER's quality_proba into ml_proba (monitor
+    # _build_block_context). Such a row carries no ML score at all -- treat it
+    # as unreplayable rather than grade the ranker's number against an ML floor.
+    rq = _num(e, "ranker_quality_proba")
+    if rq is not None and abs(rq - p) < 1e-12:
+        return None
     floor = cfg["ML_GENERAL_HARD_BLOCK_BULL_DAY_MIN" if e.get("is_bull_day")
                 else "ML_GENERAL_HARD_BLOCK_MIN"]
     return p < floor

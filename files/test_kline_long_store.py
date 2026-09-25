@@ -47,17 +47,28 @@ class TestExtendLongStore(unittest.TestCase):
     def ts(self, minute):
         return "2026-08-20T%02d:%02d:00+00:00" % (minute // 60, minute % 60)
 
-    def test_appends_only_bars_after_the_long_files_end(self):
+    def test_appends_newer_bars_and_repairs_a_differing_overlap(self):
+        # Long file: bars 0,15,30 at price 1. Rolling (closed-only): 15..60 at 2.
+        # 45 and 60 are new -> appended. 15 and 30 overlap and DIFFER: a closed
+        # bar never changes on the exchange, so the long copy was captured while
+        # still forming and is replaced (2026-09-25; until then it was frozen).
         self.write("XUSDT_15m_419d.csv", [line(self.ts(m), 1) for m in (0, 15, 30)])
         self.write("XUSDT_15m.csv", [line(self.ts(m), 2) for m in (15, 30, 45, 60)])
         n, st = B.extend_long_store("XUSDT", "15m")
-        self.assertEqual((n, st), (2, "ok"))
+        self.assertEqual(n, 2)
+        self.assertIn("replaced 2", st)
         out = self.read("XUSDT_15m_419d.csv")
         self.assertEqual(len(out), 1 + 5)
-        # the overlapping bars keep the LONG file's values: append-only means
-        # results computed on the long file stay reproducible
-        self.assertTrue(out[2].endswith(",1,1,1,1,1"))
+        self.assertTrue(out[1].endswith(",1,1,1,1,1"))     # before the rolling window: untouched
+        self.assertTrue(out[2].endswith(",2,2,2,2,1"))     # repaired
         self.assertTrue(out[-1].startswith(self.ts(60)))
+
+    def test_an_identical_overlap_is_left_byte_for_byte(self):
+        self.write("XUSDT_15m_419d.csv", [line(self.ts(m), 1) for m in (0, 15)])
+        self.write("XUSDT_15m.csv", ["%s,1.0,1.0,1.0,1.0,1.0" % self.ts(15), line(self.ts(30), 1)])
+        n, st = B.extend_long_store("XUSDT", "15m")
+        self.assertEqual((n, st), (1, "ok"))
+        self.assertEqual(self.read("XUSDT_15m_419d.csv")[2], line(self.ts(15), 1))
 
     def test_is_idempotent(self):
         self.write("XUSDT_15m_419d.csv", [line(self.ts(m), 1) for m in (0, 15)])
@@ -82,6 +93,27 @@ class TestExtendLongStore(unittest.TestCase):
 
     def test_missing_files_are_a_status_not_a_crash(self):
         self.assertEqual(B.extend_long_store("NOPEUSDT", "15m"), (0, "missing"))
+
+
+class TestOnlyClosedBarsAreFetched(unittest.TestCase):
+    def test_the_forming_bar_is_dropped(self):
+        # Binance returns the still-forming bar last; its close_time lies in the
+        # future. It was kept until 2026-09-25 and frozen into the store daily.
+        import asyncio, time
+        now = int(time.time() * 1000)
+        closed = [now - 2_000_000, "1", "1", "1", "1", "1", now - 1_100_000]
+        forming = [now - 100_000, "1", "1", "1", "1", "1", now + 800_000]
+
+        class Resp:
+            async def __aenter__(self): return self
+            async def __aexit__(self, *a): return False
+            def raise_for_status(self): pass
+            async def json(self): return [closed, forming]
+
+        class Session:
+            def get(self, *a, **k): return Resp()
+        out = asyncio.run(B.fetch_paginated(Session(), "XUSDT", "15m", now - 3_000_000, now))
+        self.assertEqual(out, [closed])
 
 
 class TestTheDailyTaskRunsIt(unittest.TestCase):

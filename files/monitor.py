@@ -873,43 +873,6 @@ def _safe_float(v: Any) -> Optional[float]:
         return None
 
 
-def _build_block_context(
-    *,
-    feat: dict,
-    i: int,
-    candidate_score: Optional[float] = None,
-    score_floor: Optional[float] = None,
-    ranker_proba: Optional[float] = None,
-    ranker_info: Optional[dict] = None,
-    is_bull_day_now: Optional[bool] = None,
-) -> dict:
-    """
-    Assemble standard fields available at any block site.
-    Used to populate botlog.log_blocked() context args.
-    All values are optional/nullable to handle partial data.
-    """
-    return {
-        "rsi": _safe_float(feat.get("rsi", [None]*999)[min(i, len(feat.get("rsi", []))-1)] if i < len(feat.get("rsi", [])) else None),
-        "adx": _safe_float(feat.get("adx", [None]*999)[min(i, len(feat.get("adx", []))-1)] if i < len(feat.get("adx", [])) else None),
-        "vol_x": _safe_float(feat.get("vol_x", [None]*999)[min(i, len(feat.get("vol_x", []))-1)] if i < len(feat.get("vol_x", [])) else None),
-        "daily_range": _safe_float(feat.get("daily_range_pct", [None]*999)[min(i, len(feat.get("daily_range_pct", []))-1)] if i < len(feat.get("daily_range_pct", [])) else None),
-        "slope_pct": _safe_float(feat.get("slope", [None]*999)[min(i, len(feat.get("slope", []))-1)] if i < len(feat.get("slope", [])) else None),
-        "macd_hist": _safe_float(feat.get("macd_hist", [None]*999)[min(i, len(feat.get("macd_hist", []))-1)] if i < len(feat.get("macd_hist", [])) else None),
-        "ema20": _safe_float(feat.get("ema_fast", [None]*999)[min(i, len(feat.get("ema_fast", []))-1)] if i < len(feat.get("ema_fast", [])) else None),
-        "ema50": _safe_float(feat.get("ema_slow", [None]*999)[min(i, len(feat.get("ema_slow", []))-1)] if i < len(feat.get("ema_slow", [])) else None),
-        "ema200": _safe_float(feat.get("ema200", [None]*999)[min(i, len(feat.get("ema200", []))-1)] if i < len(feat.get("ema200", [])) else None),
-        "ml_proba": _safe_float(ranker_proba),
-        "ranker_top_gainer_prob": _safe_float((ranker_info or {}).get("top_gainer_prob")),
-        "ranker_ev": _safe_float((ranker_info or {}).get("ev")),
-        "ranker_quality_proba": _safe_float((ranker_info or {}).get("quality_proba")),
-        "ranker_final_score": _safe_float((ranker_info or {}).get("final_score")),
-        "candidate_score": _safe_float(candidate_score),
-        "score_floor": _safe_float(score_floor),
-        "is_bull_day": bool(is_bull_day_now) if is_bull_day_now is not None else None,
-        "btc_vs_ema50": _safe_float(getattr(config, "_btc_vs_ema50", 0.0)),
-        "market_regime": str(getattr(config, "_market_regime", "neutral")),
-    }
-
 
 def _time_block_bypass_allowed(
     *,
@@ -2264,7 +2227,7 @@ def _build_block_context(
     *, feat=None, i: int = -1,
     candidate_score: Optional[float] = None,
     score_floor: Optional[float] = None,
-    ranker_proba: Optional[float] = None,
+    ml_proba: Optional[float] = None,
     ranker_info: Optional[dict] = None,
     is_bull_day: Optional[bool] = None,
 ) -> dict:
@@ -2307,9 +2270,16 @@ def _build_block_context(
                     ctx["atr_pct"] = round(a / cp * 100.0, 4)
             except Exception:
                 pass
-    if ranker_proba is not None:
+    # The ML signal model's score, and only that. Until 2026-09-25 this field was
+    # filled from a parameter named `ranker_proba`, and 7 of the 11 block sites
+    # (trend_quality onward) passed the candidate ranker's quality_proba into it:
+    # in 30 102 recent blocked events ml_proba == ranker_quality_proba exactly.
+    # That produced the "bimodal live ml_proba" (the ranker sits near 0.40) and
+    # fed the ranker's number to every analysis that read ml_proba from the log.
+    # The ranker's values travel in their own ranker_* fields via ranker_info.
+    if ml_proba is not None:
         try:
-            ctx["ml_proba"] = float(ranker_proba)
+            ctx["ml_proba"] = float(ml_proba)
         except Exception:
             pass
     if ranker_info:
@@ -4152,7 +4122,7 @@ async def _poll_coin(
                     reason_code="impulse_guard", gate="impulse_speed_guard",
                     **_build_block_context(
                         feat=feat, i=i,
-                        ranker_proba=ml_proba,
+                        ml_proba=ml_proba,
                         is_bull_day=is_bull_day_now,
                     ),
                 )
@@ -4345,7 +4315,7 @@ async def _poll_coin(
                                 feat=feat, i=i,
                                 candidate_score=candidate_score,
                                 score_floor=score_floor,
-                                ranker_proba=ml_proba,
+                                ml_proba=ml_proba,
                                 ranker_info=None,  # ranker not yet evaluated at this gate
                                 is_bull_day=is_bull_day_now,
                             ),
@@ -4594,7 +4564,7 @@ async def _poll_coin(
                                 feat=feat, i=i,
                                 candidate_score=candidate_score,
                                 score_floor=score_floor,
-                                ranker_proba=ml_proba,
+                                ml_proba=ml_proba,
                                 ranker_info=ranker_info,
                                 is_bull_day=is_bull_day_now,
                             ),
@@ -4660,7 +4630,7 @@ async def _poll_coin(
                         feat=feat, i=i,
                         candidate_score=candidate_score,
                         score_floor=score_floor,
-                        ranker_proba=ranker_proba,
+                        ml_proba=ml_proba,
                         ranker_info=ranker_info,
                         is_bull_day=is_bull_day_now,
                     ),
@@ -4724,7 +4694,7 @@ async def _poll_coin(
                         feat=feat, i=i,
                         candidate_score=candidate_score,
                         score_floor=score_floor,
-                        ranker_proba=ranker_proba,
+                        ml_proba=ml_proba,
                         ranker_info=ranker_info,
                         is_bull_day=is_bull_day_now,
                     ),
@@ -4783,7 +4753,7 @@ async def _poll_coin(
                         feat=feat, i=i,
                         candidate_score=candidate_score,
                         score_floor=score_floor,
-                        ranker_proba=ranker_proba,
+                        ml_proba=ml_proba,
                         ranker_info=ranker_info,
                         is_bull_day=is_bull_day_now,
                     ),
@@ -4888,7 +4858,7 @@ async def _poll_coin(
                         feat=feat, i=i,
                         candidate_score=candidate_score,
                         score_floor=score_floor,
-                        ranker_proba=ranker_proba,
+                        ml_proba=ml_proba,
                         ranker_info=ranker_info,
                         is_bull_day=is_bull_day_now,
                     ),
@@ -5000,7 +4970,7 @@ async def _poll_coin(
                         feat=feat, i=i,
                         candidate_score=candidate_score,
                         score_floor=score_floor,
-                        ranker_proba=ranker_proba,
+                        ml_proba=ml_proba,
                         ranker_info=ranker_info,
                         is_bull_day=is_bull_day_now,
                     ),
@@ -5057,7 +5027,7 @@ async def _poll_coin(
                         feat=feat, i=i,
                         candidate_score=candidate_score,
                         score_floor=score_floor,
-                        ranker_proba=ranker_proba,
+                        ml_proba=ml_proba,
                         ranker_info=ranker_info,
                         is_bull_day=is_bull_day_now,
                     ),
@@ -5140,7 +5110,7 @@ async def _poll_coin(
                             feat=feat, i=i,
                             candidate_score=candidate_score,
                             score_floor=score_floor,
-                            ranker_proba=ranker_proba,
+                            ml_proba=ml_proba,
                             ranker_info=ranker_info,
                             is_bull_day=is_bull_day_now,
                         ),
@@ -5401,7 +5371,7 @@ async def _poll_coin(
                             would_be_mode="trend_surge",
                             **_build_block_context(
                                 feat=feat, i=i,
-                                ranker_proba=ml_proba,
+                                ml_proba=ml_proba,
                                 is_bull_day=is_bull_day_now,
                             ),
                         )
