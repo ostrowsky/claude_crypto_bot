@@ -96,6 +96,14 @@ def _num(e, k):
 # `blocks(e, cfg)` returns True/False, or None when the row lacks the inputs.
 # --------------------------------------------------------------------------
 
+def _cfg_flag(name):
+    try:
+        import config
+        return bool(getattr(config, name, False))
+    except Exception:
+        return False
+
+
 def _tq_blocks(e, cfg):
     """monitor._trend_entry_quality_guard_reason, forecast/alt path only.
 
@@ -107,6 +115,12 @@ def _tq_blocks(e, cfg):
         return None
     fc, vol, adx, slope = map(float, m.groups())
     if fc >= cfg["TREND_15M_QUALITY_FORECAST_MIN"]:
+        return False
+    # forecast 0.000 = no data; live lets it through while the flag is on
+    # (p0-validation-0925-spec.md), so replaying it as a block would misstate
+    # what either config does today
+    if 0.0 <= fc < 0.0005 and cfg.get("TREND_15M_QUALITY_ZERO_FORECAST_AS_NO_DATA",
+                                       _cfg_flag("TREND_15M_QUALITY_ZERO_FORECAST_AS_NO_DATA")):
         return False
     return not (vol >= cfg["TREND_15M_QUALITY_ALT_VOL_MIN"]
                 and adx >= cfg["TREND_15M_QUALITY_ALT_ADX_MIN"]

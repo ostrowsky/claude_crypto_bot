@@ -882,6 +882,7 @@ BANDIT_REGIME_INTERACTION_ENABLED = False     # RM-22 Step B (neutral, held OFF)
 DECOUPLING_SHADOW_ENABLED = True              # decoupling shadow logging (2026-05-07)
 DECOUPLING_GATE_ENABLED = False               # reserved; needs shadow-replay first
 POLL_HEARTBEAT_ENABLED = True                 # per-coin per-bar poll log, logging only (2026-09-25)
+TREND_15M_QUALITY_ZERO_FORECAST_AS_NO_DATA = True  # forecast 0.000 = no data, not a block (2026-09-25, p0-validation-0925)
 ```
 
 ---

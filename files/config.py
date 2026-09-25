@@ -1155,6 +1155,14 @@ TREND_15M_QUALITY_FORECAST_MIN: float = 0.25
 TREND_15M_QUALITY_ALT_VOL_MIN: float = 1.20
 TREND_15M_QUALITY_ALT_ADX_MIN: float = 24.0
 TREND_15M_QUALITY_ALT_SLOPE_MIN: float = 0.35
+# Forecast exactly 0.000 = the coin has no rule signals yet today (no data), not
+# a bad forecast -> skip the forecast requirement. Validated on the goal
+# 2026-09-25 (docs/specs/features/p0-validation-0925-spec.md, maximum period
+# 2026-05..09, 382 winner-days): entered before the +2.5% crossing 11.0% ->
+# 14.0% expected; per-trade +0.194 pp, 95% CI [+0.015, +0.365]. ON by operator
+# decision 2026-09-25. Admitted candidates are logged as `tq_zero_forecast_pass`
+# and entries carry `tq_zero_forecast_relaxed`. Rollback: False.
+TREND_15M_QUALITY_ZERO_FORECAST_AS_NO_DATA: bool = True
 TREND_15M_QUALITY_RSI_MAX: float = 72.0              # was 68.0 — too tight on bull days (TAO blocked at 73.2)
 TREND_15M_QUALITY_RSI_MAX_BULL_DAY: float = 76.0      # relaxed for bull days
 TREND_15M_QUALITY_DAILY_RANGE_MAX: float = 10.0        # was 8.0

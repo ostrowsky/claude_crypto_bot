@@ -1945,6 +1945,15 @@ def _retest_1h_mtf_confirm_reason(
     return None
 
 
+def _is_zero_forecast(forecast_return_pct: float) -> bool:
+    """The population validated: the guard printed it as `forecast 0.000`."""
+    try:
+        f = float(forecast_return_pct)
+    except (TypeError, ValueError):
+        return False
+    return 0.0 <= f < 0.0005
+
+
 def _trend_entry_quality_guard_reason(
     *,
     tf: str,
@@ -1958,7 +1967,10 @@ def _trend_entry_quality_guard_reason(
     daily_range: float,
     forecast_return_pct: float,
     is_bull_day: bool = False,
+    zero_forecast_as_no_data: Optional[bool] = None,
 ) -> Optional[str]:
+    """`zero_forecast_as_no_data=None` reads TREND_15M_QUALITY_ZERO_FORECAST_AS_NO_DATA;
+    the call site passes False once more to learn whether the relaxation admitted it."""
     if tf != "15m" or mode != "trend":
         return None
     if not getattr(config, "TREND_15M_QUALITY_GUARD_ENABLED", False):
@@ -1991,6 +2003,15 @@ def _trend_entry_quality_guard_reason(
     alt_adx_min = float(getattr(config, "TREND_15M_QUALITY_ALT_ADX_MIN", 24.0))
     alt_slope_min = float(getattr(config, "TREND_15M_QUALITY_ALT_SLOPE_MIN", 0.35))
     if vol_x >= alt_vol_min and adx >= alt_adx_min and slope >= alt_slope_min:
+        return None
+    # A forecast of exactly 0 means the coin has had no rule signals yet today
+    # (strategy.py: < TODAY_MIN_SIGNALS evaluable -> 0.0) -- no data, not a bad
+    # forecast. Validated on the goal 2026-09-25 (p0-validation-0925-spec.md):
+    # winner-days entered before the +2.5% crossing 11.0% -> 14.0% expected,
+    # per-trade +0.194 pp [+0.015, +0.365]. Rollback: flag False.
+    if zero_forecast_as_no_data is None:
+        zero_forecast_as_no_data = bool(getattr(config, "TREND_15M_QUALITY_ZERO_FORECAST_AS_NO_DATA", False))
+    if zero_forecast_as_no_data and _is_zero_forecast(forecast_return_pct):
         return None
     return (
         "trend quality guard: weak 15m trend "
@@ -3718,6 +3739,7 @@ async def _poll_coin(
     sym = report.symbol
     tf  = report.tf
     pos = state.positions.get(sym)
+    tq_zero_forecast_relaxed = False
     if pos is not None:
         # Open positions must be monitored on their original timeframe.
         # Otherwise a 1h position can later be processed as 15m after discovery changes.
@@ -4593,7 +4615,7 @@ async def _poll_coin(
                         )
                         return
 
-            trend_guard_reason = _trend_entry_quality_guard_reason(
+            _tq_kwargs = dict(
                 tf=tf,
                 mode=preview_mode,
                 price=preview_price,
@@ -4606,6 +4628,14 @@ async def _poll_coin(
                 forecast_return_pct=float(getattr(report, "forecast_return_pct", 0.0)),
                 is_bull_day=is_bull_day_now,
             )
+            trend_guard_reason = _trend_entry_quality_guard_reason(**_tq_kwargs)
+            if trend_guard_reason is None and _trend_entry_quality_guard_reason(
+                    **_tq_kwargs, zero_forecast_as_no_data=False):
+                # admitted ONLY because forecast 0 now reads as "no data" -- tag it
+                # so the live effect can be read off the logs (entry + this event)
+                tq_zero_forecast_relaxed = True
+                log.info("TREND QUALITY zero-forecast pass %s [%s]", sym, tf)
+                botlog.log_tq_zero_forecast_pass(sym, tf, float(c[i]), bar_ts=int(data["t"][i]))
             if trend_guard_reason:
                 _log_critic_candidate(
                     sym=sym,
@@ -5640,6 +5670,7 @@ async def _poll_coin(
                     decoupling_score=(getattr(config, "_decoupling_scores", {}) or {}).get(sym, {}).get("decoupling_score"),
                     decoupling_flag=(getattr(config, "_decoupling_scores", {}) or {}).get(sym, {}).get("flag"),
                     decoupling_corr=(getattr(config, "_decoupling_scores", {}) or {}).get(sym, {}).get("trailing_corr"),
+                    tq_zero_forecast_relaxed=True if tq_zero_forecast_relaxed else None,
                 )
             except Exception as _log_err:
                 log.warning("botlog.log_entry failed for %s: %s", sym, _log_err)

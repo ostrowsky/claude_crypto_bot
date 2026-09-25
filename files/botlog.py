@@ -106,7 +106,10 @@ def log_entry(sym: str, tf: str, mode: str, price: float,
               # Report: docs/reports/2026-05-07-decoupling-validation.md
               decoupling_score: Optional[float] = None,
               decoupling_flag: Optional[bool] = None,
-              decoupling_corr: Optional[float] = None) -> None:
+              decoupling_corr: Optional[float] = None,
+              # trend_quality forecast-0 relaxation (2026-09-25, p0-validation-0925-spec.md):
+              # True when this entry passed trend_quality ONLY because forecast 0 = no data
+              tq_zero_forecast_relaxed: Optional[bool] = None) -> None:
     """Открытие позиции."""
     rec: Dict[str, Any] = {
         "event":        "entry",
@@ -147,6 +150,8 @@ def log_entry(sym: str, tf: str, mode: str, price: float,
         rec["decoupling_flag"] = bool(decoupling_flag)
     if decoupling_corr is not None:
         rec["decoupling_corr"] = round(float(decoupling_corr), 4)
+    if tq_zero_forecast_relaxed is not None:
+        rec["tq_zero_forecast_relaxed"] = bool(tq_zero_forecast_relaxed)
     _write(rec)
 
 
@@ -198,6 +203,20 @@ def log_cooldown_realert(sym: str, tf: str, exit_price: float,
         "price":      cur_price,
         "cont_pct":   round(cont_pct, 3),
         "ts":         _now(),
+    })
+
+
+def log_tq_zero_forecast_pass(sym: str, tf: str, price: float, bar_ts: Optional[int] = None) -> None:
+    """A 15m trend candidate that trend_quality would have blocked on forecast 0.000
+    and now lets through as "no data" (TREND_15M_QUALITY_ZERO_FORECAST_AS_NO_DATA).
+    Joined with the later blocked/entry event of the same coin-bar, this is how the
+    live effect of the relaxation is read. Spec: p0-validation-0925-spec.md."""
+    _write({
+        "event":  "tq_zero_forecast_pass",
+        "sym":    sym,
+        "tf":     tf,
+        "price":  price,
+        "bar_ts": bar_ts,
     })
 
 

@@ -1135,6 +1135,9 @@ def _trend_entry_quality_guard_reason(
     alt_slope_min = float(getattr(config, "TREND_15M_QUALITY_ALT_SLOPE_MIN", 0.35))
     if vol_x >= alt_vol_min and adx >= alt_adx_min and slope >= alt_slope_min:
         return None
+    # mirrors monitor: forecast exactly 0 = no data (TREND_15M_QUALITY_ZERO_FORECAST_AS_NO_DATA)
+    if getattr(config, "TREND_15M_QUALITY_ZERO_FORECAST_AS_NO_DATA", False) and 0.0 <= forecast_return_pct < 0.0005:
+        return None
     return (
         "trend quality guard: weak 15m trend "
         f"(forecast {forecast_return_pct:.3f} < {forecast_min:.3f}, "

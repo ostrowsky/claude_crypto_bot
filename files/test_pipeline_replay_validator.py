@@ -167,10 +167,14 @@ class TestMatchedControl(unittest.TestCase):
 class TestGuardsMatchTheLiveCode(unittest.TestCase):
     def test_trend_quality_predicate(self):
         e = {"reason": "trend quality guard: weak 15m trend "
-                       "(forecast 0.000 < 0.250, vol 1.50, ADX 22.0, slope 0.400)"}
+                       "(forecast 0.100 < 0.250, vol 1.50, ADX 22.0, slope 0.400)"}
         self.assertTrue(V._tq_blocks(e, vars(cfg())))                    # ADX < 24
         self.assertFalse(V._tq_blocks(e, vars(cfg(TREND_15M_QUALITY_ALT_ADX_MIN=20.0))))
         self.assertIsNone(V._tq_blocks({"reason": "price edge 5% > 4%"}, vars(cfg())))
+        # forecast 0.000 = no data: blocks only with the relaxation off (p0-validation-0925)
+        z = {"reason": e["reason"].replace("forecast 0.100", "forecast 0.000")}
+        self.assertTrue(V._tq_blocks(z, vars(cfg(TREND_15M_QUALITY_ZERO_FORECAST_AS_NO_DATA=False))))
+        self.assertFalse(V._tq_blocks(z, vars(cfg(TREND_15M_QUALITY_ZERO_FORECAST_AS_NO_DATA=True))))
 
     def test_chop_uses_the_bull_day_thresholds(self):
         e = {"adx": 23.0, "slope_pct": 1.1, "vol_x": 1.25, "is_bull_day": True}
