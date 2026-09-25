@@ -29,6 +29,8 @@ import immutable_labels as IL  # noqa: E402
 import label_store as LS  # noqa: E402
 
 DAYS = 60
+# ema_cross is not a live rule; --with-ema-cross reproduces the first published funnel
+SKIP_EMA_CROSS = "--with-ema-cross" not in sys.argv
 cut = E.NOW - timedelta(days=DAYS)
 wl = E.load_watchlist()
 full, partial, _ = E.load_uptime(cut)
@@ -41,6 +43,8 @@ print("winner-days (%d days, bot fully up, with crossing time): %d" % (DAYS, len
 fires = collections.defaultdict(list)
 for l in io.open(FILES.parent / ".runtime/backtests/lateness_rows.jsonl", encoding="utf-8"):
     r = json.loads(l)
+    if SKIP_EMA_CROSS and r["rule"] == "ema_cross":
+        continue   # EMA_CROSS_ENABLED = False live since 2026-04-19 (p1-validation-0925-spec.md)
     t = datetime.fromisoformat(r["ts"]) + timedelta(minutes=15)
     fires[(r["day"], r["sym"])].append((t, r["band"], r["rule"], r["dr"]))
 
