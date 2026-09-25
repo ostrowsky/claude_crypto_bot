@@ -1675,31 +1675,6 @@ async def text_handler(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
 
 def _ensure_positions_monitored(state) -> None:
     """
-    Гарантирует что монеты с открытыми позициями всегда в hot_coins.
-    Фикс 15.03.2026: реанализ больше не закрывает открытые позиции.
-    Позиция выходит только по техническим условиям (ATR/EMA20/RSI/hold).
-    """
-    from strategy import CoinReport
-    hot_syms = {r.symbol for r in state.hot_coins}
-    for sym, pos in list(state.positions.items()):
-        if sym not in hot_syms:
-            from strategy import CoinReport
-            dummy = CoinReport(
-                symbol=sym, tf=pos.tf,
-                today_signals=[], today_confirmed=True,
-                signal_now=False, today_accuracy={},
-                best_accuracy=0.0,
-                note="удерживаем позицию (exit guard)",
-                in_play=True,
-            )
-            state.hot_coins.append(dummy)
-            log.info("_ensure_positions_monitored: keeping %s [%s] in hot_coins", sym, pos.tf)
-
-
-
-
-def _ensure_positions_monitored(state) -> None:
-    """
     Guarantees that restored open positions stay inside hot_coins so exit logic
     keeps polling them immediately after restart.
     """
