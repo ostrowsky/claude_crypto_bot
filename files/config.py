@@ -1345,6 +1345,14 @@ DECOUPLING_CORR_MAX: float = 0.60                 # flag ceiling: trailing corr 
 DECOUPLING_REFRESH_MIN: int = 15                  # recompute cadence (minutes)
 # NOT YET IMPLEMENTED — gate stays off until shadow-replay confirms NS lift:
 DECOUPLING_GATE_ENABLED: bool = False             # reserved; do not enable without shadow validation
+# Poll heartbeat (2026-09-25, audit P-2): one line per coin per closed bar in
+# .runtime/poll_heartbeat/<day>.jsonl -- stage (no_data / short_history /
+# position_open / cooldown / evaluated), which entry rules fired and why the rest
+# failed. Logging only, no decision reads it. Makes the "rule fired on stored
+# klines, no live candidate" bucket (17.5% of winner-days) attributable.
+# Rollback: False.
+POLL_HEARTBEAT_ENABLED: bool = True
+POLL_HEARTBEAT_KEEP_DAYS: int = 45
 # H1 earliness (2026-06-29): scan-promote decoupled watchlist coins to attack the
 # silent-miss bucket (top-20 the bot never sees, ~23%). Backtest: silent-miss
 # top-20 flag 6x baseline + are MORE decoupled than entered winners. SHADOW first:

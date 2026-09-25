@@ -881,6 +881,7 @@ REGIME_SOFT_GATE_ENABLED = True               # RM-22 Step C (deployed 2026-06-0
 BANDIT_REGIME_INTERACTION_ENABLED = False     # RM-22 Step B (neutral, held OFF)
 DECOUPLING_SHADOW_ENABLED = True              # decoupling shadow logging (2026-05-07)
 DECOUPLING_GATE_ENABLED = False               # reserved; needs shadow-replay first
+POLL_HEARTBEAT_ENABLED = True                 # per-coin per-bar poll log, logging only (2026-09-25)
 ```
 
 ---

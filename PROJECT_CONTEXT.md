@@ -761,6 +761,7 @@ TREND_15M_QUALITY_GUARD_ENABLED = True
 ML_CANDIDATE_RANKER_HARD_VETO_ENABLED = True
 REGIME_SOFT_GATE_ENABLED = True               # RM-22 Step C (deployed 2026-06-01)
 BANDIT_REGIME_INTERACTION_ENABLED = False     # RM-22 Step B (neutral, OFF)
+POLL_HEARTBEAT_ENABLED = True                 # журнал опроса монет по барам, только логирование (2026-09-25)
 ```
 
 ---

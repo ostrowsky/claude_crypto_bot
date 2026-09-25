@@ -37,6 +37,7 @@ from strategy import (
     get_entry_mode,
 )
 import botlog
+import poll_heartbeat
 import critic_dataset
 import ml_dataset
 import correlation_guard as corr_guard
@@ -3724,13 +3725,18 @@ async def _poll_coin(
 
     data = await fetch_klines(session, sym, tf, limit=config.LIVE_LIMIT)
     if data is None or len(data) < 60:
+        poll_heartbeat.record(sym, tf, "no_data", n_bars=0 if data is None else len(data))
         return
 
     c, feat = await _compute_features_from_data(data)
     i    = len(c) - 2  # last *closed* bar (index -1 is the forming bar)
 
     if i < 10:
+        poll_heartbeat.record(sym, tf, "short_history", n_bars=len(c))
         return
+
+    if pos is not None:
+        poll_heartbeat.record(sym, tf, "position_open", bar_ts=int(data["t"][i]), price=float(c[i]))
 
     state.__dict__.setdefault("last_prices", {})[sym] = float(c[i])
     if pos is not None:
@@ -3811,6 +3817,8 @@ async def _poll_coin(
                         )
                 except Exception as _e:
                     log.debug("cooldown re-alert skipped for %s: %s", sym, _e)
+            poll_heartbeat.record(sym, tf, "cooldown", bar_ts=current_ts_ms, price=float(c[i]),
+                                  bars_left=int(bars_left))
             return  # ещё в cooldown, пропускаем
         else:
             # Сбрасываем флаг «cooldown залогирован» когда cooldown истёк
@@ -3826,25 +3834,39 @@ async def _poll_coin(
         # Приоритет при выборе лучшего live-сигнала:
         # BREAKOUT > RETEST > strong_trend > trend > IMPULSE > ALIGNMENT
         entry_ok, _entry_reason = check_entry_conditions(feat, i, c, tf=tf)
-        brk_ok,   _             = check_breakout_conditions(feat, i)
-        ret_ok,   _             = check_retest_conditions(feat, i)
-        surge_ok, _             = check_trend_surge_conditions(feat, i)
-        imp_ok,   _             = check_impulse_conditions(feat, i)
-        aln_ok,   _             = check_alignment_conditions(feat, i, tf=tf)
+        brk_ok,   _brk_reason   = check_breakout_conditions(feat, i)
+        ret_ok,   _ret_reason   = check_retest_conditions(feat, i)
+        surge_ok, _surge_reason = check_trend_surge_conditions(feat, i)
+        imp_ok,   _imp_reason   = check_impulse_conditions(feat, i)
+        aln_ok,   _aln_reason   = check_alignment_conditions(feat, i, tf=tf)
 
         # EMA_CROSS — самый ранний сигнал: пробой EMA20 снизу вверх.
         # Срабатывает на 3-5 баров раньше BUY (до роста ADX, до slope-порога).
         # Имеет собственный cooldown чтобы не спамить повторами одного пробоя.
         cross_ok = False
+        _cross_reason = "disabled"
         if getattr(config, "EMA_CROSS_ENABLED", True):
             _cross_cds = state.__dict__.setdefault("cross_cooldowns", {})
             _bar_ms_cross = 15 * 60 * 1000 if tf == "15m" else 60 * 60 * 1000
             _cross_until = _cross_cds.get(sym, 0)
+            _cross_reason = "cross cooldown"
             if int(data["t"][i]) >= _cross_until:
-                cross_ok, _ = check_ema_cross_conditions(feat, i)
+                cross_ok, _cross_reason = check_ema_cross_conditions(feat, i)
                 if cross_ok:
                     _cd_cross = int(getattr(config, "CROSS_COOLDOWN_BARS", 6))
                     _cross_cds[sym] = int(data["t"][i]) + _cd_cross * _bar_ms_cross
+
+        if poll_heartbeat.enabled():
+            _hb_rules = {"entry": entry_ok, "breakout": brk_ok, "retest": ret_ok, "surge": surge_ok,
+                         "impulse": imp_ok, "alignment": aln_ok, "ema_cross": cross_ok}
+            _hb_reasons = {"entry": _entry_reason, "breakout": _brk_reason, "retest": _ret_reason,
+                           "surge": _surge_reason, "impulse": _imp_reason, "alignment": _aln_reason,
+                           "ema_cross": _cross_reason}
+            poll_heartbeat.record(
+                sym, tf, "evaluated", bar_ts=int(data["t"][i]), rules=_hb_rules,
+                reasons={k: v for k, v in _hb_reasons.items() if not _hb_rules[k]},
+                price=float(c[i]), hour_blocked=hour_blocked,
+            )
 
         # Yield to event loop so Telegram UI requests aren't starved by concurrent
         # _poll_coin tasks whose synchronous sections would otherwise block the loop.
