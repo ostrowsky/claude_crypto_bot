@@ -168,6 +168,27 @@ label ranked a rolling 24h window and counted overnight spikes — moves the bot
 could not catch — as misses. Still far from the 0.40 target; what changed is that
 it can be trusted. Delisted pairs remain unrecoverable (TH-05).
 
+### The target segment: rockets (operator, 2026-09-26)
+
+**A rocket is the bot's real target, not an exception.** Definition: a watchlist
+coin that rises >= +10% from the UTC open within the day AND holds it — the day
+closes at >= 60% of that rise. Examples: FIL 2026-09-26 (+16.8%, close +15.8%),
+QNT 09-24 (+29.3% / +27.5%), STRK 09-18 (+56.2% / +52.6%). All three gave
+hours between the first +2.5% and +10%. The bot must catch these early, hold
+them while the trend lasts, and not raise false alarms.
+
+What the data says so far (`docs/specs/features/rocket-segment-spec.md`, 455
+days, 101 coins, split by time): 1 321 rockets, ~3.1 a day; at a coin's first
++2.5% close only **7.7%** of such days become rockets. Ten hypotheses (R-1..R-10:
+timing, relative volume, volatility, compression, breakouts, decoupling,
+momentum history, the path after +2.5%, a model over all of them, taker flow)
+reach at most ~13% precision at +2.5% on the holdout (2x the base), and no rule
+survives the time split (train 36-42% -> test 10-14%). With price, volume,
+time and taker flow a rocket is **not** separable early without false alarms,
+and alerts are not profitable either. The route left is new data (derivatives
+positioning is being recorded by `positioning_recorder.py`) — and, on the exit
+side, a wide trail: on rockets an 8% floor keeps +9.6% vs +2.6% for k=2.
+
 - Project root: `D:\Projects\claude_crypto_bot\`
 - **DO NOT TOUCH** `D:\Projects\gpt_crypto_bot\` — separate bot, separate Telegram token, independent process. Always check cmdline before killing any python PID.
 
