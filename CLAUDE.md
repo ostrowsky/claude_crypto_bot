@@ -915,6 +915,7 @@ DECOUPLING_SHADOW_ENABLED = True              # decoupling shadow logging (2026-
 DECOUPLING_GATE_ENABLED = False               # reserved; needs shadow-replay first
 POLL_HEARTBEAT_ENABLED = True                 # per-coin per-bar poll log, logging only (2026-09-25)
 TREND_15M_QUALITY_ZERO_FORECAST_AS_NO_DATA = True  # forecast 0.000 = no data, not a block (2026-09-25, p0-validation-0925)
+LEADER_ALERT_ENABLED = True                   # info alert: coin held top-3 of the day 2h (69% end top-3), not a buy (2026-09-27)
 ```
 
 ---

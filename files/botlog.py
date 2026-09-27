@@ -206,6 +206,24 @@ def log_cooldown_realert(sym: str, tf: str, exit_price: float,
     })
 
 
+def log_leader_alert(sym: str, price: float, rank: int, ret: float, hold_bars: int,
+                     bar_ts: int, n_ranked: int) -> None:
+    """Info alert "leader of the day" (leader_alert.py) -- not a buy signal.
+    Logged so the live hit rate (does it end the day in the top-3?) can be read
+    against the backtest's ~70%. Spec: docs/specs/features/leader-alert-spec.md"""
+    _write({
+        "event":     "leader_alert",
+        "sym":       sym,
+        "tf":        "15m",
+        "price":     price,
+        "rank":      int(rank),
+        "ret_since_open": round(float(ret), 5),
+        "hold_bars": int(hold_bars),
+        "bar_ts":    int(bar_ts),
+        "n_ranked":  int(n_ranked),
+    })
+
+
 def log_tq_zero_forecast_pass(sym: str, tf: str, price: float, bar_ts: Optional[int] = None) -> None:
     """A 15m trend candidate that trend_quality would have blocked on forecast 0.000
     and now lets through as "no data" (TREND_15M_QUALITY_ZERO_FORECAST_AS_NO_DATA).

@@ -38,6 +38,7 @@ from strategy import (
 )
 import botlog
 import poll_heartbeat
+import leader_alert
 import critic_dataset
 import ml_dataset
 import correlation_guard as corr_guard
@@ -6575,6 +6576,24 @@ async def monitoring_loop(state: MonitorState, send: SendFn) -> None:
                                 await _soft_promote_watchlist(session, state)
                         except Exception as _sp_err:
                             log.warning("soft promotion failed: %s", _sp_err)
+
+                # ── Leader-of-the-day info alert (2026-09-27) ───────────────
+                # Once per new closed 15m bar, in the background so the poll
+                # loop is not delayed by ~100 kline fetches. Info only: it
+                # never opens a position. leader-alert-spec.md
+                if leader_alert.enabled():
+                    _la_bar = int(time.time() * 1000) // (15 * 60 * 1000)
+                    _la_task = state.__dict__.get("leader_alert_task")
+                    if (state.__dict__.get("leader_alert_bar") != _la_bar
+                            and (_la_task is None or _la_task.done())):
+                        state.__dict__["leader_alert_bar"] = _la_bar
+
+                        async def _run_leader_alert() -> None:
+                            try:
+                                await leader_alert.run_once(session, send, list(config.load_watchlist()))
+                            except Exception as _la_err:
+                                log.warning("leader alert failed: %s", _la_err)
+                        state.__dict__["leader_alert_task"] = asyncio.create_task(_run_leader_alert())
 
                 # Heartbeat каждые ~10 минут (600с / POLL_SEC итераций)
                 _heartbeat_counter += 1

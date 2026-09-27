@@ -795,6 +795,7 @@ REGIME_SOFT_GATE_ENABLED = True               # RM-22 Step C (deployed 2026-06-0
 BANDIT_REGIME_INTERACTION_ENABLED = False     # RM-22 Step B (neutral, OFF)
 POLL_HEARTBEAT_ENABLED = True                 # журнал опроса монет по барам, только логирование (2026-09-25)
 TREND_15M_QUALITY_ZERO_FORECAST_AS_NO_DATA = True  # прогноз 0.000 = нет данных, не блок (2026-09-25, p0-validation-0925)
+LEADER_ALERT_ENABLED = True                   # инфо-алерт: монета 2 ч в топ-3 дня (69% кончают день в топ-3), не покупка (2026-09-27)
 ```
 
 ---

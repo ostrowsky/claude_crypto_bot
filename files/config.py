@@ -1361,6 +1361,17 @@ DECOUPLING_GATE_ENABLED: bool = False             # reserved; do not enable with
 # Rollback: False.
 POLL_HEARTBEAT_ENABLED: bool = True
 POLL_HEARTBEAT_KEEP_DAYS: int = 45
+# Leader-of-the-day INFO alert (operator, 2026-09-27; leader_alert.py). A coin that
+# held rank <= 3 by return since the UTC open at >= +7.5% for 2h (8 closed 15m
+# bars): ~70% end the day in the watchlist top-3 (leader-mode-spec.md, v2 L-1),
+# but entering then loses -0.7..-1.2%/trade -> information, NOT a buy signal.
+# At most 3 a day, once per coin. Rollback: False.
+LEADER_ALERT_ENABLED: bool = True
+LEADER_ALERT_RANK_MAX: int = 3
+LEADER_ALERT_MIN_RET: float = 0.075
+LEADER_ALERT_HOLD_BARS: int = 8
+LEADER_ALERT_MAX_PER_DAY: int = 3
+LEADER_ALERT_FETCH_CONCURRENCY: int = 8
 # H1 earliness (2026-06-29): scan-promote decoupled watchlist coins to attack the
 # silent-miss bucket (top-20 the bot never sees, ~23%). Backtest: silent-miss
 # top-20 flag 6x baseline + are MORE decoupled than entered winners. SHADOW first:
