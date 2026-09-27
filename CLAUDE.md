@@ -916,6 +916,7 @@ DECOUPLING_GATE_ENABLED = False               # reserved; needs shadow-replay fi
 POLL_HEARTBEAT_ENABLED = True                 # per-coin per-bar poll log, logging only (2026-09-25)
 TREND_15M_QUALITY_ZERO_FORECAST_AS_NO_DATA = True  # forecast 0.000 = no data, not a block (2026-09-25, p0-validation-0925)
 LEADER_ALERT_ENABLED = True                   # info alert: coin held top-3 of the day 2h (69% end top-3), not a buy (2026-09-27)
+LEADER_EXIT_ENABLED = True                    # X-7b: held coin top-3 of the day at +5% -> wide 8% trail, exit on losing top-10 (2026-09-27)
 ```
 
 ---

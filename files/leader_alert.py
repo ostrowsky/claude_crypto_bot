@@ -40,6 +40,28 @@ log = logging.getLogger(__name__)
 STATE_FILE = Path(__file__).resolve().parent.parent / ".runtime" / "leader_alerts.json"
 BAR_MS = 15 * 60 * 1000
 
+# Ranking of the whole watchlist at the latest closed 15m bar of the UTC day,
+# refreshed by refresh() on every new bar. leader_exit.py reads it.
+_LATEST: Dict[str, object] = {"bar_ts": None, "ranks": {}}
+
+
+def latest_ranks() -> Optional[Tuple[int, Dict[str, Tuple[int, float]]]]:
+    """(bar_ts, {sym: (rank, return since the UTC open)}) or None before the first refresh."""
+    if _LATEST["bar_ts"] is None:
+        return None
+    return int(_LATEST["bar_ts"]), dict(_LATEST["ranks"])
+
+
+def rank_last_bar(day: Dict[str, Tuple[float, Dict[int, float]]]) -> Tuple[Optional[int], Dict[str, Tuple[int, float]]]:
+    """Rank every coin by return since the UTC open at the latest closed bar any coin has."""
+    bars = {t for _, closes in day.values() for t in closes}
+    if not bars:
+        return None, {}
+    last = max(bars)
+    rets = {s: closes[last] / op - 1 for s, (op, closes) in day.items() if op > 0 and last in closes}
+    order = sorted(rets, key=lambda s: -rets[s])
+    return last, {s: (k + 1, rets[s]) for k, s in enumerate(order)}
+
 
 def enabled() -> bool:
     return bool(getattr(config, "LEADER_ALERT_ENABLED", False))
@@ -119,23 +141,37 @@ def format_message(x: dict, hold_bars: int) -> str:
         sym=x["sym"], rmax=params()[0], hours=hold_bars / 4, ret=100 * x["ret"], rank=x["rank"], price=x["price"])
 
 
+def ranking_needed() -> bool:
+    try:
+        import leader_exit
+        return enabled() or leader_exit.enabled()
+    except Exception:
+        return enabled()
+
+
 async def run_once(session, send, watchlist: List[str], now: Optional[datetime] = None) -> List[dict]:
-    """Check once (call on each new closed 15m bar); send and log any new leader alerts."""
-    if not enabled():
+    """Call on each new closed 15m bar: refresh the watchlist ranking (read by
+    leader_exit.py) and send / log any new leader alerts."""
+    if not ranking_needed():
         return []
     rank_max, min_ret, hold_bars, max_day = params()
     now = now or datetime.now(timezone.utc)
     now_ms = int(now.timestamp() * 1000)
     day_ms = int(now.replace(hour=0, minute=0, second=0, microsecond=0).timestamp() * 1000)
     today = now.strftime("%Y-%m-%d")
-    st = _load_state(today)
-    if len(st["alerted"]) >= max_day:
-        return []
     sem = asyncio.Semaphore(int(getattr(config, "LEADER_ALERT_FETCH_CONCURRENCY", 8)))
     got = await asyncio.gather(*(_fetch_today(session, s, day_ms, now_ms, sem) for s in watchlist))
     day = {s: g for s, g in zip(watchlist, got) if g is not None and g[1]}
     if len(day) < 20:
         log.info("leader_alert: only %d coins with today's bars, skipped", len(day))
+        return []
+    bar, ranks = rank_last_bar(day)
+    if bar is not None:
+        _LATEST["bar_ts"], _LATEST["ranks"] = bar, ranks
+    if not enabled():
+        return []
+    st = _load_state(today)
+    if len(st["alerted"]) >= max_day:
         return []
     sent = []
     for x in find_leaders(day, rank_max, min_ret, hold_bars):

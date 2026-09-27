@@ -39,6 +39,7 @@ from strategy import (
 import botlog
 import poll_heartbeat
 import leader_alert
+import leader_exit
 import critic_dataset
 import ml_dataset
 import correlation_guard as corr_guard
@@ -2683,6 +2684,8 @@ def _find_replaceable_position(
 
     replaceable: List[tuple[float, OpenPosition]] = []
     for pos in state.positions.values():
+        if getattr(pos, "leader_mode", False):
+            continue          # a day-leader is never swapped out (leader_exit.py)
         if restrict_tf is not None and getattr(pos, "tf", "") != restrict_tf:
             continue
         if restrict_mode is not None and getattr(pos, "signal_mode", "") != restrict_mode:
@@ -3104,6 +3107,8 @@ def _pos_to_dict(pos: "OpenPosition") -> dict:
         "last_macd_bar_i": pos.last_macd_bar_i,
         "bandit_arm": getattr(pos, "bandit_arm", None),
         "buy_notified": getattr(pos, "buy_notified", True),
+        "leader_mode": bool(getattr(pos, "leader_mode", False)),
+        "leader_since_ts": int(getattr(pos, "leader_since_ts", 0) or 0),
     }
 
 def _pos_from_dict(d: dict) -> "OpenPosition":
@@ -3141,6 +3146,8 @@ def _pos_from_dict(d: dict) -> "OpenPosition":
         last_macd_bar_i=d.get("last_macd_bar_i", -1),
         bandit_arm=d.get("bandit_arm"),
         buy_notified=d.get("buy_notified", True),  # True = старые позиции не получат повтор
+        leader_mode=bool(d.get("leader_mode", False)),
+        leader_since_ts=int(d.get("leader_since_ts", 0) or 0),
     )
 
 def save_positions(positions: dict) -> None:
@@ -3459,6 +3466,11 @@ class OpenPosition:
     # Если False — значит await send() при входе бросил исключение и позиция
     # осталась «немой». При следующем поллинге перед SELL будет ретрансляция.
     buy_notified: bool = False
+
+    # Leader exit mode (X-7b, leader_exit.py): once the coin leads the day the
+    # position is held on a wide trail and every other exit is skipped.
+    leader_mode: bool = False
+    leader_since_ts: int = 0
 
     def pnl_pct(self, current_price: float) -> float:
         return (current_price / self.entry_price - 1.0) * 100.0
@@ -5800,6 +5812,66 @@ async def _poll_coin(
     atr_now   = float(feat["atr"][i]) if np.isfinite(feat["atr"][i]) else 0.0
     current_pnl = pos.pnl_pct(close_now)
 
+    # ── Leader exit mode (X-7b, 2026-09-27) ──────────────────────────────────
+    # A position whose coin leads the day (top-3 by return since the UTC open,
+    # >= +5%) is held on a wide trail; every exit below is skipped for it.
+    # Backtest: rocket-days +1.18 pp/trade, all trades non-inferior.
+    # leader-exit-x6-spec.md. Rollback: LEADER_EXIT_ENABLED = False.
+    if leader_exit.enabled():
+        try:
+            _lx_action, _lx_reason = leader_exit.step(
+                pos, sym=sym, tf=tf, close=close_now, atr=atr_now,
+                bar_ts=current_bar_ts, ranks=leader_alert.latest_ranks(),
+            )
+        except Exception as _lx_err:
+            log.warning("leader exit step failed for %s: %s", sym, _lx_err)
+            _lx_action, _lx_reason = "none", ""
+        if _lx_action == "switch":
+            save_positions(state.positions)
+            log.info("LEADER MODE %s [%s]: %s, stop %.6g", sym, tf, _lx_reason, pos.trail_stop)
+            try:
+                botlog.log_leader_exit_switch(sym, tf, close_now, _lx_reason, pos.trail_stop, current_pnl)
+            except Exception as _lxl:
+                log.warning("leader exit log failed: %s", _lxl)
+            try:
+                await send(leader_exit.switch_message(sym, tf, _lx_reason, pos.trail_stop, close_now))
+            except Exception as _lxs:
+                log.warning("leader exit message failed for %s: %s", sym, _lxs)
+            return
+        if _lx_action == "hold":
+            save_positions(state.positions)
+            return
+        if _lx_action == "exit":
+            pnl = pos.pnl_pct(close_now)
+            pnl_icon = "🟢" if pnl >= 0 else "🔴"
+            await send(
+                f"🔴 *СИГНАЛ ПРОДАЖИ*\n\n"
+                f"*{sym}*  `[{tf}]`\n"
+                f"💰 Выход: `{close_now:.6g}`\n"
+                f"📉 Причина: {_lx_reason}\n"
+                f"{pnl_icon} Изменение от входа: `{pnl:+.2f}%`\n"
+                f"⏱ Баров в позиции: {pos.bars_elapsed}"
+            )
+            botlog.log_exit(sym=sym, tf=tf, mode=getattr(pos, "signal_mode", "trend"),
+                            entry_price=pos.entry_price, exit_price=close_now,
+                            reason=_lx_reason,
+                            bars_held=pos.bars_elapsed, trail_k=getattr(pos, "trail_k", 2.0))
+            _fill_trade_outcome_labels(
+                pos,
+                exit_pnl=pnl,
+                exit_reason=_lx_reason,
+                bars_held=pos.bars_elapsed,
+            )
+            del state.positions[sym]
+            save_positions(state.positions)
+            bar_ms_cd = 15 * 60 * 1000 if tf == "15m" else 60 * 60 * 1000
+            cooldown_bars = _cooldown_bars_after_exit(
+                getattr(pos, "signal_mode", "trend"), _lx_reason, tf=tf, pnl_pct=pnl,
+            )
+            state.cooldowns[sym] = int(data["t"][i]) + cooldown_bars * bar_ms_cd
+            state.cd_logged.pop(sym, None)
+            return
+
     # ── P1.2 PEAK RISK shadow detector (2026-05-07) ───────────────────────────
     # Compute score for open position; log when score crosses bucket
     # threshold (50/70/90). Pure observability — no SELL triggered.
@@ -6484,7 +6556,7 @@ async def monitoring_loop(state: MonitorState, send: SendFn) -> None:
                             )
                             for _pc in _prune_list:
                                 _prune_pos = state.positions.get(_pc.symbol)
-                                if _prune_pos is None:
+                                if _prune_pos is None or getattr(_prune_pos, "leader_mode", False):
                                     continue
                                 _prune_price = state.__dict__.get("last_prices", {}).get(_pc.symbol)
                                 if _prune_price is None:
@@ -6581,7 +6653,7 @@ async def monitoring_loop(state: MonitorState, send: SendFn) -> None:
                 # Once per new closed 15m bar, in the background so the poll
                 # loop is not delayed by ~100 kline fetches. Info only: it
                 # never opens a position. leader-alert-spec.md
-                if leader_alert.enabled():
+                if leader_alert.ranking_needed():
                     _la_bar = int(time.time() * 1000) // (15 * 60 * 1000)
                     _la_task = state.__dict__.get("leader_alert_task")
                     if (state.__dict__.get("leader_alert_bar") != _la_bar

@@ -1372,6 +1372,21 @@ LEADER_ALERT_MIN_RET: float = 0.075
 LEADER_ALERT_HOLD_BARS: int = 8
 LEADER_ALERT_MAX_PER_DAY: int = 3
 LEADER_ALERT_FETCH_CONCURRENCY: int = 8
+# Leader exit mode (X-7b, operator 2026-09-27; leader_exit.py). A 15m position
+# whose coin is top-3 of the day by return since the UTC open at >= +5% is held on
+# a wide trail (stop reset to close - max(k*ATR, 8%*close), then ratchet); every
+# other exit is skipped; exit on the trail, on dropping out of the day's top-10
+# (>= 1h after the switch) or after 7 days. Backtest (leader-exit-x6-spec.md, all
+# 15m trades since 2026-03-01): rocket-days +1.18 pp [+0.75, +1.68], 7/7 months;
+# all trades +0.026 pp [-0.030, +0.087]. Rollback: False.
+LEADER_EXIT_ENABLED: bool = True
+LEADER_EXIT_TF: tuple = ("15m",)
+LEADER_EXIT_RANK_MAX: int = 3
+LEADER_EXIT_MIN_RET: float = 0.05
+LEADER_EXIT_FLOOR_PCT: float = 0.08
+LEADER_EXIT_LOST_RANK: int = 10
+LEADER_EXIT_LOST_MIN_BARS: int = 4
+LEADER_EXIT_MAX_HOLD_BARS: int = 672
 # H1 earliness (2026-06-29): scan-promote decoupled watchlist coins to attack the
 # silent-miss bucket (top-20 the bot never sees, ~23%). Backtest: silent-miss
 # top-20 flag 6x baseline + are MORE decoupled than entered winners. SHADOW first:

@@ -206,6 +206,19 @@ def log_cooldown_realert(sym: str, tf: str, exit_price: float,
     })
 
 
+def log_leader_exit_switch(sym: str, tf: str, price: float, reason: str, stop: float, pnl_pct: float) -> None:
+    """A held position switched to leader exit mode (leader_exit.py, X-7b)."""
+    _write({
+        "event":   "leader_exit_switch",
+        "sym":     sym,
+        "tf":      tf,
+        "price":   price,
+        "reason":  reason,
+        "stop":    stop,
+        "pnl_pct": round(float(pnl_pct), 4),
+    })
+
+
 def log_leader_alert(sym: str, price: float, rank: int, ret: float, hold_bars: int,
                      bar_ts: int, n_ranked: int) -> None:
     """Info alert "leader of the day" (leader_alert.py) -- not a buy signal.

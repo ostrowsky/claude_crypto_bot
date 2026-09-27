@@ -77,6 +77,8 @@ def find_weakest_leg(
 
     candidates: list[tuple[float, str]] = []  # (ev, sym)
     for sym, pos in positions.items():
+        if getattr(pos, "leader_mode", False):
+            continue          # a day-leader is never evicted (leader_exit.py)
         ev = float(getattr(pos, "ranker_ev", 0.0) or 0.0)
         if ev >= weak_ev_max:
             continue
