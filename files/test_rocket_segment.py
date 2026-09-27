@@ -63,5 +63,25 @@ class TestSpec(unittest.TestCase):
             self.assertIn("rocket-segment-spec.md", t, doc)
 
 
+class TestRocketBlockers(unittest.TestCase):
+    def setUp(self):
+        self.src = (HERE / "_audit_rocket_blockers.py").read_text(encoding="utf-8")
+
+    def test_parse_no_machine_paths(self):
+        ast.parse(self.src)
+        self.assertNotIn("D:/", self.src)
+
+    def test_window_ends_at_the_first_plus_ten_close_and_drops_ema_cross(self):
+        self.assertIn("x[4] >= op * 1.10", self.src)
+        self.assertIn('r["rule"] != "ema_cross"', self.src)
+
+    def test_spec_numbers(self):
+        if not SPEC.exists():
+            self.skipTest("spec not in this checkout")
+        t = SPEC.read_text(encoding="utf-8")
+        for tok in ("446 ракет", "13.7%", "31.6%", "+1.3%", "+8.4%"):
+            self.assertIn(tok, t)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
