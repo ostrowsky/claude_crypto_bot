@@ -168,6 +168,17 @@ label ranked a rolling 24h window and counted overnight spikes — moves the bot
 could not catch — as misses. Still far from the 0.40 target; what changed is that
 it can be trusted. Delisted pairs remain unrecoverable (TH-05).
 
+### Goal update: leaders only (operator, 2026-09-27)
+
+"Catch one, at most three day-leaders and hold them as long as it takes,
+collecting their rise; no more junk signals." Measurable form: at most 3
+entries a day, each into a coin that ends the day among the leaders, share of
+the leader's move captured (entry to exit vs day open to peak). The literal 97%
+is not reachable by any rule (it needs the day's low and high in hindsight);
+it is recorded as the direction. First test (`leader-mode-spec.md`): entering
+the CURRENT day-leader and holding it on a wide trail gives ~1 trade a day,
+38-50% of them real leaders, median trade -2.7..-3.9%, not ready.
+
 ### The target segment: rockets (operator, 2026-09-26)
 
 **A rocket is the bot's real target, not an exception.** Definition: a watchlist
