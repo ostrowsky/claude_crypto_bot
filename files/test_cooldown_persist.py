@@ -78,5 +78,43 @@ class TestWiring(unittest.TestCase):
         self.assertIs(config.COOLDOWN_PERSIST_ENABLED, True)
 
 
+class TestRealertReference(unittest.TestCase):
+    """QNT 2026-09-28: exit 344.48 (+50.7%), restart during the cooldown reset the
+    alert reference to 226.49 and the channel got "+7.3% after our exit" at 243."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.p = mock.patch.object(monitor, "_COOLDOWN_REFS_FILE", Path(self.tmp.name) / "refs.json")
+        self.p.start()
+
+    def tearDown(self):
+        self.p.stop()
+        self.tmp.cleanup()
+
+    def test_restart_keeps_the_reference_of_the_same_cooldown(self):
+        st = monitor.MonitorState()
+        self.assertTrue(monitor._begin_or_resume_cooldown_ref(st, "QNTUSDT", NOW, 344.48))
+        st.cooldown_realerted["QNTUSDT"] = True
+        monitor._save_cooldown_refs(st)
+        fresh = monitor.MonitorState()                      # the process after a restart
+        self.assertFalse(monitor._begin_or_resume_cooldown_ref(fresh, "QNTUSDT", NOW, 226.49))
+        self.assertEqual(fresh.cooldown_exit_px["QNTUSDT"], 344.48)
+        self.assertTrue(fresh.cooldown_realerted["QNTUSDT"])
+
+    def test_a_new_cooldown_takes_a_new_reference(self):
+        st = monitor.MonitorState()
+        monitor._begin_or_resume_cooldown_ref(st, "QNTUSDT", NOW, 344.48)
+        st.cooldown_realerted["QNTUSDT"] = True
+        self.assertTrue(monitor._begin_or_resume_cooldown_ref(st, "QNTUSDT", NOW + 86_400_000, 250.0))
+        self.assertEqual(st.cooldown_exit_px["QNTUSDT"], 250.0)
+        self.assertFalse(st.cooldown_realerted["QNTUSDT"])
+
+    def test_first_cooldown_poll_uses_it_and_the_alert_is_markdown(self):
+        src = (HERE / "monitor.py").read_text(encoding="utf-8")
+        self.assertIn("_begin_or_resume_cooldown_ref(state, sym, cooldown_until_ms, float(c[i]))", src)
+        self.assertNotIn("<b>{sym}</b> продолжает движение", src)
+        self.assertIn("*{sym}* продолжает движение", src)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

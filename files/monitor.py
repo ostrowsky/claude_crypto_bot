@@ -260,6 +260,7 @@ def _save_cooldown_refs(state) -> None:
         _COOLDOWN_REFS_FILE.write_text(json.dumps({
             "exit_px": state.cooldown_exit_px,
             "realerted": state.cooldown_realerted,
+            "until": getattr(state, "cooldown_ref_until", {}),
         }), encoding="utf-8")
     except Exception:
         pass
@@ -273,8 +274,30 @@ def _load_cooldown_refs(state) -> None:
                 state.cooldown_exit_px.setdefault(k, float(v))
             for k, v in (d.get("realerted") or {}).items():
                 state.cooldown_realerted.setdefault(k, bool(v))
+            for k, v in (d.get("until") or {}).items():
+                state.cooldown_ref_until.setdefault(k, int(v))
     except Exception:
         pass
+
+
+def _begin_or_resume_cooldown_ref(state, sym: str, until_ms: int, price: float) -> bool:
+    """Reference price for the alert-during-cooldown, tied to ONE cooldown.
+
+    The reference is taken on the first poll of a cooldown (~the exit price) and
+    stored with the cooldown's end. Since cooldowns survive restarts
+    (COOLDOWN_PERSIST_ENABLED) the first poll after a restart is NOT a new
+    cooldown: resetting the reference there turned QNT's +50.7% exit at 344.48
+    into "+7.3% after our exit" at 243 (2026-09-28). Returns True for a new cooldown.
+    """
+    if sym not in state.cooldown_exit_px or sym not in state.cooldown_ref_until:
+        _load_cooldown_refs(state)
+    if state.cooldown_ref_until.get(sym) == int(until_ms) and sym in state.cooldown_exit_px:
+        return False
+    state.cooldown_exit_px[sym] = float(price)
+    state.cooldown_realerted[sym] = False
+    state.cooldown_ref_until[sym] = int(until_ms)
+    _save_cooldown_refs(state)
+    return True
 
 
 _COOLDOWNS_FILE = Path(__file__).resolve().parent.parent / ".runtime" / "cooldowns.json"
@@ -3568,6 +3591,7 @@ class MonitorState:
     # on 60d: +5% trigger -> ~3.8 alerts/day, 45% land on real top-20.
     cooldown_exit_px:   Dict[str, float] = field(default_factory=dict)
     cooldown_realerted: Dict[str, bool]  = field(default_factory=dict)
+    cooldown_ref_until: Dict[str, int]   = field(default_factory=dict)   # which cooldown the ref belongs to
     # Деdup для portfolio BLOCK логов: {symbol: последний_ts_ms когда логировали}.
     # Портфельный лимит проверяется каждые 60с → без dedup = 100+ строк на монету.
     # Логируем не чаще 1 раза в BLOCK_LOG_INTERVAL_BARS баров (по умолчанию 4 = 1ч на 15m).
@@ -3871,9 +3895,8 @@ async def _poll_coin(
             if not state.cd_logged.get(sym):
                 botlog.log_cooldown(sym=sym, tf=tf, bars_remaining=int(bars_left), first=True)
                 state.cd_logged[sym] = True
-                state.cooldown_exit_px[sym] = float(c[i])      # ref ~ exit price
-                state.cooldown_realerted[sym] = False
-                _save_cooldown_refs(state)
+                # ref ~ exit price; kept across restarts for the same cooldown
+                _begin_or_resume_cooldown_ref(state, sym, cooldown_until_ms, float(c[i]))
                 # ФИКС: логируем в critic_dataset чтобы Trend Scout видел cooldown-блоки.
                 # Без этого в critic нет записей о монетах в cooldown → скаут не диагностирует.
                 _log_critic_candidate(
@@ -3905,7 +3928,7 @@ async def _poll_coin(
                         _save_cooldown_refs(state)
                         botlog.log_cooldown_realert(sym, tf, ex_px, cur_px, cont)
                         await send(
-                            f"🔔 <b>{sym}</b> продолжает движение: "
+                            f"🔔 *{sym}* продолжает движение: "
                             f"+{cont:.1f}% после нашего выхода (мы в cooldown, "
                             f"позицию не открываем — это инфо-алерт)."
                         )
