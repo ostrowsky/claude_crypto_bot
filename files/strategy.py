@@ -1981,11 +1981,18 @@ async def _run_analysis(
             for sym in symbols
             for tf in config.TIMEFRAMES
         ]
+        # 2026-09-28: analyze_coin is pure CPU; ~200 calls in a row held the event
+        # loop 10-23 s every auto-reanalyze (30 min) and stalled coin polling. In a
+        # worker thread the results are identical and the loop keeps running.
+        in_thread = bool(getattr(config, "ANALYSIS_IN_THREAD", False))
         for sym, tf, task in tasks:
             data = await task
             if data is None:
                 continue
-            all_reports.append(analyze_coin(sym, tf, data, from_scan=from_scan))
+            if in_thread:
+                all_reports.append(await asyncio.to_thread(analyze_coin, sym, tf, data, from_scan=from_scan))
+            else:
+                all_reports.append(analyze_coin(sym, tf, data, from_scan=from_scan))
 
     # Лучший таймфрейм на монету.
     # Приоритет (по убыванию важности):

@@ -13,6 +13,7 @@ Crypto Trend Bot — Telegram interface.
 """
 
 import asyncio
+import os
 import time
 from pathlib import Path
 import logging
@@ -48,6 +49,51 @@ logging.basicConfig(
     format="%(asctime)s  %(levelname)-8s  %(name)s  %(message)s",
 )
 log = logging.getLogger(__name__)
+
+
+class _RedactSecrets(logging.Filter):
+    """Strip the Telegram token from every log record, message and traceback.
+
+    The token is part of every Bot API URL; httpx logged each request at INFO and
+    wrote it into bot_stderr.log (2026-09-28). Kept as a second line of defence
+    behind HTTPX_LOG_LEVEL: exceptions from the telegram stack can carry URLs too.
+    """
+
+    def __init__(self, secrets):
+        super().__init__()
+        self._secrets = [s for s in secrets if s and len(s) >= 20]
+
+    def _clean(self, text):
+        for s in self._secrets:
+            text = text.replace(s, "<TELEGRAM_TOKEN>")
+        return text
+
+    def filter(self, record):
+        if not self._secrets:
+            return True
+        try:
+            msg = record.getMessage()
+            clean = self._clean(msg)
+            if clean != msg:
+                record.msg, record.args = clean, ()
+            if record.exc_info and not record.exc_text:
+                record.exc_text = logging.Formatter().formatException(record.exc_info)
+            if record.exc_text:
+                record.exc_text = self._clean(record.exc_text)
+        except Exception:
+            pass
+        return True
+
+
+def _install_log_hygiene() -> None:
+    level = str(getattr(config, "HTTPX_LOG_LEVEL", "WARNING")).upper()
+    logging.getLogger("httpx").setLevel(getattr(logging, level, logging.WARNING))
+    flt = _RedactSecrets([os.environ.get("TELEGRAM_BOT_TOKEN", "")])
+    for h in logging.getLogger().handlers:
+        h.addFilter(flt)
+
+
+_install_log_hygiene()
 
 state = MonitorState()
 # Фикс: восстанавливаем позиции после рестарта

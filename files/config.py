@@ -477,6 +477,12 @@ MIN_SIGNALS  = 5  # общий минимум (не используется в 
 POLL_SEC      = 60
 HISTORY_LIMIT = 300
 LIVE_LIMIT    = 100
+# 2026-09-28: run analyze_coin in a worker thread during market_scan (the auto-reanalyze
+# held the event loop 10-23 s every 30 min). Same results. Rollback: False.
+ANALYSIS_IN_THREAD: bool = True
+# httpx logs every Bot API request URL at INFO -- the URL contains the Telegram token.
+# WARNING keeps it out of bot_stderr.log (bot.py also redacts it from every record).
+HTTPX_LOG_LEVEL: str = "WARNING"
 DISCOVERY_ENTRY_GRACE_BARS: int = 2
 DISCOVERY_ENTRY_MAX_SLIPPAGE_PCT: float = 0.45
 # Round-trip trading fee (Binance USDT-M futures taker ~0.05%/side = ~0.10%
