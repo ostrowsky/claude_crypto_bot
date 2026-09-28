@@ -44,7 +44,7 @@ class TestSwitch(unittest.TestCase):
         self.assertLess(p.trail_stop, 108.0)
 
     def test_no_switch_when_not_a_leader(self):
-        for rr in ((4, 0.10), (1, 0.049)):
+        for rr in ((6, 0.10), (1, 0.029)):
             p = pos()
             a, _ = LX.step(p, sym="AUSDT", tf="15m", close=110.0, atr=1.0, bar_ts=T0 + BAR, ranks=ranks(T0 + BAR, {"AUSDT": rr}))
             self.assertEqual(a, "none")
@@ -154,7 +154,7 @@ class TestProtection(unittest.TestCase):
     def test_flags(self):
         self.assertIs(config.LEADER_EXIT_ENABLED, True)
         self.assertEqual((config.LEADER_EXIT_RANK_MAX, config.LEADER_EXIT_MIN_RET, config.LEADER_EXIT_FLOOR_PCT,
-                          config.LEADER_EXIT_LOST_RANK, config.LEADER_EXIT_LOST_MIN_BARS), (3, 0.05, 0.08, 10, 4))
+                          config.LEADER_EXIT_LOST_RANK, config.LEADER_EXIT_LOST_MIN_BARS), (5, 0.03, 0.08, 10, 4))
         self.assertEqual(tuple(config.LEADER_EXIT_TF), ("15m",))
 
 

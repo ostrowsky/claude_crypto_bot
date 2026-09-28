@@ -10,8 +10,9 @@ rocket-days +1.18 pp per trade [+0.75, +1.68], positive 7/7 months; winner-days
 
 RULE (identical to the backtest)
   switch  15m position; at a closed bar at or after the entry bar the coin is
-          rank <= LEADER_EXIT_RANK_MAX (3) by return since the UTC open across
-          the watchlist, at >= LEADER_EXIT_MIN_RET (+5%) -> leader mode: the stop
+          rank <= LEADER_EXIT_RANK_MAX (5 since X-9c; X-7b had 3) by return since
+          the UTC open across the watchlist, at >= LEADER_EXIT_MIN_RET (+3%; X-7b
+          +5%) -> leader mode: the stop
           is RESET to close - max(k*ATR, LEADER_EXIT_FLOOR_PCT*close) (it may go
           down: the point is to give the leader room) and only ratchets up after
   hold    every other exit (WEAK, RSI, EMA, micro-weakness, profit-lock, time,

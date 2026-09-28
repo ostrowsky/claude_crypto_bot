@@ -1381,8 +1381,12 @@ LEADER_ALERT_FETCH_CONCURRENCY: int = 8
 # all trades +0.026 pp [-0.030, +0.087]. Rollback: False.
 LEADER_EXIT_ENABLED: bool = True
 LEADER_EXIT_TF: tuple = ("15m",)
-LEADER_EXIT_RANK_MAX: int = 3
-LEADER_EXIT_MIN_RET: float = 0.05
+# X-9c (operator 2026-09-28): switch at top-5 and +3% (was top-3 / +5%). Backtest
+# vs X-7b: rocket-days +0.42 pp [+0.19, +0.68], winner-days +0.41 pp, all trades
+# -0.008 pp [-0.038, +0.023]; rocket-days held in leader mode 20.9% -> 27.8%.
+# Rollback to X-7b: 3 / 0.05.
+LEADER_EXIT_RANK_MAX: int = 5
+LEADER_EXIT_MIN_RET: float = 0.03
 LEADER_EXIT_FLOOR_PCT: float = 0.08
 LEADER_EXIT_LOST_RANK: int = 10
 LEADER_EXIT_LOST_MIN_BARS: int = 4
