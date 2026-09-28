@@ -85,6 +85,14 @@ USDT (734 пары запрошено, 530 отдали данные, ~497/де�
 **Проект:** `D:\Projects\claude_crypto_bot\`  
 **Второй бот (НЕ ТРОГАТЬ):** `D:\Projects\gpt_crypto_bot\` — работает независимо на другом Telegram токене.
 
+**Перезапуск из сессии Claude — только отвязанно (2026-09-28).** Бот, запущенный
+из инструмента Claude Code, живёт в дереве процессов приложения Claude и умирает
+вместе с ним: 28.09 Windows обновляла приложение (20:19), бот остановился в
+20:18:48 без ошибки. Из сессии Claude запускать через службу WMI:
+`Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{CommandLine='powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File D:\Projects\claude_crypto_bot\start_bot_detached.ps1'}`
+— скрипт сам читает токен и вызывает `start_bot_bg.ps1` (лог
+`.runtime\start_bot_detached.log`). Вручную — как раньше, `restart_bot.bat`.
+
 ---
 
 ## P0 — Непрерывное обучение алгоритмов

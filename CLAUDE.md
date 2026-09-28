@@ -506,6 +506,18 @@ stop_rl_headless.bat     - stop RL worker (PID from .runtime/rl_worker_bg.json)
 - Only ONE main bot instance at a time (Telegram token conflict).
 - Windows logs are cp1251 — keep `.bat` and printed strings ASCII-only.
 
+### Restarting from a Claude session: start detached (2026-09-28)
+A bot started from a Claude Code tool call lives in the Claude desktop app's
+process tree and dies with it: on 2026-09-28 Windows updated the app (20:19) and
+the bot stopped at 20:18:48 with no traceback and no crash event, while the RL
+worker (started from a user cmd window) survived. From a Claude session, start
+the bot through the WMI service so it has no Claude ancestor:
+`Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{CommandLine='powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File D:\Projects\claude_crypto_bot\start_bot_detached.ps1'}`.
+The script reads the token itself (runner file or `files\.env`), calls
+`start_bot_bg.ps1`, logs to `.runtime\start_bot_detached.log`. Back up
+`bot_stderr.log` first — `start_bot_bg.ps1` deletes it. `restart_bot.bat` from a
+user cmd window stays the normal manual path.
+
 ---
 
 ## 7. Known issues & fixes
