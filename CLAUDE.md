@@ -917,6 +917,7 @@ POLL_HEARTBEAT_ENABLED = True                 # per-coin per-bar poll log, loggi
 TREND_15M_QUALITY_ZERO_FORECAST_AS_NO_DATA = True  # forecast 0.000 = no data, not a block (2026-09-25, p0-validation-0925)
 LEADER_ALERT_ENABLED = True                   # info alert: coin held top-3 of the day 2h (69% end top-3), not a buy (2026-09-27)
 LEADER_EXIT_ENABLED = True                    # X-7b/X-9c: held coin top-5 of the day at +3% -> wide 8% trail, exit on losing top-10 (2026-09-28)
+COOLDOWN_PERSIST_ENABLED = True               # post-exit cooldowns survive a restart (.runtime/cooldowns.json) (2026-09-28)
 ```
 
 ---

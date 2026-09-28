@@ -774,6 +774,9 @@ ADX_SMA_BYPASS: float = 35.0  # ADX ≥ этого → плато сильног
 
 # ── П3: Cooldown (уже использовался через getattr) ───────────────────────────
 COOLDOWN_BARS: int = 19  # баров тишины после выхода (Scout APPROVE: n=35, ret5=+0.79%, win=60%; было 24)
+# Post-exit cooldowns survive a bot restart (.runtime/cooldowns.json, monitor.PersistentCooldowns).
+# Until 2026-09-28 a restart silently lifted every cooldown. Rollback: False.
+COOLDOWN_PERSIST_ENABLED: bool = True
 # Alert-during-cooldown (2026-06-17): info-only re-alert when a coin we exited
 # keeps running >= TRIGGER% above exit while still in (trade) cooldown. Decouples
 # the ALERT from the TRADE block — no re-entry, just informs the channel of a

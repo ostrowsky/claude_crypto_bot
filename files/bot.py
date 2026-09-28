@@ -39,7 +39,7 @@ from telegram.ext import (
 )
 
 import config
-from monitor import MonitorState, monitoring_loop, load_positions, save_positions
+from monitor import MonitorState, monitoring_loop, load_positions, save_positions, load_cooldowns
 from strategy import market_scan, check_entry_conditions, check_setup_conditions, analyze_coin, fetch_klines, get_entry_mode
 import bot_ui_cache
 
@@ -52,6 +52,8 @@ log = logging.getLogger(__name__)
 state = MonitorState()
 # Фикс: восстанавливаем позиции после рестарта
 state.positions = load_positions()
+# ... и cooldown после выхода (2026-09-28: раньше рестарт снимал все cooldown)
+state.cooldowns = load_cooldowns()
 state.auto_reanalyze_task = None
 state.early_scanner_task = None
 state.data_collector_task = None

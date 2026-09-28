@@ -797,6 +797,7 @@ POLL_HEARTBEAT_ENABLED = True                 # журнал опроса мон
 TREND_15M_QUALITY_ZERO_FORECAST_AS_NO_DATA = True  # прогноз 0.000 = нет данных, не блок (2026-09-25, p0-validation-0925)
 LEADER_ALERT_ENABLED = True                   # инфо-алерт: монета 2 ч в топ-3 дня (69% кончают день в топ-3), не покупка (2026-09-27)
 LEADER_EXIT_ENABLED = True                    # X-7b/X-9c: купленная монета в топ-5 дня при +3% -> широкий трейл 8%, выход при потере топ-10 (2026-09-28)
+COOLDOWN_PERSIST_ENABLED = True               # cooldown после выхода переживает перезапуск (.runtime/cooldowns.json) (2026-09-28)
 ```
 
 ---

@@ -277,6 +277,65 @@ def _load_cooldown_refs(state) -> None:
         pass
 
 
+_COOLDOWNS_FILE = Path(__file__).resolve().parent.parent / ".runtime" / "cooldowns.json"
+
+
+class PersistentCooldowns(dict):
+    """{symbol: re-entry blocked until (unix ms)} that survives restarts.
+
+    Until 2026-09-28 state.cooldowns lived only in memory: every bot restart
+    silently lifted every post-exit cooldown (HBAR 2026-09-28: 12 bars left at
+    09:45 UTC, evaluated as free right after the 10:09 restart). Every write
+    rewrites .runtime/cooldowns.json (a few dozen entries, written only on
+    exits); expired entries are dropped on load. Rollback: COOLDOWN_PERSIST_ENABLED = False.
+    """
+
+    def __init__(self, *args, path: Path = _COOLDOWNS_FILE, **kw):
+        super().__init__(*args, **kw)
+        self._path = path
+
+    def _save(self) -> None:
+        try:
+            self._path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = self._path.with_suffix(".tmp")
+            tmp.write_text(json.dumps({k: int(v) for k, v in self.items()}), encoding="utf-8")
+            tmp.replace(self._path)
+        except Exception as e:
+            log.warning("cooldowns save failed: %s", e)
+
+    def __setitem__(self, key, value) -> None:
+        super().__setitem__(key, int(value))
+        self._save()
+
+    def __delitem__(self, key) -> None:
+        super().__delitem__(key)
+        self._save()
+
+    def pop(self, key, *default):
+        out = super().pop(key, *default)
+        self._save()
+        return out
+
+
+def load_cooldowns(path: Path = _COOLDOWNS_FILE, now_ms: Optional[int] = None) -> dict:
+    """Restore post-exit cooldowns at startup; plain dict when the flag is off."""
+    if not getattr(config, "COOLDOWN_PERSIST_ENABLED", False):
+        return {}
+    now_ms = int(time.time() * 1000) if now_ms is None else int(now_ms)
+    live = {}
+    try:
+        if path.exists():
+            d = json.loads(path.read_text(encoding="utf-8"))
+            live = {str(k): int(v) for k, v in d.items() if int(v) > now_ms}
+    except Exception as e:
+        log.warning("cooldowns load failed: %s", e)
+    cd = PersistentCooldowns(live, path=path)
+    cd._save()                      # drop the expired entries on disk too
+    if live:
+        log.info("Restored %d active cooldown(s): %s", len(live), sorted(live))
+    return cd
+
+
 _soft_promote_day = ""
 _soft_promoted_today: set = set()
 
