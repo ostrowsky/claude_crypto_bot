@@ -1445,6 +1445,15 @@ ML_FLOOR_CALIBRATION_ENABLED: bool = False
 ML_FLOOR_TARGET_RECALL: float = 0.80        # chosen by the pre-registered walk-forward rule
 ML_FLOOR_CALIBRATED_MIN: float = 0.02       # clamps: a calibrated floor never blacks out
 ML_FLOOR_CALIBRATED_MAX: float = 0.60       # or opens the gate completely
+# Hot reload of ml_signal_model.json (operator 2026-09-29, spec §8). The model was
+# read once per process, so the nightly retrain reached the gate only at a restart.
+# Now the file's mtime is checked every ML_MODEL_RELOAD_CHECK_SEC; a changed, settled
+# (>= MIN_AGE s old), complete file replaces the model in use; anything else keeps
+# it. The promotion gate (ML_PROMOTION_GATE_ENABLED) decides what lands in the file.
+# Readout ML-HOT-RELOAD watches for a blackout after a swap. Rollback: False.
+ML_MODEL_HOT_RELOAD_ENABLED: bool = True
+ML_MODEL_RELOAD_CHECK_SEC: int = 60
+ML_MODEL_RELOAD_MIN_AGE_SEC: int = 10
 # H1 earliness (2026-06-29): scan-promote decoupled watchlist coins to attack the
 # silent-miss bucket (top-20 the bot never sees, ~23%). Backtest: silent-miss
 # top-20 flag 6x baseline + are MORE decoupled than entered winners. SHADOW first:

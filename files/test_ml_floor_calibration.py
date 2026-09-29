@@ -50,8 +50,11 @@ class TestLiveGate(unittest.TestCase):
         self.assertLess(config.ML_FLOOR_CALIBRATED_MIN, config.ML_FLOOR_CALIBRATED_MAX)
 
     def test_calibrated_floor_is_clamped(self):
+        import config
         import monitor as M
         old = M._ML_MODEL_CACHE
+        old_reload = getattr(config, "ML_MODEL_HOT_RELOAD_ENABLED", False)
+        config.ML_MODEL_HOT_RELOAD_ENABLED = False     # the injected cache must not be replaced by the real file
         try:
             M._ML_MODEL_CACHE = {"calibration": {"floor": 0.001}}
             self.assertAlmostEqual(M._ml_floor_calibrated(), 0.02)
@@ -63,6 +66,7 @@ class TestLiveGate(unittest.TestCase):
             self.assertIsNone(M._ml_floor_calibrated())
         finally:
             M._ML_MODEL_CACHE = old
+            config.ML_MODEL_HOT_RELOAD_ENABLED = old_reload
 
     def test_gate_uses_it_only_behind_the_flag(self):
         src = (HERE / "monitor.py").read_text(encoding="utf-8")

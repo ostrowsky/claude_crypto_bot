@@ -372,8 +372,52 @@ def readout_ml_floor_shadow(r: dict, ctx: dict) -> dict:
     return out
 
 
+BLACKOUT_SHARE = 0.85      # 08-20 blackout = 0.886 by coin-hour; max of the other 97 days since June 0.791
+BLACKOUT_MIN_ROWS = 50
+
+
+def readout_ml_reload(r: dict, ctx: dict) -> dict:
+    """ML model hot reload: were models swapped, and did a swap black out the gate?"""
+    import pipeline_replay_validator as RV
+    evs = scan_events(r["window_from"], {"ml_model_reload", "blocked", "entry"})
+    reloads = [e for e in evs if e["event"] == "ml_model_reload"]
+    per_day = collections.defaultdict(lambda: [set(), set()])      # day -> [reached ML gate, blocked by it]
+    for e in evs:
+        if e["event"] == "ml_model_reload":
+            continue
+        g = RV._gate_of(e)
+        if g != "ENTRY" and RV.STAGE.get(g, 0) < 1:
+            continue
+        k = (e.get("sym"), e["_dt"].replace(minute=0, second=0, microsecond=0))
+        d = per_day[e["ts"][:10]]
+        d[0].add(k)
+        if g in ("ml_zone", "ml_proba_zone"):
+            d[1].add(k)
+    days = {d: {"candidates": len(v[0]), "ml_blocked_share": round(len(v[1]) / len(v[0]), 3) if v[0] else None}
+            for d, v in sorted(per_day.items())}
+    anomalies = [f"{d}: ML gate blocked {x['ml_blocked_share']:.0%} of {x['candidates']} candidates"
+                 for d, x in days.items()
+                 if x["candidates"] >= BLACKOUT_MIN_ROWS and (x["ml_blocked_share"] or 0) >= BLACKOUT_SHARE]
+    try:
+        mt = (HERE / "ml_signal_model.json").stat().st_mtime
+        last = max((e.get("file_mtime") or 0) for e in reloads) if reloads else 0
+        age_h = (ctx["now"].timestamp() - mt) / 3600 if ctx.get("now") else 0
+        if mt > last + 3600 and age_h > 24 and r["window_from"] <= datetime.fromtimestamp(mt, timezone.utc).strftime("%Y-%m-%d"):
+            anomalies.append("model file changed %.0f h ago but no reload was logged" % age_h)
+    except Exception:
+        pass
+    out = {"days": len(ctx["days"]), "reloads": len(reloads),
+           "models": [f"{e.get('old_model')}->{e.get('new_model')} {e['ts'][:16]}" for e in reloads][-10:],
+           "ml_block_share_by_day": days, "anomalies": anomalies}
+    out["_n_trades"] = len(reloads)
+    out["_anomaly"] = bool(anomalies)
+    out["_verdict"] = "KEEP" if reloads and not anomalies else "INCONCLUSIVE"
+    return out
+
+
 FNS = {"readout_e4": readout_e4, "readout_leader_exit": readout_leader_exit,
-       "readout_leader_alert": readout_leader_alert, "readout_ml_floor_shadow": readout_ml_floor_shadow}
+       "readout_leader_alert": readout_leader_alert, "readout_ml_floor_shadow": readout_ml_floor_shadow,
+       "readout_ml_reload": readout_ml_reload}
 
 
 # ---------------------------------------------------------------- runner

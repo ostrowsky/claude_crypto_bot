@@ -749,8 +749,12 @@ tasks. Now (spec `docs/specs/features/agent-tasks-0929-spec.md`):
   target by 10-14 pp, goal +1 winner-day of 27. The model now carries a
   `calibration` block, the bot logs `ml_floor_calibration` at load; readout
   ML-FLOOR-SHADOW (due 2026-10-21) decides.
-- **The live bot loads the ML model ONCE at start** (`_load_ml_model_payload`
-  caches it): a nightly retrain reaches the gate only at the next restart.
+- ML model hot reload (`ML_MODEL_HOT_RELOAD_ENABLED`, spec §8): until 2026-09-29
+  the bot loaded the model once per process, so the nightly retrain reached the
+  gate only at a restart. Now a changed, settled, complete `ml_signal_model.json`
+  replaces the model in use (checked every 60 s); event `ml_model_reload`. Readout
+  ML-HOT-RELOAD flags a blackout day (>= 85% of >= 50 candidates blocked by the ML
+  gate -- 08-20 was 88.6%, no other day since June above 79.1%).
 Flags: `L3_GOAL_VALIDATOR_ENABLED`, `INCIDENT_ANALYST_ENABLED`,
 `INCIDENT_ANALYST_LLM_ENABLED`, `READOUTS_ENABLED`, `READOUTS_LLM_SUMMARY_ENABLED`.
 
@@ -987,6 +991,7 @@ L3_EXIT_VALIDATOR_ENABLED = True              # L3 can test exit / leader-mode k
 TREND_SCOUT_AUTO_APPLY_REQUIRES_L3 = True     # scout edits config only on an L3 accept (2026-09-29)
 ML_PROMOTION_GATE_ENABLED = True              # nightly ML model replaces the live one unless clearly worse (ml_promotion_gate.py, 2026-09-29)
 ML_FLOOR_CALIBRATION_ENABLED = False          # per-model ML floor: SHADOW until readout ML-FLOOR-SHADOW (2026-09-29)
+ML_MODEL_HOT_RELOAD_ENABLED = True            # retrained ML model picked up without a restart (2026-09-29)
 ```
 
 ---

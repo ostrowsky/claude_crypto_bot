@@ -74,18 +74,83 @@ def _aux_notifications_enabled() -> bool:
     return bool(getattr(config, "SEND_AUX_NOTIFICATIONS", False))
 
 
+_ML_MODEL_MTIME: Optional[float] = None
+_ML_MODEL_CHECKED_AT: float = 0.0
+
+
+def _ml_payload_usable(payload) -> bool:
+    return isinstance(payload, dict) and "feature_names" in payload and "model" in payload
+
+
+def _maybe_reload_ml_model() -> None:
+    """Pick up a retrained model without a restart (2026-09-29, spec §8).
+
+    Until then the model was read ONCE per process, so the nightly retrain reached
+    the gate only at the next restart (the bot started 09-28 22:14 never used the
+    09-29 model). Checked at most every ML_MODEL_RELOAD_CHECK_SEC; a file younger
+    than ML_MODEL_RELOAD_MIN_AGE_SEC may still be being written and is left for the
+    next check; anything unreadable or incomplete keeps the model in use.
+    """
+    global _ML_MODEL_CACHE, _ML_MODEL_MTIME, _ML_MODEL_CHECKED_AT, _LABEL_VERSION_WARNED
+    if not getattr(config, "ML_MODEL_HOT_RELOAD_ENABLED", False):
+        return
+    now = time.monotonic()
+    if now - _ML_MODEL_CHECKED_AT < float(getattr(config, "ML_MODEL_RELOAD_CHECK_SEC", 60)):
+        return
+    _ML_MODEL_CHECKED_AT = now
+    try:
+        mt = _ML_MODEL_FILE.stat().st_mtime
+    except OSError:
+        return
+    if _ML_MODEL_MTIME is not None and mt == _ML_MODEL_MTIME:
+        return
+    if time.time() - mt < float(getattr(config, "ML_MODEL_RELOAD_MIN_AGE_SEC", 10)):
+        return
+    try:
+        payload = json.loads(_ML_MODEL_FILE.read_text(encoding="utf-8"))
+    except Exception as e:
+        log.warning("ML model reload skipped (unreadable, keeping the loaded model): %s", e)
+        return
+    if not _ml_payload_usable(payload):
+        log.warning("ML model reload skipped: file has no feature_names/model -- keeping the loaded model")
+        return
+    old = _ML_MODEL_CACHE or {}
+    _ML_MODEL_CACHE, _ML_MODEL_MTIME = payload, mt
+    _LABEL_VERSION_WARNED = False
+    try:
+        import ml_signal_model as _ms
+        _ms._CATBOOST_CACHE.clear()          # one booster per night must not accumulate
+    except Exception:
+        pass
+    log.info("ML model reloaded: %s -> %s (label %s)", old.get("model_name"), payload.get("model_name"),
+             payload.get("label_version"))
+    try:
+        botlog.log_ml_model_reload(old.get("model_name"), payload.get("model_name"),
+                                   payload.get("label_version"), float(mt))
+        botlog.log_ml_floor_calibration(
+            payload.get("model_name"), payload.get("label_version"), payload.get("calibration") or {},
+            float(getattr(config, "ML_GENERAL_HARD_BLOCK_MIN", 0.0)),
+            bool(getattr(config, "ML_FLOOR_CALIBRATION_ENABLED", False)))
+    except Exception:
+        pass
+
+
 def _load_ml_model_payload() -> dict:
-    global _ML_MODEL_CACHE
+    global _ML_MODEL_CACHE, _ML_MODEL_MTIME
     if _ML_MODEL_CACHE is not None:
+        _maybe_reload_ml_model()
         return _ML_MODEL_CACHE
+    try:
+        _ML_MODEL_MTIME = _ML_MODEL_FILE.stat().st_mtime
+    except OSError:
+        _ML_MODEL_MTIME = None
     try:
         payload = json.loads(_ML_MODEL_FILE.read_text(encoding="utf-8"))
         _ML_MODEL_CACHE = payload if isinstance(payload, dict) else {}
     except Exception:
         _ML_MODEL_CACHE = {}
     try:
-        # The model is loaded ONCE per process: a nightly retrain reaches the
-        # gate only at the next restart. Record which floor comes with it.
+        # Record which floor comes with the loaded model (reloads log it too).
         botlog.log_ml_floor_calibration(
             _ML_MODEL_CACHE.get("model_name"), _ML_MODEL_CACHE.get("label_version"),
             _ML_MODEL_CACHE.get("calibration") or {},

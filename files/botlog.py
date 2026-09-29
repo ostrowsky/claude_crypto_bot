@@ -219,6 +219,17 @@ def log_leader_exit_switch(sym: str, tf: str, price: float, reason: str, stop: f
     })
 
 
+def log_ml_model_reload(old_model, new_model, label_version, mtime: float) -> None:
+    """The live ML model was swapped without a restart (monitor._maybe_reload_ml_model)."""
+    _write({
+        "event": "ml_model_reload",
+        "old_model": old_model,
+        "new_model": new_model,
+        "label_version": label_version,
+        "file_mtime": mtime,
+    })
+
+
 def log_ml_floor_calibration(model_name, label_version, calibration: dict,
                               live_floor: float, enabled: bool) -> None:
     """The loaded ML model's calibrated floor, beside the floor the gate uses
