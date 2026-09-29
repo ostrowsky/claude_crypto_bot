@@ -305,6 +305,26 @@ def dispatch(hyp: dict) -> dict:
 # ---------------------------------------------------------------------------
 
 
+def record_rejection(hyp: dict, vr: dict) -> None:
+    """Remember an L3 reject in already_tried.jsonl (CLAUDE.md section 0: memory is mandatory).
+
+    Until 2026-09-29 L3 set status=rejected but wrote nothing to already_tried,
+    whose 30-day window is what stops L2 from proposing the same (rule,
+    config_key) again next week -- the last entry there was from 2026-06-26.
+    """
+    try:
+        PL.append_jsonl(PL.ALREADY_TRIED, {
+            "ts": PL.utc_now_iso(),
+            "rule": hyp.get("rule"),
+            "config_key": hyp.get("config_key"),
+            "stage": "rejected",
+            "hypothesis_id": hyp.get("hypothesis_id"),
+            "note": str(vr.get("reason") or "")[:300],
+        })
+    except Exception as e:  # memory must not break validation
+        print(f"[L3] already_tried write failed: {e}")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--hypothesis", help="hypothesis_id (looked up in .runtime/pipeline/hypotheses)")
@@ -344,6 +364,7 @@ def main():
         hyp["status"] = "validated"
     elif vr.get("verdict") == "reject":
         hyp["status"] = "rejected"
+        record_rejection(hyp, vr)
     else:
         hyp["status"] = "pending_validation"
     PL.write_json(hp, hyp)

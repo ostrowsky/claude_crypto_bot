@@ -157,6 +157,7 @@ Legend: ✅ done · 🟡 partial · ❌ not implemented · ⏸ deferred
 
 | ID | Component | Status | Tests | Notes |
 |----|-----------|--------|-------|-------|
+| L3-mem | Rejects remembered in `already_tried.jsonl` | ✅ | `test_l3_memory_and_chop.py` (5) | **2026-09-29:** L3 set `status=rejected` but never wrote the memory L2 filters by (last entry 2026-06-26), so a rejected (rule, key) could return next week. `record_rejection` now writes every reject. Spec: [`chop-bull-adx`](chop-bull-adx-spec.md) |
 | L3-a | `validate_entry_score_floor` (per-coin replay) | ✅ | — | the only fully wired validator |
 | L3-b | `validate_gate_threshold` (generic) | 🟡 | — | emits diagnostic only, no verdict |
 | L3-c | Universal Pareto sweep over any gate | 🟡 | — | **UNBLOCKED** (RM-1/RM-2 done; sweep proven on live data via `_backtest_blocked_breakdown.py`). Remaining: integrate as a formal L3 validator + close 740 `<none>` sites via branch-merge of c479a4c |
