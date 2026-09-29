@@ -1120,6 +1120,34 @@ def build_next_step_block(top_n: int = 5) -> str | None:
 # ---------------------------------------------------------------------------
 
 
+def build_agent_blocks(target_date: date) -> list[str]:
+    """Yesterday's winners (incident_analyst) and the open readouts (readouts).
+
+    Added 2026-09-29 (agent-tasks-0929-spec.md): the operator was finding lost
+    leaders by asking about single coins; these two blocks say it every morning.
+    Each is optional -- a missing file or a failure yields no block, never an error.
+    """
+    out = []
+    try:
+        import incident_analyst as IA
+        from datetime import timedelta as _td
+        p = IA.OUT_DIR / f"{(target_date - _td(days=1)).isoformat()}.json"
+        if p.exists():
+            b = IA.render_block(json.loads(p.read_text(encoding="utf-8")))
+            if b:
+                out.append(b)
+    except Exception as e:
+        print(f"[notify] incidents block skipped: {e}")
+    try:
+        import readouts as RO
+        b = RO.render_block(RO.load_latest(), today=target_date.isoformat())
+        if b:
+            out.append(b)
+    except Exception as e:
+        print(f"[notify] readouts block skipped: {e}")
+    return out
+
+
 def build_full_message(
     target_date: date,
     *,
@@ -1128,6 +1156,7 @@ def build_full_message(
     review_block: str | None | type = ...,
     incidents_block: str | None | type = ...,
     rollback_block: str | None | type = ...,
+    agent_blocks: list | None | type = ...,
 ) -> str | None:
     """Compose the final Telegram payload. Returns None if there's no health
     report (we don't send naked attribution blocks — they have no context).
@@ -1150,6 +1179,10 @@ def build_full_message(
     # emit only the compact next-step block.
     if review_block is ...:
         review_block = build_next_step_block()
+    if agent_blocks is ...:
+        agent_blocks = build_agent_blocks(target_date)
+    for b in agent_blocks or []:
+        parts += ["", b]
     if isinstance(incidents_block, str) and incidents_block:
         parts += ["", incidents_block]
     if isinstance(rollback_block, str) and rollback_block:

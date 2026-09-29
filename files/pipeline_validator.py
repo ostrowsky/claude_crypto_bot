@@ -268,6 +268,32 @@ PREFIX_VALIDATORS = [
 ]
 
 
+def _with_goal_verdict(hyp: dict, peak: dict) -> dict:
+    """Let the goal validator decide when it can replay the key (2026-09-29).
+
+    The peak replay grades a proxy (4h peak); the goal validator grades the
+    project's criterion -- winner-days entered before the +2.5% crossing plus
+    per-trade non-inferiority (agent-tasks-0929-spec.md). The peak result is kept
+    beside the verdict as secondary evidence. Rollback: L3_GOAL_VALIDATOR_ENABLED = False.
+    """
+    try:
+        import config as _cfg
+        if not getattr(_cfg, "L3_GOAL_VALIDATOR_ENABLED", False):
+            return peak
+        import pipeline_replay_validator as RV
+        if str(hyp.get("config_key") or "") not in RV.REPLAY_SPECS:
+            return peak                      # unvalidatable key: the peak reject stands
+        import goal_validator as GV
+        try:
+            goal = GV.validate(hyp)
+        except Exception as e:               # never lose the peak verdict to a crash
+            goal = {"error": repr(e)[:300]}
+        return GV.combine(goal, peak)
+    except Exception as e:
+        print(f"[L3] goal validator skipped: {e}")
+        return peak
+
+
 def dispatch(hyp: dict) -> dict:
     """Rule-name validators first; anything they cannot decide goes to the
     config_key replay validator.
@@ -293,6 +319,7 @@ def dispatch(hyp: dict) -> dict:
         return primary
     import pipeline_replay_validator as RV
     out = RV.validate(hyp)
+    out = _with_goal_verdict(hyp, out)
     if primary is not None:
         out["superseded"] = {"validator": primary.get("validator"),
                              "verdict": primary.get("verdict"),

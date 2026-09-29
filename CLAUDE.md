@@ -704,6 +704,32 @@ change applied since then came from manual analysis. Minimum fix: validate
 `config_key` against `config.py` at generation time and drop hypotheses whose key
 is unknown. Status report: `docs/reports/2026-08-05-roadmap-status.md`.
 
+### Improvement agent sees cases and is judged by the goal (2026-09-29)
+
+Before: L2 got aggregate red flags only and could propose nothing but "move a
+threshold" (all 3 proposals of 09-29 rejected, one on a 4-month-old premise); L3
+judged by a 4h-peak proxy; readouts of live changes lived in free-text one-off
+tasks. Now (spec `docs/specs/features/agent-tasks-0929-spec.md`):
+- `files/incident_analyst.py` (daily, before notify): for each of yesterday's
+  immutable top-20 on the watchlist, the FIRST place the bot lost it (bot down /
+  held / caught early / caught late / blocked + first gate / heartbeat stages) and
+  the exit; LLM only groups cases with ids, no remedies. Morning block "Лидеры".
+  First 4 days (09-25..28): 25 winner-days, caught before +2.5% 6 (24%), **late
+  17 (68%)**, blocked 1 — the dominant loss is late entry, not a gate.
+- `files/goal_validator.py` decides L3 for replayable keys: winner-days entered
+  before the +2.5% crossing + per-trade non-inferiority (-0.10 pp), maximum period;
+  the peak replay is kept beside it. Fixed in both validators: rows the gate never
+  judged (blocked later by impulse_guard) were counted as admitted — 9 of 46 rows
+  of the chop 22->20 hypothesis.
+- `files/readouts.py` + `files/readout_registry.json`: E-4, X-9c, leader alert read
+  out daily against pre-registered criteria (COLLECTING / TOO_EARLY / KEEP /
+  ROLLBACK_SUGGESTED / INCONCLUSIVE; ANOMALY at once). P-2 and positioning stay
+  Claude tasks.
+- L2 receives `incidents_14d`, must cite case_ids, writes unreachable losses to
+  `decisions/l2_gaps.jsonl`.
+Flags: `L3_GOAL_VALIDATOR_ENABLED`, `INCIDENT_ANALYST_ENABLED`,
+`INCIDENT_ANALYST_LLM_ENABLED`, `READOUTS_ENABLED`, `READOUTS_LLM_SUMMARY_ENABLED`.
+
 ### Morning report ignores downtime (2026-08-05, OPEN)
 
 The North Star metric is a 14-day window with no notion of the bot being down, so
@@ -930,6 +956,9 @@ TREND_15M_QUALITY_ZERO_FORECAST_AS_NO_DATA = True  # forecast 0.000 = no data, n
 LEADER_ALERT_ENABLED = True                   # info alert: coin held top-3 of the day 2h (69% end top-3), not a buy (2026-09-27)
 LEADER_EXIT_ENABLED = True                    # X-7b/X-9c: held coin top-5 of the day at +3% -> wide 8% trail, exit on losing top-10 (2026-09-28)
 COOLDOWN_PERSIST_ENABLED = True               # post-exit cooldowns survive a restart (.runtime/cooldowns.json) (2026-09-28)
+L3_GOAL_VALIDATOR_ENABLED = True              # L3 judged by the goal, not the 4h peak (goal_validator.py, 2026-09-29)
+INCIDENT_ANALYST_ENABLED = True               # daily: where each winner was lost (incident_analyst.py, 2026-09-29)
+READOUTS_ENABLED = True                       # pre-registered readouts of live changes (readouts.py, 2026-09-29)
 ```
 
 ---

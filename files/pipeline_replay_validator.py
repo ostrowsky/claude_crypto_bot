@@ -343,9 +343,15 @@ def validate(hyp: dict, since: str = "2026-01-01", cfg_module=None) -> dict:
                 # under the current value too -- stated in the spec's note
                 control.append(e)
             continue
-        if b_cur and not b_new:
+        # A relaxed row must be one this gate actually BLOCKED on the day, and a
+        # tightened one must have PASSED it. Without that, rows the gate never
+        # judged (an impulse candidate blocked later by impulse_guard carries
+        # ADX/slope/vol too) were replayed through the chop predicate and
+        # counted as "admitted by the new value": 9 of 46 rows for the
+        # 2026-09-29 chop hypothesis (agent-tasks-0929-spec.md).
+        if b_cur and not b_new and e["_blocked_here"]:
             relaxed_in.append(e)
-        elif b_new and not b_cur:
+        elif b_new and not b_cur and not e["_blocked_here"]:
             tightened_out.append(e)
         elif not b_cur:
             control.append(e)

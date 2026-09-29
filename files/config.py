@@ -1400,6 +1400,25 @@ LEADER_EXIT_FLOOR_PCT: float = 0.08
 LEADER_EXIT_LOST_RANK: int = 10
 LEADER_EXIT_LOST_MIN_BARS: int = 4
 LEADER_EXIT_MAX_HOLD_BARS: int = 672
+# Improvement agent, 2026-09-29 (agent-tasks-0929-spec.md). None of these
+# change a trading decision; they change what the agent sees and how it is judged.
+# L3 goal validator (goal_validator.py): a threshold hypothesis is judged by
+# winner-days entered before the +2.5% crossing + per-trade non-inferiority
+# (-0.10 pp) on the calibrated trail, not by the 4h peak proxy (kept beside it).
+# Rollback: False -> peak replay decides again.
+L3_GOAL_VALIDATOR_ENABLED: bool = True
+# Daily incident analyst (incident_analyst.py): where the bot lost each of
+# yesterday's immutable top-20 winners (bot down / not polled / no rule / gate X /
+# cooldown / entered late / exited early), with case ids; the LLM only groups the
+# cases (no remedies). L2 receives the 14-day roll-up. Rollback: False.
+INCIDENT_ANALYST_ENABLED: bool = True
+INCIDENT_ANALYST_LLM_ENABLED: bool = True
+INCIDENT_L2_WINDOW_DAYS: int = 14
+# Pre-registered readouts (readouts.py, readout_registry.json): each live change
+# is read out by code against criteria written before the data existed;
+# "too early" until the minimum comparable days exist. Rollback: False.
+READOUTS_ENABLED: bool = True
+READOUTS_LLM_SUMMARY_ENABLED: bool = True
 # H1 earliness (2026-06-29): scan-promote decoupled watchlist coins to attack the
 # silent-miss bucket (top-20 the bot never sees, ~23%). Backtest: silent-miss
 # top-20 flag 6x baseline + are MORE decoupled than entered winners. SHADOW first:

@@ -1,0 +1,88 @@
+{
+ "_about": "Pre-registered readouts of live changes (readouts.py, agent-tasks-0929-spec.md). Criteria are written BEFORE the data exists and are never edited after the window opens -- a revision is a new entry with a new id. Every expectation below is quoted from the spec named in 'spec'.",
+ "readouts": [
+  {
+   "id": "E-4",
+   "title": "trend_quality: forecast 0.000 treated as no data",
+   "kind": "computed",
+   "fn": "readout_e4",
+   "flag": "TREND_15M_QUALITY_ZERO_FORECAST_AS_NO_DATA",
+   "switched_on_utc": "2026-09-25T20:10:00Z",
+   "window_from": "2026-09-26",
+   "due": "2026-10-09",
+   "min_days": 14,
+   "min_trades": 5,
+   "spec": "docs/specs/features/p0-validation-0925-spec.md",
+   "expected": {"goal_before_pct": 11.0, "goal_expected_pct": 14.0, "goal_upper_pct": 18.8, "downstream_p": "0.24..0.42"},
+   "criteria": {
+    "keep": "combined (all 15m trend entries) minus the non-relaxed ones: lower 95% >= -0.10 pp AND at least one relaxed entry before a winner's +2.5% crossing",
+    "rollback": "upper 95% of the same difference < -0.10 pp",
+    "otherwise": "inconclusive"
+   },
+   "rollback": "TREND_15M_QUALITY_ZERO_FORECAST_AS_NO_DATA = False + restart"
+  },
+  {
+   "id": "X-9c",
+   "title": "leader exit mode, top-5 of the day at +3%",
+   "kind": "computed",
+   "fn": "readout_leader_exit",
+   "flag": "LEADER_EXIT_ENABLED",
+   "switched_on_utc": "2026-09-28T10:08:00Z",
+   "window_from": "2026-09-29",
+   "due": "2026-10-12",
+   "min_days": 14,
+   "min_trades": 10,
+   "spec": "docs/specs/features/leader-exit-x6-spec.md",
+   "expected": {"switched_share_of_15m_trades": 0.256, "rocket_day_mean_trade_pct": 3.3, "old_exit_rocket_day_mean_pct": 1.70},
+   "criteria": {
+    "anomaly": "any 1h position switched, a position switched twice, or a switched position without an exit after 7 days + 1 day",
+    "keep": "no anomaly AND mean pnl of 15m trades on rocket-days >= +1.70% (the old exits' backtest level) with n >= min_trades",
+    "rollback": "anomaly, OR upper 95% of the rocket-day mean < +1.70%",
+    "otherwise": "inconclusive"
+   },
+   "rollback": "LEADER_EXIT_RANK_MAX / MIN_RET back to 3 / 0.05 (X-7b), or LEADER_EXIT_ENABLED = False; restart"
+  },
+  {
+   "id": "LEADER-ALERT",
+   "title": "leader of the day info alert, hit rate",
+   "kind": "computed",
+   "fn": "readout_leader_alert",
+   "flag": "LEADER_ALERT_ENABLED",
+   "switched_on_utc": "2026-09-27T10:50:00Z",
+   "window_from": "2026-09-28",
+   "due": "2026-10-18",
+   "min_days": 14,
+   "min_trades": 10,
+   "spec": "docs/specs/features/leader-alert-spec.md",
+   "expected": {"top3_watchlist_hit": 0.69, "global_top20_hit": 0.77},
+   "criteria": {
+    "keep": "Wilson 95% upper bound of the watchlist top-3 hit rate >= 0.69 (not shown worse than the backtest)",
+    "rollback": "Wilson 95% upper bound < 0.69",
+    "otherwise": "inconclusive"
+   },
+   "rollback": "LEADER_ALERT_ENABLED = False + restart"
+  },
+  {
+   "id": "P-2",
+   "title": "poll heartbeat: split the 'rule fired, no candidate' bucket",
+   "kind": "delegated",
+   "scheduled_task": "crypto-bot-check-poll-heartbeat",
+   "window_from": "2026-09-26",
+   "due": "2026-10-02",
+   "min_days": 7,
+   "spec": "docs/specs/features/poll-heartbeat-spec.md",
+   "criteria": {"keep": ">= 90% of the bucket explained (research readout by the scheduled Claude task)"}
+  },
+  {
+   "id": "LEADER-POSITIONING",
+   "title": "leader + derivatives positioning",
+   "kind": "delegated",
+   "scheduled_task": "crypto-bot-leader-positioning-test",
+   "window_from": "2026-08-21",
+   "due": "2026-10-18",
+   "min_days": 45,
+   "spec": "docs/specs/features/leader-mode-spec.md",
+   "criteria": {"keep": "a train-chosen rule holds on the time-split test (research readout by the scheduled Claude task)"}
+  }
+ ]
+}

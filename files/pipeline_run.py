@@ -141,6 +141,12 @@ def main():
     # Skips silently for fresh decisions ("needs_data" verdict).
     results.append(run_step("attribution", [py, f"{files}/pipeline_attribution.py", "--all-due", "--days-after", "14"]))
 
+    # Improvement agent, 2026-09-29 (agent-tasks-0929-spec.md): where the bot
+    # lost yesterday's winners, and the pre-registered readouts of live changes.
+    # Both before notify, which prints them. Each honours its own flag.
+    results.append(run_step("incidents", [py, f"{files}/incident_analyst.py"], timeout=600))
+    results.append(run_step("readouts", [py, f"{files}/readouts.py"], timeout=900))
+
     # Telegram delivery — sends today's L1 health.tg.txt + brief attribution
     # block. Idempotent by day via tg_send_dedup.json. Silently no-ops if
     # token/chat_ids/health report are missing — never blocks the orchestrator.

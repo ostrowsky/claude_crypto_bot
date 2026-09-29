@@ -336,6 +336,17 @@ Rules you MUST follow:
     as unvalidatable -- the event log does not record what it is compared
     against, so no replay can test it. Keys that do not exist in config.py are
     dropped before L3 ever sees them.
+10. incidents_14d is the primary evidence: for each of the last days' top-20
+    winners it records the FIRST place the bot lost it (stage), the gate or the
+    rule reasons, and the exit. Target the stage that loses the most winner-days
+    and cite the case_ids your hypothesis would have changed. A hypothesis with
+    no case it would have changed is not worth proposing.
+11. L3 judges by the goal: share of winner-days entered BEFORE the first +2.5%
+    crossing, plus per-trade non-inferiority (-0.10 pp) over the maximum
+    period. A change that only raises a 4h price peak will be rejected.
+12. If incidents_14d shows the dominant loss is outside validatable_config_keys
+    (entered late, exit, no rule fired), say so in "gaps" instead of forcing a
+    threshold change.
 """
 
 _CLAUDE_SCHEMA_HINT = (
@@ -343,7 +354,8 @@ _CLAUDE_SCHEMA_HINT = (
     '"diff": {"from": number|str, "to": number|str}, '
     '"rationale": str, "expected_delta": {metric_name: "lo..hi"}, '
     '"risk": str, "rollback": str, '
-    '"validation_required": [str], "source_flag": str}]}'
+    '"validation_required": [str], "source_flag": str, "case_ids": [str]}], '
+    '"gaps": [str]}'
 )
 
 
@@ -354,6 +366,18 @@ def _validatable_with_values() -> dict:
         import pipeline_replay_validator as RV
         return {k: getattr(_cfg, k) for k in RV.validatable_keys() if hasattr(_cfg, k)}
     except Exception:
+        return {}
+
+
+def _incidents_rollup() -> dict:
+    try:
+        import config as _cfg
+        if not getattr(_cfg, "INCIDENT_ANALYST_ENABLED", False):
+            return {}
+        import incident_analyst as IA
+        return IA.rollup(days=int(getattr(_cfg, "INCIDENT_L2_WINDOW_DAYS", 14)))
+    except Exception as e:
+        print(f"[L2] incidents roll-up unavailable: {e}")
         return {}
 
 
@@ -399,6 +423,9 @@ def _claude_augment(
         # Added 2026-09-18: without this, L2 proposed keys L3 had no way to
         # test and the queue never drained (11 weeks, 0 automatic verdicts).
         "validatable_config_keys": _validatable_with_values(),
+        # Added 2026-09-29: concrete cases, not only aggregate flags
+        # (agent-tasks-0929-spec.md). {} when the analyst is off or has no reports.
+        "incidents_14d": _incidents_rollup(),
     }
 
     res = CC.call_claude_json(
@@ -415,6 +442,15 @@ def _claude_augment(
     raw = res.get("hypotheses") or []
     if not isinstance(raw, list):
         return []
+    gaps = res.get("gaps")
+    if isinstance(gaps, list) and gaps:
+        # the agent's statement of where the loss is that no key can reach --
+        # kept, because "nothing validatable fixes this" is a finding (TH-08)
+        try:
+            PL.append_jsonl(PL.DECISIONS_DIR / "l2_gaps.jsonl",
+                            {"ts": PL.utc_now_iso(), "gaps": [str(g)[:300] for g in gaps[:5]]})
+        except Exception as e:
+            print(f"[L2] gaps not recorded: {e}")
 
     out = []
     for item in raw[:3]:
@@ -433,6 +469,8 @@ def _claude_augment(
         item["generator"] = "claude"
         item.setdefault("expected_delta", {})
         item.setdefault("validation_required", ["backtest_60d_pareto_sweep"])
+        if isinstance(item.get("case_ids"), list):
+            item["case_ids"] = [str(c) for c in item["case_ids"]][:20]
         out.append(item)
     return out
 
