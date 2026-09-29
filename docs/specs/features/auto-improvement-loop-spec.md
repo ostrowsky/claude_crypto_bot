@@ -145,8 +145,8 @@ Legend: ✅ done · 🟡 partial · ❌ not implemented · ⏸ deferred
 |----|-----------|--------|-------|-------|
 | L2-a | Rule-based: `entry_score_floor_relax` | ✅ | — | `rule_entry_score_floor` |
 | L2-b | Rule-based: `tighten_proba_<mode>` | ✅ | — | `rule_losing_mode_disable` (misnamed; produces tighten) |
-| L2-c | Rule-based: `relax_gate_<gate>` | ✅ | — | `rule_overblock_gate` |
-| L2-d | Claude augmentation (≤3 extra hypotheses) | ✅ | — | gated by `pipeline_claude_client.is_enabled()` |
+| L2-c | Rule-based: `relax_gate_<gate>` | ✅ | `test_gate_activity.py` (6) | `rule_overblock_gate`. **2026-09-29:** the over-block red flag (L1 RF5) and L2 now require the gate to have blocked something in the last 14 days (`PL.recently_active_gates`) — the scout reads the whole critic history, so `entry_score` (0 blocks since June) kept a daily flag from 2 475 March–May rows and L2 built three hypotheses on it. Spec: [`gate-activity-overblock`](gate-activity-overblock-spec.md) |
+| L2-d | Claude augmentation (≤3 extra hypotheses) | ✅ | — | gated by `pipeline_claude_client.is_enabled()`. **2026-09-29:** silent 30.08–27.09 (credit balance exhausted); after the top-up a manual run generated 3 (L3: 2 rejected, 1 needs_review) |
 | L2-e | already_tried 30d cooldown | ✅ | — | `filter_already_tried()` |
 | L2-f | do_not_touch enforcement | ✅ | — | `filter_locked_keys()` |
 | L2-g | Incident → severity bump (premature/losers/missed) | ✅ | indirect | `_attach_incident_evidence()` |

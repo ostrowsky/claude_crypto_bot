@@ -133,5 +133,60 @@ def load_do_not_touch() -> dict:
     return d
 
 
+GATE_ACTIVE_DAYS = 14
+
+
+def recently_active_gates(days: int = GATE_ACTIVE_DAYS, events_path: "Path | None" = None,
+                          now: "datetime | None" = None) -> "set[str] | None":
+    """Gate names that blocked at least one candidate in the last `days` days.
+
+    Read from bot_events.jsonl (every blocked event's reason_code AND signal_type,
+    so both naming schemes match). Returns None when the log cannot be read --
+    callers then keep their old behaviour instead of silently dropping flags.
+
+    Why (2026-09-29): the over-blocking scout reads the WHOLE critic dataset, so
+    the entry_score gate -- which has blocked nothing since June (soft gate) --
+    kept a daily "over-blocks" red flag from 2 475 March-May rows, and the L2 agent
+    built hypotheses on it.
+    """
+    import re as _re
+    from datetime import timedelta as _td
+    path = Path(events_path) if events_path else FILES_DIR / "bot_events.jsonl"
+    now = now or datetime.now(timezone.utc)
+    cutoff = (now - _td(days=days)).strftime("%Y-%m-%dT%H:%M:%S")
+    ts_re = _re.compile(rb'"ts":\s*"([^"]+)"')
+    active: set = set()
+    try:
+        with open(path, "rb") as fh:
+            for raw in fh:
+                if b'"blocked"' not in raw:
+                    continue
+                m = ts_re.search(raw)
+                if not m or m.group(1).decode("ascii", "replace")[:19] < cutoff:
+                    continue
+                try:
+                    e = json.loads(raw.decode("utf-8", "replace"))
+                except Exception:
+                    continue
+                if e.get("event") != "blocked":
+                    continue
+                for k in ("reason_code", "signal_type"):
+                    v = e.get(k)
+                    if v:
+                        active.add(str(v))
+    except OSError:
+        return None
+    return active
+
+
+def active_over_blockers(over_blocking: list, active: "set[str] | None") -> tuple:
+    """Split scout over-blocking rows into (active, inactive) by recent gate activity."""
+    if active is None:
+        return list(over_blocking), []
+    keep = [ob for ob in over_blocking if ob.get("gate") in active]
+    drop = [ob for ob in over_blocking if ob.get("gate") not in active]
+    return keep, drop
+
+
 def load_already_tried() -> list[dict]:
     return list(iter_jsonl(ALREADY_TRIED))

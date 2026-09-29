@@ -815,7 +815,13 @@ def detect_red_flags(deploy: dict, per_mode: dict, gap: dict, scout: dict,
 
     # RF5 — Over-blocking gates (skip if in do_not_touch)
     dnt_gates = {g["name"] for g in PL.load_do_not_touch().get("gates", [])}
-    for ob in (scout.get("over_blocking") or []):
+    # A gate that blocked nothing in the last PL.GATE_ACTIVE_DAYS cannot over-block
+    # now; the scout's table covers the whole critic history (entry_score: 2 475
+    # March-May rows, zero blocks since June). 2026-09-29.
+    _obs, _inactive = PL.active_over_blockers(scout.get("over_blocking") or [], PL.recently_active_gates())
+    if _inactive:
+        scout["inactive_over_blocking"] = [ob["gate"] for ob in _inactive]
+    for ob in _obs:
         if ob["gate"] in dnt_gates:
             continue  # protected
         if ob["sharpe"] >= 2.0 and ob["miss_pct"] >= 0.10:

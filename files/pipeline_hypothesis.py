@@ -142,6 +142,24 @@ def load_recent_health(window_days: int, until: date) -> list[dict]:
     return out
 
 
+def drop_inactive_overblock_flags(aggs: dict, active) -> tuple:
+    """Remove RF_overblock_<gate> flags whose gate blocked nothing recently.
+
+    The health reports of the last N days may still carry a flag computed before
+    the gate-activity check existed (entry_score, 2026-09-29), so L2 filters too.
+    """
+    if active is None:
+        return aggs, []
+    stale = []
+    out = {}
+    for rid, a in aggs.items():
+        if rid.startswith("RF_overblock_") and rid[len("RF_overblock_"):] not in active:
+            stale.append(rid[len("RF_overblock_"):])
+            continue
+        out[rid] = a
+    return out, sorted(stale)
+
+
 def aggregate_red_flags(reports: list[dict]) -> dict[str, dict]:
     """Group red_flags by id. Track:
        - days_red: how many days the flag was red/critical
@@ -522,6 +540,9 @@ def main():
         return
 
     aggs = aggregate_red_flags(reports)
+    aggs, stale = drop_inactive_overblock_flags(aggs, PL.recently_active_gates())
+    if stale:
+        print(f"[L2] dropped over-block flag(s) of gate(s) with no block in {PL.GATE_ACTIVE_DAYS}d: {', '.join(stale)}")
     rule_hyps = apply_rules(aggs)
 
     claude_hyps: list[dict] = []
