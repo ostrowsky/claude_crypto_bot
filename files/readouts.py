@@ -288,8 +288,92 @@ def readout_delegated(r: dict, ctx: dict) -> dict:
     return out
 
 
+def _peak_label(sym, tf, dt, price, bars_ahead, thr_pct):
+    """1/0: did the high reach +thr_pct within `bars_ahead` bars after the decision bar."""
+    import goal_validator as GV
+    import pipeline_replay_validator as RV
+    if tf not in GV.STEP or not price:
+        return None
+    bars, idx = RV._bars(sym, tf)
+    i = idx.get(GV.bar_open(dt, tf) - GV.STEP[tf])
+    if i is None or i + bars_ahead >= len(bars):
+        return None
+    hi = max(b[2] for b in bars[i + 1: i + 1 + bars_ahead])
+    return 1.0 if (hi / float(price) - 1) * 100 >= thr_pct else 0.0
+
+
+def readout_ml_floor_shadow(r: dict, ctx: dict) -> dict:
+    """Per-model ML floor in SHADOW vs the fixed floor, on the bot's own candidates.
+
+    Rows: every candidate that reached the ML gate (blocked there, blocked later, or
+    entered), deduplicated per coin-hour, with its logged ml_proba. The calibrated
+    floor of a row is the one logged at the last model load before it.
+    """
+    import pipeline_replay_validator as RV
+    import config as cfg
+    evs = scan_events(r["window_from"], {"ml_floor_calibration", "blocked", "entry"})
+    cals = sorted((e["_dt"], float(e["calibrated_floor"]), float(e.get("live_floor") or 0.0)) for e in evs
+                  if e["event"] == "ml_floor_calibration" and isinstance(e.get("calibrated_floor"), (int, float)))
+    if not cals:
+        return {"days": 0, "note": "no model with a calibrated floor has been loaded yet", "_n_trades": 0}
+    first = cals[0][0]
+    days = set(d for d in ctx["days"] if d >= first.strftime("%Y-%m-%d"))
+    horizon = int(getattr(cfg, "ML_PEAK_LABEL_HORIZON", 5))
+    thr = float(getattr(cfg, "ML_PEAK_LABEL_THRESHOLD_PCT", 2.0))
+    seen, rows = set(), []
+    for e in evs:
+        if e["event"] == "ml_floor_calibration" or e["_dt"] < first or e["ts"][:10] not in days:
+            continue
+        g = RV._gate_of(e)
+        if g != "ENTRY" and RV.STAGE.get(g, 0) < 1:
+            continue                                   # stopped before the ML gate
+        p = e.get("ml_proba")
+        if not isinstance(p, (int, float)) or not e.get("sym"):
+            continue
+        k = (e["sym"], e["_dt"].replace(minute=0, second=0, microsecond=0))
+        if k in seen:
+            continue
+        seen.add(k)
+        cal = [c for c in cals if c[0] <= e["_dt"]][-1]
+        y = _peak_label(e["sym"], str(e.get("tf") or ""), e["_dt"], e.get("price"), horizon, thr)
+        rows.append({"sym": e["sym"], "dt": e["_dt"], "p": float(p), "cal": cal[1], "fixed": cal[2], "y": y})
+
+    def st(key):
+        lab = [x for x in rows if x["y"] is not None]
+        adm = [x for x in lab if x["p"] >= x[key]]
+        pos = [x for x in lab if x["y"] > 0.5]
+        tp = sum(1 for x in adm if x["y"] > 0.5)
+        return {"admitted_share": round(len(adm) / len(lab), 3) if lab else None,
+                "recall": round(tp / len(pos), 3) if pos else None,
+                "precision": round(tp / len(adm), 3) if adm else None, "rows": len(lab)}
+    import goal_validator as GV
+    W = [w for w in GV.winner_days(min(days), set(days)) if w[0] in days] if days else []
+    reach = {"fixed": 0, "cal": 0}
+    has = 0
+    for day, sym, op, dd in W:
+        pre = [x for x in rows if x["sym"] == sym and op <= x["dt"] < dd]
+        if not pre:
+            continue
+        has += 1
+        for key in reach:
+            reach[key] += any(x["p"] >= x[key] for x in pre)
+    fixed, cal = st("fixed"), st("cal")
+    out = {"days": len(days), "model_loads": len(cals), "calibrated_floors": sorted({round(c[1], 4) for c in cals}),
+           "fixed_floor": fixed, "calibrated_floor": cal,
+           "winner_days_with_candidate": has, "reached_fixed": reach["fixed"], "reached_calibrated": reach["cal"],
+           "base_rate": round(sum(1 for x in rows if x["y"]) / max(1, sum(1 for x in rows if x["y"] is not None)), 3)}
+    out["_n_trades"] = fixed["rows"]
+    if reach["cal"] < reach["fixed"]:
+        out["_verdict"] = "ROLLBACK_SUGGESTED"
+    elif (cal["precision"] or 0) >= (fixed["precision"] or 0):
+        out["_verdict"] = "KEEP"
+    else:
+        out["_verdict"] = "INCONCLUSIVE"
+    return out
+
+
 FNS = {"readout_e4": readout_e4, "readout_leader_exit": readout_leader_exit,
-       "readout_leader_alert": readout_leader_alert}
+       "readout_leader_alert": readout_leader_alert, "readout_ml_floor_shadow": readout_ml_floor_shadow}
 
 
 # ---------------------------------------------------------------- runner

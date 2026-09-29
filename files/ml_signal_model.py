@@ -746,6 +746,43 @@ def predict_proba_from_payload(payload: dict, rec: dict) -> float:
     raise ValueError(f"Unsupported model type: {model['type']}")
 
 
+def calibrate_floor(y, scores, target_recall: float) -> float:
+    """The score at which a model admits `target_recall` of the positive rows.
+
+    2026-09-29 (agent-tasks-0929-spec.md §7): the live ML floor was a fixed
+    number while each nightly model has its own score scale -- the 08-20
+    blackout and the 09-29 candidate that admitted 82% instead of 62% are the
+    same defect. The floor is therefore expressed as an operating point ("let
+    through R of the future movers") and converted to a score per model, on
+    rows the model did not train on. Returns 0.0 when there are no positives.
+    """
+    pos = sorted(float(s) for s, t in zip(scores, y) if float(t) > 0.5)
+    if not pos:
+        return 0.0
+    k = int((1.0 - float(target_recall)) * len(pos))
+    k = max(0, min(len(pos) - 1, k))
+    return pos[k]
+
+
+def _calibration_block(y_test, test_score) -> dict:
+    """Calibrated floor of the chosen model on its own test rows (never trained on)."""
+    try:
+        import config as _c
+        target = float(getattr(_c, "ML_FLOOR_TARGET_RECALL", 0.80))
+    except Exception:
+        target = 0.80
+    y = [float(v) for v in y_test]
+    s = [float(v) for v in test_score]
+    fl = calibrate_floor(y, s, target)
+    adm = [v >= fl for v in s]
+    tp = sum(1 for a, t in zip(adm, y) if a and t > 0.5)
+    return {"target_recall": target, "floor": round(fl, 6), "rows": len(y),
+            "positives": int(sum(1 for t in y if t > 0.5)),
+            "admitted_share": round(sum(adm) / len(y), 4) if y else None,
+            "precision": round(tp / sum(adm), 4) if any(adm) else None,
+            "grid": {("%.2f" % r): round(calibrate_floor(y, s, r), 6) for r in (0.80, 0.85, 0.90, 0.95)}}
+
+
 def roc_auc_score_np(y_true: np.ndarray, y_score: np.ndarray) -> Optional[float]:
     y_true = np.asarray(y_true, dtype=float)
     y_score = np.asarray(y_score, dtype=float)
@@ -1095,6 +1132,7 @@ def train_and_evaluate(
 
     best_model = models[best_name]
     test_score = best_model.predict_proba(X_test)
+    calibration = _calibration_block(bundle.y_test, test_score)
     baseline = rule_baseline_metrics(bundle.r_test, bundle.y_test)
     filtered = evaluate_predictions(bundle.y_test, test_score, bundle.r_test, best_threshold)
     importances = permutation_importance(
@@ -1114,6 +1152,9 @@ def train_and_evaluate(
         "threshold": best_threshold,
         "positive_ret_threshold": positive_ret_threshold,
         "model": best_model.to_dict(),
+        # SHADOW since 2026-09-29: the live gate still uses the fixed config floor
+        # unless ML_FLOOR_CALIBRATION_ENABLED (agent-tasks-0929-spec.md §7)
+        "calibration": calibration,
     }
 
     suggestions = build_improvement_hints(rows, importances)
@@ -1318,6 +1359,17 @@ def main() -> None:
         cand = args.model_out.with_name(args.model_out.stem + ".candidate.json")
         save_json(cand, payload)
         print(f"[ml] incumbent kept; candidate saved to {cand}")
+        # the kept model gets its calibrated floor re-measured on tonight's
+        # held-out rows (it never trained on them), so the shadow floor stays
+        # current even while the incumbent is kept (agent-tasks-0929-spec.md §7)
+        try:
+            inc = json.loads(args.model_out.read_text(encoding="utf-8"))
+            s_inc = [predict_proba_from_payload(inc, r) for r in holdout["rows"]]
+            inc["calibration"] = _calibration_block(holdout["y"], s_inc)
+            save_json(args.model_out, inc)
+            print("[ml] incumbent calibration refreshed: floor %s" % inc["calibration"].get("floor"))
+        except Exception as e:
+            print(f"[ml] incumbent calibration not refreshed: {e!r}")
     save_json(args.report_out, {k: v for k, v in report.items() if k != "model_payload"})
 
     if args.as_json:

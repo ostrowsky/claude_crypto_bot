@@ -83,6 +83,31 @@
    "min_days": 45,
    "spec": "docs/specs/features/leader-mode-spec.md",
    "criteria": {"keep": "a train-chosen rule holds on the time-split test (research readout by the scheduled Claude task)"}
+  },
+  {
+   "id": "ML-FLOOR-SHADOW",
+   "title": "per-model ML floor in shadow (KEEP = switch it on, ROLLBACK = keep the fixed floor)",
+   "kind": "computed",
+   "fn": "readout_ml_floor_shadow",
+   "flag": "ML_FLOOR_CALIBRATION_ENABLED",
+   "switched_on_utc": "2026-09-30T00:00:00Z",
+   "window_from": "2026-09-30",
+   "due": "2026-10-21",
+   "min_days": 14,
+   "min_trades": 100,
+   "spec": "docs/specs/features/agent-tasks-0929-spec.md",
+   "expected": {
+    "walk_forward_precision_fixed": 0.284,
+    "walk_forward_precision_calibrated": 0.301,
+    "walk_forward_reach_fixed": "17/27",
+    "walk_forward_reach_calibrated": "18/27"
+   },
+   "criteria": {
+    "keep": "switch ML_FLOOR_CALIBRATION_ENABLED on: winner-days reached with the calibrated floor >= with the fixed floor AND precision at the calibrated floor >= at the fixed floor",
+    "rollback": "the calibrated floor reaches fewer winner-days than the fixed floor -> the fixed floor stays",
+    "otherwise": "inconclusive -> the fixed floor stays"
+   },
+   "rollback": "nothing to undo while in shadow; after a switch: ML_FLOOR_CALIBRATION_ENABLED = False + restart"
   }
  ]
 }

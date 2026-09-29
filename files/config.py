@@ -1434,6 +1434,17 @@ TREND_SCOUT_AUTO_APPLY_REQUIRES_L3: bool = True
 # bound < 0) on AUC, recall or precision at the live floor, on rows neither model
 # trained on (ml_promotion_gate.py). Rollback: False -> overwrite every night.
 ML_PROMOTION_GATE_ENABLED: bool = True
+# Per-model ML floor (agent-tasks-0929-spec.md §7). The trainer stores in the model
+# the score at which it admits ML_FLOOR_TARGET_RECALL of peak-label movers on its
+# own held-out rows; the bot logs it at model load (event ml_floor_calibration).
+# SHADOW: walk-forward over 4 folds did NOT show the premise -- the fixed 0.15 kept
+# recall at 0.80-0.86 while calibrated floors missed their target by 10-14 pp, and
+# the goal gain (18/27 vs 17/27 winner-days) is one day. Readout ML-FLOOR-SHADOW
+# decides. Live switch: ML_FLOOR_CALIBRATION_ENABLED = True (then restart).
+ML_FLOOR_CALIBRATION_ENABLED: bool = False
+ML_FLOOR_TARGET_RECALL: float = 0.80        # chosen by the pre-registered walk-forward rule
+ML_FLOOR_CALIBRATED_MIN: float = 0.02       # clamps: a calibrated floor never blacks out
+ML_FLOOR_CALIBRATED_MAX: float = 0.60       # or opens the gate completely
 # H1 earliness (2026-06-29): scan-promote decoupled watchlist coins to attack the
 # silent-miss bucket (top-20 the bot never sees, ~23%). Backtest: silent-miss
 # top-20 flag 6x baseline + are MORE decoupled than entered winners. SHADOW first:

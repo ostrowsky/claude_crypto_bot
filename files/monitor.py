@@ -83,7 +83,28 @@ def _load_ml_model_payload() -> dict:
         _ML_MODEL_CACHE = payload if isinstance(payload, dict) else {}
     except Exception:
         _ML_MODEL_CACHE = {}
+    try:
+        # The model is loaded ONCE per process: a nightly retrain reaches the
+        # gate only at the next restart. Record which floor comes with it.
+        botlog.log_ml_floor_calibration(
+            _ML_MODEL_CACHE.get("model_name"), _ML_MODEL_CACHE.get("label_version"),
+            _ML_MODEL_CACHE.get("calibration") or {},
+            float(getattr(config, "ML_GENERAL_HARD_BLOCK_MIN", 0.0)),
+            bool(getattr(config, "ML_FLOOR_CALIBRATION_ENABLED", False)))
+    except Exception:
+        pass
     return _ML_MODEL_CACHE
+
+
+def _ml_floor_calibrated() -> Optional[float]:
+    """The loaded model's calibrated floor, clamped; None if it has none."""
+    cal = (_load_ml_model_payload() or {}).get("calibration") or {}
+    f = cal.get("floor")
+    if not isinstance(f, (int, float)) or isinstance(f, bool):
+        return None
+    lo = float(getattr(config, "ML_FLOOR_CALIBRATED_MIN", 0.02))
+    hi = float(getattr(config, "ML_FLOOR_CALIBRATED_MAX", 0.60))
+    return min(hi, max(lo, float(f)))
 
 
 def _load_ml_segment_payloads() -> dict:
@@ -4428,6 +4449,11 @@ async def _poll_coin(
                         _min = float(getattr(config, "ML_GENERAL_HARD_BLOCK_BULL_DAY_MIN", 0.28))
                     else:
                         _min = float(getattr(config, "ML_GENERAL_HARD_BLOCK_MIN", 0.35))
+                    if getattr(config, "ML_FLOOR_CALIBRATION_ENABLED", False):
+                        # per-model floor (agent-tasks-0929-spec.md §7); off = fixed floor
+                        _cal = _ml_floor_calibrated()
+                        if _cal is not None:
+                            _min = _cal
                     _max = float(getattr(config, "ML_GENERAL_HARD_BLOCK_MAX", 1.01))
                     if ml_proba < _min or ml_proba > _max:
                         reason = f"ML proba {ml_proba:.3f} outside profitable zone [{_min:.2f},{_max:.2f}]"

@@ -743,6 +743,14 @@ tasks. Now (spec `docs/specs/features/agent-tasks-0929-spec.md`):
   0.661 -> 0.673, but admitted 62% -> 82% (score scale moved against the fixed 0.15
   floor), precision 0.308 -> 0.271 -> incumbent kept. Precision was added after that
   run (stated in the spec). Open defect: the floor is not calibrated per model.
+- Per-model ML floor, SHADOW (`ML_FLOOR_CALIBRATION_ENABLED = False`,
+  `ML_FLOOR_TARGET_RECALL = 0.80`): walk-forward (4 folds, 5 800 rows) did NOT
+  support it -- fixed 0.15 kept recall 0.80-0.86, calibrated floors missed their
+  target by 10-14 pp, goal +1 winner-day of 27. The model now carries a
+  `calibration` block, the bot logs `ml_floor_calibration` at load; readout
+  ML-FLOOR-SHADOW (due 2026-10-21) decides.
+- **The live bot loads the ML model ONCE at start** (`_load_ml_model_payload`
+  caches it): a nightly retrain reaches the gate only at the next restart.
 Flags: `L3_GOAL_VALIDATOR_ENABLED`, `INCIDENT_ANALYST_ENABLED`,
 `INCIDENT_ANALYST_LLM_ENABLED`, `READOUTS_ENABLED`, `READOUTS_LLM_SUMMARY_ENABLED`.
 
@@ -978,6 +986,7 @@ READOUTS_ENABLED = True                       # pre-registered readouts of live 
 L3_EXIT_VALIDATOR_ENABLED = True              # L3 can test exit / leader-mode keys (exit_validator.py, 2026-09-29)
 TREND_SCOUT_AUTO_APPLY_REQUIRES_L3 = True     # scout edits config only on an L3 accept (2026-09-29)
 ML_PROMOTION_GATE_ENABLED = True              # nightly ML model replaces the live one unless clearly worse (ml_promotion_gate.py, 2026-09-29)
+ML_FLOOR_CALIBRATION_ENABLED = False          # per-model ML floor: SHADOW until readout ML-FLOOR-SHADOW (2026-09-29)
 ```
 
 ---

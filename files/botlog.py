@@ -219,6 +219,23 @@ def log_leader_exit_switch(sym: str, tf: str, price: float, reason: str, stop: f
     })
 
 
+def log_ml_floor_calibration(model_name, label_version, calibration: dict,
+                              live_floor: float, enabled: bool) -> None:
+    """The loaded ML model's calibrated floor, beside the floor the gate uses
+    (agent-tasks-0929-spec.md §7). One event per model load; the shadow readout
+    replays the calibrated floor on every candidate's logged ml_proba."""
+    _write({
+        "event": "ml_floor_calibration",
+        "model": model_name,
+        "label_version": label_version,
+        "calibrated_floor": (calibration or {}).get("floor"),
+        "target_recall": (calibration or {}).get("target_recall"),
+        "calibration": calibration or {},
+        "live_floor": live_floor,
+        "calibrated_floor_live": bool(enabled),
+    })
+
+
 def log_leader_alert(sym: str, price: float, rank: int, ret: float, hold_bars: int,
                      bar_ts: int, n_ranked: int) -> None:
     """Info alert "leader of the day" (leader_alert.py) -- not a buy signal.
