@@ -294,6 +294,27 @@ def _with_goal_verdict(hyp: dict, peak: dict) -> dict:
         return peak
 
 
+def _exit_verdict(hyp: dict) -> dict | None:
+    """Exit / leader-mode keys go to exit_validator (2026-09-29, task 3).
+
+    Until then no exit key had a replay, so L2 was never offered one and the exit
+    side -- where the bot keeps ~8% of a rocket's move -- was outside the loop.
+    Returns None for any other key, or when L3_EXIT_VALIDATOR_ENABLED is off.
+    """
+    try:
+        import config as _cfg
+        if not getattr(_cfg, "L3_EXIT_VALIDATOR_ENABLED", False):
+            return None
+        import exit_validator as EV
+        if str(hyp.get("config_key") or "") not in EV.KEYS:
+            return None
+        return EV.validate(hyp)
+    except Exception as e:
+        print(f"[L3] exit validator failed: {e}")
+        return {"validator": "exit_validator", "verdict": "needs_data",
+                "reason": f"exit validator error, re-run next week: {e!r}"[:300]}
+
+
 def dispatch(hyp: dict) -> dict:
     """Rule-name validators first; anything they cannot decide goes to the
     config_key replay validator.
@@ -317,6 +338,9 @@ def dispatch(hyp: dict) -> dict:
                 break
     if primary is not None and primary.get("verdict") != "pending_manual_validation":
         return primary
+    exit_res = _exit_verdict(hyp)
+    if exit_res is not None:
+        return exit_res
     import pipeline_replay_validator as RV
     out = RV.validate(hyp)
     out = _with_goal_verdict(hyp, out)

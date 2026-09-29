@@ -166,7 +166,7 @@ def main():
             results.append(run_step(
                 f"L3 validate {h.get('hypothesis_id')}",
                 [py, f"{files}/pipeline_validator.py", "--hypothesis-file", str(hp)],
-                timeout=600,
+                timeout=1200,   # goal/exit validators replay the maximum period (2026-09-29)
             ))
 
         # Weekly does NOT need to re-sim — the daily step above already

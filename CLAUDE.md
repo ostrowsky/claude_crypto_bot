@@ -727,6 +727,11 @@ tasks. Now (spec `docs/specs/features/agent-tasks-0929-spec.md`):
   Claude tasks.
 - L2 receives `incidents_14d`, must cite case_ids, writes unreachable losses to
   `decisions/l2_gaps.jsonl`.
+- `files/exit_validator.py` (task 3): L3 for `LEADER_EXIT_*` and
+  `TRAIL_MIN_BUFFER_PCT_<MODE>`, replayed on every real 15m trade since 03-01
+  (4 286); paired rocket-day difference > 0 + all-trade non-inferiority + months.
+  Reproduces X-9c vs X-7b: +0.45 pp [+0.22, +0.73] on rocket-days (spec +0.42).
+  L2 is now offered these keys.
 Flags: `L3_GOAL_VALIDATOR_ENABLED`, `INCIDENT_ANALYST_ENABLED`,
 `INCIDENT_ANALYST_LLM_ENABLED`, `READOUTS_ENABLED`, `READOUTS_LLM_SUMMARY_ENABLED`.
 
@@ -959,6 +964,7 @@ COOLDOWN_PERSIST_ENABLED = True               # post-exit cooldowns survive a re
 L3_GOAL_VALIDATOR_ENABLED = True              # L3 judged by the goal, not the 4h peak (goal_validator.py, 2026-09-29)
 INCIDENT_ANALYST_ENABLED = True               # daily: where each winner was lost (incident_analyst.py, 2026-09-29)
 READOUTS_ENABLED = True                       # pre-registered readouts of live changes (readouts.py, 2026-09-29)
+L3_EXIT_VALIDATOR_ENABLED = True              # L3 can test exit / leader-mode keys (exit_validator.py, 2026-09-29)
 ```
 
 ---

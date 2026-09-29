@@ -1419,6 +1419,12 @@ INCIDENT_L2_WINDOW_DAYS: int = 14
 # "too early" until the minimum comparable days exist. Rollback: False.
 READOUTS_ENABLED: bool = True
 READOUTS_LLM_SUMMARY_ENABLED: bool = True
+# L3 exit validator (exit_validator.py, task 3): LEADER_EXIT_* and
+# TRAIL_MIN_BUFFER_PCT_<MODE> hypotheses replayed on every real 15m trade since
+# 2026-03-01; judged by the paired rocket-day difference + all-trade
+# non-inferiority (-0.10 pp). Also offered to L2 as proposable keys.
+# Rollback: False -> exit keys are unvalidatable again (and not offered to L2).
+L3_EXIT_VALIDATOR_ENABLED: bool = True
 # H1 earliness (2026-06-29): scan-promote decoupled watchlist coins to attack the
 # silent-miss bucket (top-20 the bot never sees, ~23%). Backtest: silent-miss
 # top-20 flag 6x baseline + are MORE decoupled than entered winners. SHADOW first:

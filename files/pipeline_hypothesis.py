@@ -344,6 +344,11 @@ Rules you MUST follow:
 11. L3 judges by the goal: share of winner-days entered BEFORE the first +2.5%
     crossing, plus per-trade non-inferiority (-0.10 pp) over the maximum
     period. A change that only raises a 4h price peak will be rejected.
+12b. Exit keys (LEADER_EXIT_*, TRAIL_MIN_BUFFER_PCT_<MODE>) are judged on every
+    real 15m trade: paired per-trade difference on rocket-days must be above 0,
+    all trades non-inferior (-0.10 pp), months agreeing. Propose them when
+    incidents_14d shows entered winners exiting with the move left behind
+    (exit.left_after_exit_pct, exit.capture, exit_classes).
 12. If incidents_14d shows the dominant loss is outside validatable_config_keys
     (entered late, exit, no rule fired), say so in "gaps" instead of forcing a
     threshold change.
@@ -364,7 +369,11 @@ def _validatable_with_values() -> dict:
     try:
         import config as _cfg
         import pipeline_replay_validator as RV
-        return {k: getattr(_cfg, k) for k in RV.validatable_keys() if hasattr(_cfg, k)}
+        keys = list(RV.validatable_keys())
+        if getattr(_cfg, "L3_EXIT_VALIDATOR_ENABLED", False):
+            import exit_validator as EV       # exit / leader-mode keys (2026-09-29)
+            keys += EV.validatable_keys()
+        return {k: getattr(_cfg, k) for k in keys if hasattr(_cfg, k)}
     except Exception:
         return {}
 

@@ -154,7 +154,7 @@ run in `pipeline_run.py --daily` before notify. Spec: [`agent-tasks-0929`](agent
 | L2-e | already_tried 30d cooldown | ✅ | — | `filter_already_tried()` |
 | L2-f | do_not_touch enforcement | ✅ | — | `filter_locked_keys()` |
 | L2-g | Incident → severity bump (premature/losers/missed) | ✅ | indirect | `_attach_incident_evidence()` |
-| L2-h | New rule types from incidents (`loosen_trail_k_*`, `lower_entry_floor_*`) | ❌ | — | blocked by L3/L4 validator coverage |
+| L2-h | New rule types from incidents (`loosen_trail_k_*`, `lower_entry_floor_*`) | 🟡 | `test_exit_validator.py` | **2026-09-29:** exit side unblocked — L2 is offered `LEADER_EXIT_*` and `TRAIL_MIN_BUFFER_PCT_<MODE>` (validated by L3-exit); entry-side rule types still wait |
 | L2-i | Outcome-aware hypothesis priority (learn from hits/misses) | ❌ | — | future |
 | L2-j | Concrete cases as L2 input (`incidents_14d`) | ✅ | `test_agent_tasks_0929.py` | **2026-09-29:** L2 saw only aggregate red flags, so all it could propose was a threshold move. `incident_analyst.py` (daily, L1b) classifies where each immutable top-20 winner of the day was lost; its 14-day roll-up goes into the Claude payload, the prompt requires case_ids and a `gaps` list for losses no key reaches (`decisions/l2_gaps.jsonl`). First 4 days: 25 winner-days, 24% caught before +2.5%, 68% late. Spec: [`agent-tasks-0929`](agent-tasks-0929-spec.md) |
 
@@ -163,6 +163,7 @@ run in `pipeline_run.py --daily` before notify. Spec: [`agent-tasks-0929`](agent
 | ID | Component | Status | Tests | Notes |
 |----|-----------|--------|-------|-------|
 | L3-goal | Goal validator decides L3 (`goal_validator.py`) | ✅ | `test_agent_tasks_0929.py` | **2026-09-29:** the peak replay graded a proxy (chop 22->20: 1.72x, needs_review) while the project's criterion rejects it (goal +0.00 pp on 401 winner-days, per-trade -0.100 [-0.475, +0.288]). Now winner-days entered before the +2.5% crossing + non-inferiority decide; the peak verdict travels beside. Also fixed in BOTH validators: rows the gate never judged were counted as admitted (9 of 46 chop rows). Rollback `L3_GOAL_VALIDATOR_ENABLED=False`. Spec: [`agent-tasks-0929`](agent-tasks-0929-spec.md) |
+| L3-exit | Exit / leader-mode validator (`exit_validator.py`) | ✅ | `test_exit_validator.py` (13) | **2026-09-29:** no exit key had a replay, so the exit side (bot keeps ~8% of a rocket's move) was outside the loop. Every real 15m trade since 03-01 (4 286) replayed under current vs proposed params; paired rocket-day difference > 0, all trades >= -0.10 pp, months. Reproduces X-9c vs X-7b: +0.45 pp [+0.22, +0.73] (hand backtest +0.42). Rollback `L3_EXIT_VALIDATOR_ENABLED=False`. Spec: [`agent-tasks-0929`](agent-tasks-0929-spec.md) §3 |
 | L3-mem | Rejects remembered in `already_tried.jsonl` | ✅ | `test_l3_memory_and_chop.py` (5) | **2026-09-29:** L3 set `status=rejected` but never wrote the memory L2 filters by (last entry 2026-06-26), so a rejected (rule, key) could return next week. `record_rejection` now writes every reject. Spec: [`chop-bull-adx`](chop-bull-adx-spec.md) |
 | L3-a | `validate_entry_score_floor` (per-coin replay) | ✅ | — | the only fully wired validator |
 | L3-b | `validate_gate_threshold` (generic) | 🟡 | — | emits diagnostic only, no verdict |
