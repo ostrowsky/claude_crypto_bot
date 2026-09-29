@@ -1145,7 +1145,35 @@ def build_agent_blocks(target_date: date) -> list[str]:
             out.append(b)
     except Exception as e:
         print(f"[notify] readouts block skipped: {e}")
+    try:
+        b = build_ml_gate_line()
+        if b:
+            out.append(b)
+    except Exception as e:
+        print(f"[notify] ml gate line skipped: {e}")
     return out
+
+
+def build_ml_gate_line(log_path=None) -> str | None:
+    """One line when the nightly ML model was NOT promoted (ml_promotion_gate.py).
+
+    A kept incumbent is the safe outcome for one night; several in a row mean the
+    model has stopped learning (CLAUDE.md §0), so the count is shown.
+    """
+    import ml_promotion_gate as MPG
+    n = MPG.consecutive_keeps(log_path)
+    if n <= 0:
+        return None
+    last = {}
+    try:
+        with open(log_path or MPG.LOG, encoding="utf-8") as fh:
+            for line in fh:
+                if line.strip():
+                    last = json.loads(line)
+    except Exception:
+        pass
+    return (f"<b>ML-модель</b>: оставлена прежняя ({n} ноч. подряд) — "
+            f"{last.get('reason', 'новая модель явно хуже')}")
 
 
 def build_full_message(

@@ -688,6 +688,76 @@ def _log_changelog(entry: dict) -> None:
         fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
 
+L3_CACHE_FILE = Path(__file__).resolve().parent.parent / ".runtime" / "trend_scout_l3_cache.json"
+L3_CACHE_DAYS = 7
+LAST_HELD: list[dict] = []          # proposals the L3 gate held back on the last run
+
+
+def _l3_cache_load() -> dict:
+    try:
+        return json.loads(L3_CACHE_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def l3_verdict(param: str, value: float, *, validators=None, now=None) -> dict:
+    """Judge a scout proposal with the L3 validator that can replay its key.
+
+    Why (2026-09-29, agent-tasks-0929-spec.md §5): scout auto-applied on its own
+    proxy -- mean ret5 >= 0 and win >= 40% of the entries a 4h window would have
+    added -- which is neither the bot's goal nor the maximum period (CLAUDE.md
+    §0a rules 3, 11). CLONE_SIGNAL_GUARD_MAX_SIMILAR drifted 4 -> 23 that way.
+    Now a change is applied only on an L3 `accept`: goal_validator for the gate
+    keys it replays, exit_validator for exit keys. Anything else -> held.
+    Verdicts are cached per (param, value) for L3_CACHE_DAYS: a maximum-period
+    replay costs minutes and the scout runs every 4 hours.
+    """
+    now = now or datetime.now(timezone.utc)
+    key = f"{param}={float(value):g}"
+    cache = _l3_cache_load()
+    hit = cache.get(key)
+    if hit:
+        try:
+            if now - datetime.fromisoformat(hit["ts"]) < timedelta(days=L3_CACHE_DAYS):
+                return dict(hit, cached=True)
+        except Exception:
+            pass
+    if validators is None:
+        import exit_validator as EV
+        import goal_validator as GV
+        import pipeline_replay_validator as RV
+        validators = [(set(EV.KEYS), EV.validate), (set(RV.REPLAY_SPECS), GV.validate)]
+    res = None
+    for keys, fn in validators:
+        if param in keys:
+            try:
+                r = fn({"config_key": param, "diff": {"to": value}})
+                res = {"verdict": r.get("verdict"), "validator": r.get("validator"),
+                       "reason": str(r.get("reason") or "")[:300]}
+            except Exception as e:
+                res = {"verdict": "error", "reason": repr(e)[:300]}
+            break
+    if res is None:
+        res = {"verdict": "no_goal_replay",
+               "reason": f"no L3 validator replays {param}; held for the operator"}
+    res["ts"] = now.isoformat()
+    cache[key] = res
+    try:
+        L3_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        L3_CACHE_FILE.write_text(json.dumps(cache, ensure_ascii=False, indent=1), encoding="utf-8")
+    except Exception as e:
+        log.warning("scout L3 cache not written: %s", e)
+    return res
+
+
+def _l3_gate_enabled() -> bool:
+    try:
+        import config as _cfg
+        return bool(getattr(_cfg, "TREND_SCOUT_AUTO_APPLY_REQUIRES_L3", False))
+    except Exception:
+        return True                 # fail closed: without config, do not auto-apply
+
+
 def apply_approved_changes(
     validated: list[ValidationResult],
     auto_apply_risk: str = "low",
@@ -700,6 +770,7 @@ def apply_approved_changes(
     auto_threshold = risk_order.get(auto_apply_risk, 0)
 
     applied = []
+    LAST_HELD.clear()
     for vr in validated:
         if vr.verdict != "approve":
             continue
@@ -712,6 +783,19 @@ def apply_approved_changes(
         old_value = p.current_value
         new_value = p.proposed_value
 
+        l3 = None
+        if _l3_gate_enabled():
+            l3 = l3_verdict(p.config_param, new_value)
+            if l3.get("verdict") != "accept":
+                held = {"param": p.config_param, "old_value": old_value, "new_value": new_value,
+                        "held": True, "l3_verdict": l3.get("verdict"), "l3_reason": l3.get("reason"),
+                        "backtest_n": vr.new_entries_count,
+                        "backtest_ret5": round(vr.new_entries_avg_ret5, 3)}
+                LAST_HELD.append(held)
+                _log_changelog(dict(held))
+                log.info("Held (L3 %s): %s %s -> %s", l3.get("verdict"), p.config_param, old_value, new_value)
+                continue
+
         success = _apply_config_change(p.config_param, new_value, is_integer=rule.is_integer)
         if success:
             entry = {
@@ -723,6 +807,7 @@ def apply_approved_changes(
                 "backtest_ret5": round(vr.new_entries_avg_ret5, 3),
                 "backtest_win": round(vr.new_entries_win_rate, 3),
                 "rationale": p.rationale,
+                "l3_verdict": (l3 or {}).get("verdict"),
             }
             _log_changelog(entry)
             applied.append(entry)
@@ -758,6 +843,11 @@ def _build_telegram_text(report: ScoutReport) -> str:
                 f"(n={a['backtest_n']}, ret5={a['backtest_ret5']:+.2f}%, "
                 f"win={a['backtest_win']*100:.0f}%)"
             )
+
+    if LAST_HELD:
+        lines.append("\n⏸ <b>Не применено — нет подтверждения по цели (L3):</b>")
+        for h in LAST_HELD:
+            lines.append(f"  • {h['param']}: {h['old_value']} → {h['new_value']} ({h['l3_verdict']})")
 
     pending = [
         vr for vr in report.validated

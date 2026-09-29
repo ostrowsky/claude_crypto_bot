@@ -1425,6 +1425,15 @@ READOUTS_LLM_SUMMARY_ENABLED: bool = True
 # non-inferiority (-0.10 pp). Also offered to L2 as proposable keys.
 # Rollback: False -> exit keys are unvalidatable again (and not offered to L2).
 L3_EXIT_VALIDATOR_ENABLED: bool = True
+# trend-scout auto-apply only on an L3 accept (goal_validator / exit_validator,
+# maximum period); keys no validator replays are held for the operator. Scout's own
+# proxy (ret5 >= 0, win >= 40% over 4h) moved CLONE_SIGNAL_GUARD_MAX_SIMILAR 4 -> 23.
+# Rollback: False -> the old proxy auto-apply.
+TREND_SCOUT_AUTO_APPLY_REQUIRES_L3: bool = True
+# Nightly ML signal model replaces the live one unless CLEARLY worse (95% upper
+# bound < 0) on AUC, recall or precision at the live floor, on rows neither model
+# trained on (ml_promotion_gate.py). Rollback: False -> overwrite every night.
+ML_PROMOTION_GATE_ENABLED: bool = True
 # H1 earliness (2026-06-29): scan-promote decoupled watchlist coins to attack the
 # silent-miss bucket (top-20 the bot never sees, ~23%). Backtest: silent-miss
 # top-20 flag 6x baseline + are MORE decoupled than entered winners. SHADOW first:

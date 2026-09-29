@@ -1157,6 +1157,8 @@ def train_and_evaluate(
         "top_feature_importance": importances,
         "suggestions": suggestions,
         "model_payload": model_payload,
+        # rows no model trained on, for ml_promotion_gate (never written to the report)
+        "_holdout": {"rows": list(bundle.meta_test), "y": [float(v) for v in bundle.y_test]},
     }
 
 
@@ -1291,7 +1293,31 @@ def main() -> None:
         blindspot_proba_threshold=args.blindspot_proba_threshold,
         prev_model_path=args.prev_model if args.blindspot_weight > 1.0 else None,
     )
-    save_json(args.model_out, build_live_model_payload(report))
+    payload = build_live_model_payload(report)
+    holdout = report.pop("_holdout", None)
+    gate = None
+    try:
+        import config as _gcfg
+        gated = bool(getattr(_gcfg, "ML_PROMOTION_GATE_ENABLED", False))
+    except Exception:
+        gated = False
+    if gated and holdout is not None:
+        # 2026-09-29: the live model is replaced only if the new one is not
+        # clearly worse on rows neither trained on (ml_promotion_gate.py).
+        import ml_promotion_gate as MPG
+        try:
+            gate = MPG.evaluate(args.model_out, payload, holdout)
+        except Exception as e:  # a broken gate must not block learning
+            gate = {"decision": "promote", "ungated": True, "reason": f"gate error: {e!r}"[:200]}
+        MPG.log_decision(gate)
+        report["promotion"] = gate
+        print("[ml] promotion gate: %s -- %s" % (gate.get("decision"), gate.get("reason")))
+    if gate is None or gate.get("decision") == "promote":
+        save_json(args.model_out, payload)
+    else:
+        cand = args.model_out.with_name(args.model_out.stem + ".candidate.json")
+        save_json(cand, payload)
+        print(f"[ml] incumbent kept; candidate saved to {cand}")
     save_json(args.report_out, {k: v for k, v in report.items() if k != "model_payload"})
 
     if args.as_json:
@@ -1299,7 +1325,8 @@ def main() -> None:
     else:
         print(render_text(report))
         print("")
-        print(f"Model saved to: {args.model_out}")
+        if gate is None or gate.get("decision") == "promote":
+            print(f"Model saved to: {args.model_out}")
         print(f"Report saved to: {args.report_out}")
 
 

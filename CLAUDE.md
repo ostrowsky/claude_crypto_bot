@@ -732,6 +732,17 @@ tasks. Now (spec `docs/specs/features/agent-tasks-0929-spec.md`):
   (4 286); paired rocket-day difference > 0 + all-trade non-inferiority + months.
   Reproduces X-9c vs X-7b: +0.45 pp [+0.22, +0.73] on rocket-days (spec +0.42).
   L2 is now offered these keys.
+- trend-scout (RL worker, every 4h) was the ONLY loop that edits `config.py` by
+  itself, on a proxy (ret5 >= 0, win >= 40% over 4h); CLONE_SIGNAL_GUARD_MAX_SIMILAR
+  drifted 4 -> 23 that way. `TREND_SCOUT_AUTO_APPLY_REQUIRES_L3`: it now applies
+  only on an L3 `accept` (goal/exit validator, maximum period); unreplayable keys
+  are held and logged. Takes effect after an RL-worker restart.
+- `files/ml_promotion_gate.py` (`ML_PROMOTION_GATE_ENABLED`): the nightly ML model
+  replaces the live one unless clearly worse (95% upper bound < 0) on AUC, recall
+  or precision at the live floor, on the trainer's test rows. First run: AUC
+  0.661 -> 0.673, but admitted 62% -> 82% (score scale moved against the fixed 0.15
+  floor), precision 0.308 -> 0.271 -> incumbent kept. Precision was added after that
+  run (stated in the spec). Open defect: the floor is not calibrated per model.
 Flags: `L3_GOAL_VALIDATOR_ENABLED`, `INCIDENT_ANALYST_ENABLED`,
 `INCIDENT_ANALYST_LLM_ENABLED`, `READOUTS_ENABLED`, `READOUTS_LLM_SUMMARY_ENABLED`.
 
@@ -965,6 +976,8 @@ L3_GOAL_VALIDATOR_ENABLED = True              # L3 judged by the goal, not the 4
 INCIDENT_ANALYST_ENABLED = True               # daily: where each winner was lost (incident_analyst.py, 2026-09-29)
 READOUTS_ENABLED = True                       # pre-registered readouts of live changes (readouts.py, 2026-09-29)
 L3_EXIT_VALIDATOR_ENABLED = True              # L3 can test exit / leader-mode keys (exit_validator.py, 2026-09-29)
+TREND_SCOUT_AUTO_APPLY_REQUIRES_L3 = True     # scout edits config only on an L3 accept (2026-09-29)
+ML_PROMOTION_GATE_ENABLED = True              # nightly ML model replaces the live one unless clearly worse (ml_promotion_gate.py, 2026-09-29)
 ```
 
 ---
