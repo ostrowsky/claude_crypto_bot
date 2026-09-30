@@ -704,6 +704,19 @@ change applied since then came from manual analysis. Minimum fix: validate
 `config_key` against `config.py` at generation time and drop hypotheses whose key
 is unknown. Status report: `docs/reports/2026-08-05-roadmap-status.md`.
 
+### Late entry: anatomy, and the crossing-entry fix REFUTED (2026-09-30)
+
+531 winner-days (03-01..09-28): early 11.3%, **late 55.6%**, never 26.2%, held 7%.
+Late entries come 3.1 h after the +2.5% crossing with 46% of the move done (early:
+30%); in 70% of late days NO entry rule fired before the crossing (detection, not
+gates). Entering AT the crossing when the coin is rank <= 3 of the day doubles
+precision (0.202 vs the bot's 0.102) and enters ~10 points of the move earlier,
+but loses -0.37%/trade (every month but September); a leader-mode exit and a
+regime filter chosen on Mar-Jun / judged on Jul-Sep were refuted too (three looks,
+counted). Do not re-test crossing entries on price features; next lever is
+positioning at the crossing (added to the 2026-10-18 test). Spec:
+`docs/specs/features/late-entry-0930-spec.md`.
+
 ### Improvement agent sees cases and is judged by the goal (2026-09-29)
 
 Before: L2 got aggregate red flags only and could propose nothing but "move a
