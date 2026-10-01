@@ -102,6 +102,12 @@ def _maybe_reload_ml_model() -> None:
         mt = _ML_MODEL_FILE.stat().st_mtime
     except OSError:
         return
+    if _ML_MODEL_MTIME is None and _ml_payload_usable(_ML_MODEL_CACHE):
+        # a usable model whose file time is unknown (injected, not read here):
+        # remember the file's current time and reload only on a later change.
+        # Found 2026-10-01: test_T208A's injected payload was replaced by the real file.
+        _ML_MODEL_MTIME = mt
+        return
     if _ML_MODEL_MTIME is not None and mt == _ML_MODEL_MTIME:
         return
     if time.time() - mt < float(getattr(config, "ML_MODEL_RELOAD_MIN_AGE_SEC", 10)):

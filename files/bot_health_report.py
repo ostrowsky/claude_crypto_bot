@@ -630,6 +630,20 @@ def derive_next_steps(scorecard: dict, training: dict, dnt: dict,
             "evidence": f"EX1 median={capture['value']:.3f} < target={capture['target']:.2f}; n={capture.get('n')}",
             "gate": "Не менять production SELL без положительного multi-objective backtest",
         })
+    # Delisted / silent pairs in the operator's watchlist (watchlist_liveness.py)
+    try:
+        import watchlist_liveness as _WL
+        _live = _WL.load_latest()
+        _dead = [d.get("symbol") for d in (_live.get("dead") or [])] if _live.get("available") else []
+    except Exception:
+        _dead = []
+    if _dead:
+        steps.append({
+            "priority": "P1", "id": "remove_dead_watchlist_pairs",
+            "action": "Убрать из watchlist мёртвые пары (не торгуются или нет свечей > 24 ч)",
+            "evidence": ", ".join(_dead[:12]),
+            "gate": "Watchlist меняет только оператор (CLAUDE.md §14)",
+        })
     # A lock the goal does not back is an operator decision, not a P0 chore
     # (valid-proposals-1001-spec.md): it stays in force until decided.
     for c in (dnt.get("contested") or []):

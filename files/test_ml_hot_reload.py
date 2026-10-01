@@ -101,6 +101,13 @@ class TestHotReload(unittest.TestCase):
         M._load_ml_model_payload()
         self.assertNotIn("x", MS._CATBOOST_CACHE)
 
+    def test_injected_model_is_not_replaced_until_the_file_changes(self):
+        self._write(_payload("file"), age=100)
+        M._ML_MODEL_CACHE, M._ML_MODEL_MTIME = _payload("injected"), None
+        self.assertEqual(M._load_ml_model_payload()["model_name"], "injected")
+        self._write(_payload("newer"), age=50)
+        self.assertEqual(M._load_ml_model_payload()["model_name"], "newer")
+
     def test_on_by_default(self):
         self.assertTrue(self.saved[5])
 

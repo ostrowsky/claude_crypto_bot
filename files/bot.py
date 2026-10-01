@@ -1427,7 +1427,7 @@ async def cmd_why(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     parts = (update.message.text or "").strip().split()
     if len(parts) < 2:
         await update.message.reply_text(
-            "Использование: `/why SYMBOL`\nПример: `/why TONUSDT`",
+            "Использование: `/why SYMBOL`\nПример: `/why SOLUSDT`",
             parse_mode=ParseMode.MARKDOWN,
         )
         return

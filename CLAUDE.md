@@ -1068,7 +1068,14 @@ Runtime token storage: `.runtime\bot_bg_runner.cmd` (runtime-generated, gitignor
 
 ## 14. Watchlist
 
-102 Binance USDT coins. File: `files/watchlist.json`.
+93 Binance USDT coins. File: `files/watchlist.json`.
+
+**Nine more delisted pairs removed 2026-10-01** (BAKE, SNT, MKR, LRC, MDT, OXT,
+TRU, TON, PYR — status BREAK, dead 45-533 days; backup
+`files/watchlist.pre_dead_cleanup_1001.json`); `DEFAULT_WATCHLIST` cleaned of them
+and of RNDR/EOS/ACA. `files/watchlist_liveness.py` runs daily and puts a P1 step in
+the morning report when a pair stops trading. Spec:
+`docs/specs/features/watchlist-dead-1001-spec.md`.
 
 **Delisted entries were removed 2026-08-19** (`RNDRUSDT`, `EOSUSDT`, `ACAUSDT`;
 backup at `files/watchlist.pre_phantom_cleanup.json`). This is not an exception

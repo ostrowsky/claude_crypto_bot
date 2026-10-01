@@ -145,6 +145,8 @@ def main():
     # lost yesterday's winners, and the pre-registered readouts of live changes.
     # Both before notify, which prints them. Each honours its own flag.
     results.append(run_step("incidents", [py, f"{files}/incident_analyst.py"], timeout=600))
+    # 2026-10-01: nine delisted pairs sat in the watchlist for 45-533 days unseen
+    results.append(run_step("watchlist liveness", [py, f"{files}/watchlist_liveness.py"], timeout=300))
     results.append(run_step("readouts", [py, f"{files}/readouts.py"], timeout=900))
 
     # Telegram delivery — sends today's L1 health.tg.txt + brief attribution
