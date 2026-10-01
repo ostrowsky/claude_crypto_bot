@@ -1191,6 +1191,78 @@ def build_full_message(
 
     `*_block=...` (sentinel) means "compute from disk". Pass an explicit
     str or None to override — useful for tests."""
+    parts = _message_parts(target_date, health_text=health_text, review_block=review_block,
+                           incidents_block=incidents_block, rollback_block=rollback_block,
+                           agent_blocks=agent_blocks)
+    if parts is None:
+        return None
+    return safe_truncate("\n\n".join(parts), TG_MAX_CHARS)
+
+
+_HTML_TAGS = ("b", "i", "u", "s", "code", "pre")
+
+
+def _close_tags(text: str) -> str:
+    """Drop a dangling '<...' and close tags left open, so Telegram's HTML parser accepts it."""
+    lt, gt = text.rfind("<"), text.rfind(">")
+    if lt > gt:
+        text = text[:lt]
+    import re as _re
+    opened = []
+    for m in _re.finditer(r"<(/?)([a-z]+)[^>]*>", text):
+        tag = m.group(2)
+        if tag not in _HTML_TAGS:
+            continue
+        if m.group(1):
+            if tag in opened:
+                opened.reverse()
+                opened.remove(tag)
+                opened.reverse()
+        else:
+            opened.append(tag)
+    return text + "".join("</%s>" % t for t in reversed(opened))
+
+
+def safe_truncate(msg: str, limit: int) -> str:
+    """Truncate at a line boundary, never inside a tag (2026-10-01: a cut through a
+    tag made Telegram reject the whole morning report with HTTP 400)."""
+    if len(msg) <= limit:
+        return msg
+    cut = msg[: limit - 50]
+    nl = cut.rfind("\n")
+    if nl > limit // 2:
+        cut = cut[:nl]
+    return _close_tags(cut) + "\n…[truncated]"
+
+
+def split_for_telegram(parts: list, limit: int = None) -> list:
+    """Pack message parts into as few messages as fit the limit, splitting only
+    between parts; a single oversized part is truncated safely."""
+    limit = limit or TG_MAX_CHARS
+    out, cur = [], ""
+    for p in parts:
+        p = p if len(p) <= limit else safe_truncate(p, limit)
+        if not cur:
+            cur = p
+        elif len(cur) + 2 + len(p) <= limit:
+            cur += "\n\n" + p
+        else:
+            out.append(cur)
+            cur = p
+    if cur:
+        out.append(cur)
+    return out
+
+
+def _message_parts(
+    target_date: date,
+    *,
+    health_text: str | None = None,
+    review_block=...,
+    incidents_block=...,
+    rollback_block=...,
+    agent_blocks=...,
+) -> list | None:
     if health_text is None:
         health_text = read_health_tg(target_date)
     if not health_text:
@@ -1210,18 +1282,14 @@ def build_full_message(
     if agent_blocks is ...:
         agent_blocks = build_agent_blocks(target_date)
     for b in agent_blocks or []:
-        parts += ["", b]
+        parts.append(b)
     if isinstance(incidents_block, str) and incidents_block:
-        parts += ["", incidents_block]
+        parts.append(incidents_block)
     if isinstance(rollback_block, str) and rollback_block:
-        parts += ["", rollback_block]
+        parts.append(rollback_block)
     if review_block:
-        parts += ["", review_block]
-
-    msg = "\n".join(parts)
-    if len(msg) > TG_MAX_CHARS:
-        msg = msg[: TG_MAX_CHARS - 50] + "\n…[truncated]"
-    return msg
+        parts.append(review_block)
+    return parts
 
 
 # ---------------------------------------------------------------------------
@@ -1354,34 +1422,38 @@ def notify(
         result["skipped"] = "no_chat_ids"
         return result
 
-    msg = build_full_message(target_date)
-    if not msg:
+    parts = _message_parts(target_date)
+    if not parts:
         result["skipped"] = "no_health_report"
         return result
-
-    result["message_chars"] = len(msg)
+    chunks = split_for_telegram(parts)
+    result["message_chars"] = sum(len(c) for c in chunks)
+    result["messages"] = len(chunks)
 
     if dry_run:
         result["skipped"] = "dry_run"
-        result["message_preview"] = msg[:300]
+        result["message_preview"] = chunks[0][:300]
         return result
 
     any_ok = False
     import time as _time
     _retry = http_post is _real_http_post   # retry only the real network path
     for cid in chat_ids:
-        r = send_to_chat(token, cid, msg, http_post=http_post)
-        attempts = 1
-        while _retry and not r["ok"] and attempts < SEND_MAX_ATTEMPTS:
-            _time.sleep(SEND_RETRY_BACKOFF * attempts)   # 2s, then 4s
+        chat_ok = True
+        for k, msg in enumerate(chunks):
             r = send_to_chat(token, cid, msg, http_post=http_post)
-            attempts += 1
-        if r["ok"]:
+            attempts = 1
+            while _retry and not r["ok"] and attempts < SEND_MAX_ATTEMPTS:
+                _time.sleep(SEND_RETRY_BACKOFF * attempts)   # 2s, then 4s
+                r = send_to_chat(token, cid, msg, http_post=http_post)
+                attempts += 1
+            if not r["ok"]:
+                chat_ok = False
+                result["errors"].append({"chat_id": cid, "part": k + 1, "status": r["status"],
+                                         "body": r["body"][:300], "attempts": attempts})
+        if chat_ok:
             any_ok = True
             result["sent"].append(cid)
-        else:
-            result["errors"].append({"chat_id": cid, "status": r["status"],
-                                     "body": r["body"][:300], "attempts": attempts})
 
     if any_ok:
         mark_dedup(target_date, now_iso=now_iso)
@@ -1415,6 +1487,10 @@ def main():
             print(f"[notify] sent to {len(res['sent'])} chat(s); errors={len(res['errors'])}")
         else:
             print(f"[notify] no chats reached; errors={len(res['errors'])}")
+        for e in res.get("errors") or []:
+            # Telegram's error body never contains the token (it is only in the URL)
+            print(f"[notify] error chat={e.get('chat_id')} part={e.get('part')} status={e.get('status')} "
+                  f"body={str(e.get('body'))[:200]}")
 
 
 if __name__ == "__main__":
