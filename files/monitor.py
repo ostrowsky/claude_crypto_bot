@@ -2549,6 +2549,7 @@ def _mode_daily_range_guard_reason(
     tf: str,
     daily_range: float,
     slope: float,
+    ignore_flag: bool = False,
 ) -> Optional[str]:
     """
     Regime gate: block signals on quiet-market days (low daily_range / slope).
@@ -2559,7 +2560,7 @@ def _mode_daily_range_guard_reason(
       trend/1h      slope>=0.50 -> +4.6pp precision (14.1%->18.8%)
       impulse_speed/1h range>=7.0 -> +3.3pp precision (16.5%->19.8%)
     """
-    if not getattr(config, "MODE_RANGE_QUALITY_GUARD_ENABLED", True):
+    if not ignore_flag and not getattr(config, "MODE_RANGE_QUALITY_GUARD_ENABLED", True):
         return None
 
     if mode == "alignment" and tf == "15m":
@@ -4944,7 +4945,13 @@ async def _poll_coin(
                 tf=tf,
                 daily_range=preview_range,
                 slope=preview_slope,
+                ignore_flag=True,
             )
+            if mode_range_guard_reason and not getattr(config, "MODE_RANGE_QUALITY_GUARD_ENABLED", True):
+                # gate OFF (operator 2026-10-01): record what it would have blocked
+                # so readout MRQ-OFF can tell the entries it lets through
+                botlog.log_mode_range_shadow(sym, tf, preview_mode, float(c[i]), mode_range_guard_reason)
+                mode_range_guard_reason = None
             if mode_range_guard_reason:
                 _log_critic_candidate(
                     sym=sym,

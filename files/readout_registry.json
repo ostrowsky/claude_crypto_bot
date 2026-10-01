@@ -133,6 +133,32 @@
     "otherwise": "inconclusive"
    },
    "rollback": "ML_MODEL_HOT_RELOAD_ENABLED = False + restart"
+  },
+  {
+   "id": "MRQ-OFF",
+   "title": "mode_range_quality gate OFF: entries it would have blocked vs the rest",
+   "kind": "computed",
+   "fn": "readout_mrq_off",
+   "flag": "MODE_RANGE_QUALITY_GUARD_ENABLED",
+   "switched_on_utc": "2026-10-01T20:00:00Z",
+   "window_from": "2026-10-02",
+   "due": "2026-10-16",
+   "min_days": 14,
+   "min_trades": 20,
+   "spec": "docs/specs/features/mrq-off-1001-spec.md",
+   "expected": {
+    "early_winner_days_pp": 3.43,
+    "added_messages_per_day": 6.6,
+    "added_coin_day_precision": 0.011,
+    "trades_combined_minus_current_pp": -0.002
+   },
+   "criteria": {
+    "anomaly": "more than 20 added entries per day (3x the expected 6.6)",
+    "keep": "combined (all entries) minus the other entries: lower 95% >= -0.10 pp",
+    "rollback": "upper 95% of the same difference < -0.10 pp",
+    "otherwise": "inconclusive -> keep and re-read"
+   },
+   "rollback": "MODE_RANGE_QUALITY_GUARD_ENABLED = True + restart"
   }
  ]
 }

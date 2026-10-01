@@ -415,7 +415,44 @@ def readout_ml_reload(r: dict, ctx: dict) -> dict:
     return out
 
 
-FNS = {"readout_e4": readout_e4, "readout_leader_exit": readout_leader_exit,
+def readout_mrq_off(r: dict, ctx: dict) -> dict:
+    """mode_range_quality OFF: the entries it would have blocked, vs the rest."""
+    import goal_validator as GV
+    days = set(ctx["days"])
+    evs = scan_events(r["window_from"], {"mode_range_shadow", "entry", "exit"})
+    shadow = collections.defaultdict(list)
+    for e in evs:
+        if e["event"] == "mode_range_shadow":
+            shadow[(e.get("sym"), e.get("tf"))].append(e["_dt"])
+    trades = [(a, b) for a, b in pair_trades([e for e in evs if e["event"] in ("entry", "exit")])
+              if a["ts"][:10] in days]
+
+    def flagged(a):
+        lag = timedelta(minutes=20 if a.get("tf") == "15m" else 90)
+        return any(timedelta(0) <= a["_dt"] - t <= lag for t in shadow.get((a.get("sym"), a.get("tf")), ()))
+    fl = [(a, b) for a, b in trades if flagged(a)]
+    ot = [(a, b) for a, b in trades if not flagged(a)]
+    f_p = [float(b["pnl_pct"]) for _, b in fl if isinstance(b.get("pnl_pct"), (int, float))]
+    o_p = [float(b["pnl_pct"]) for _, b in ot if isinstance(b.get("pnl_pct"), (int, float))]
+    W = {(d, s): dd for d, s, _, dd in GV.winner_days(min(days), days)} if days else {}
+    early = {(a["ts"][:10], a["sym"]) for a, _ in fl if (a["ts"][:10], a["sym"]) in W and a["_dt"] < W[(a["ts"][:10], a["sym"])]}
+    nd = max(1, len(days))
+    out = {"days": len(days), "added_entries": len(fl), "added_per_day": round(len(fl) / nd, 2),
+           "other_entries": len(ot), "added_trades": mean_ci(f_p, random.Random(29)),
+           "other_trades": mean_ci(o_p, random.Random(30)), "early_winner_days_from_added": len(early)}
+    if f_p and o_p:
+        pt, lo, hi = GV.bootstrap(o_p, f_p, 1.0, random.Random(31))
+        out["combined_minus_other_pp"] = {"point": round(pt, 3), "lo95": round(lo, 3), "hi95": round(hi, 3)}
+    out["_n_trades"] = len(f_p)
+    out["anomalies"] = ["%.1f added entries/day > 20" % (len(fl) / nd)] if len(fl) / nd > 20 else []
+    out["_anomaly"] = bool(out["anomalies"])
+    c = out.get("combined_minus_other_pp")
+    out["_verdict"] = ("ROLLBACK_SUGGESTED" if c and c["hi95"] < -0.10 else
+                       "KEEP" if c and c["lo95"] >= -0.10 else "INCONCLUSIVE")
+    return out
+
+
+FNS = {"readout_e4": readout_e4, "readout_mrq_off": readout_mrq_off, "readout_leader_exit": readout_leader_exit,
        "readout_leader_alert": readout_leader_alert, "readout_ml_floor_shadow": readout_ml_floor_shadow,
        "readout_ml_reload": readout_ml_reload}
 

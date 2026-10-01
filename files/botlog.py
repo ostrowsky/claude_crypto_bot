@@ -219,6 +219,18 @@ def log_leader_exit_switch(sym: str, tf: str, price: float, reason: str, stop: f
     })
 
 
+def log_mode_range_shadow(sym: str, tf: str, mode: str, price: float, reason: str) -> None:
+    """mode_range_quality is OFF; this candidate is one it would have blocked."""
+    _write({
+        "event": "mode_range_shadow",
+        "sym": sym,
+        "tf": tf,
+        "mode": mode,
+        "price": price,
+        "reason": reason,
+    })
+
+
 def log_ml_model_reload(old_model, new_model, label_version, mtime: float) -> None:
     """The live ML model was swapped without a restart (monitor._maybe_reload_ml_model)."""
     _write({

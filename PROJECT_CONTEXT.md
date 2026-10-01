@@ -627,6 +627,14 @@ stop_rl_headless.bat     — остановка RL worker (по PID из .runtim
 
 ## Известные проблемы и фиксы
 
+### Фильтр mode_range_quality выключен — решение оператора (2026-10-01)
+
+`MODE_RANGE_QUALITY_GUARD_ENABLED = False` (оператор выбрал +3.43 п.п. ранних
+дней-победителей ценой ~+6.6 сообщ./день с точностью 1.1%). Фильтр продолжает
+считаться в тени и пишет `mode_range_shadow`; проверка MRQ-OFF (срок 16.10) сравнивает
+добавленные входы с остальными. Откат: True + перезапуск. Спека:
+`docs/specs/features/mrq-off-1001-spec.md`.
+
 ### Блокировки фильтров перепроверены по цели; бюджет сообщений опровергнут (2026-10-01)
 
 `goal_validator.validate_gate_off` (фильтр убран целиком, критерий L3): chop,
@@ -897,6 +905,7 @@ TREND_SCOUT_AUTO_APPLY_REQUIRES_L3 = True     # scout меняет конфиг 
 ML_PROMOTION_GATE_ENABLED = True              # ночная ML-модель заменяет живую, если не явно хуже (ml_promotion_gate.py, 2026-09-29)
 ML_FLOOR_CALIBRATION_ENABLED = False          # порог ML под модель: SHADOW до проверки ML-FLOOR-SHADOW (2026-09-29)
 ML_MODEL_HOT_RELOAD_ENABLED = True            # переобученная ML-модель подхватывается без перезапуска (2026-09-29)
+MODE_RANGE_QUALITY_GUARD_ENABLED = False      # выключен оператором 2026-10-01; тень пишется (mrq-off-1001-spec.md)
 ```
 
 ---

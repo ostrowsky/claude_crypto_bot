@@ -1267,7 +1267,13 @@ UI_WATCHDOG_FORCE_EXIT_AFTER_WARNS: int = 0   # 0 = disabled (was 3)
 # Root cause: on quiet-market days (daily_range 3-4%) signals are almost all FP
 # because coins don't make big moves regardless of technical setup.
 # TP entries have significantly higher daily_range than FP across all modes.
-MODE_RANGE_QUALITY_GUARD_ENABLED: bool = True
+# 2026-10-01 OFF by operator decision (valid-proposals-1001-spec.md, mrq-off spec):
+# judged by the goal with the gate removed entirely, 412 winner-days since 05-01:
+# early winner-days 10.9% -> 14.4% (+3.43 pp), trades -0.002 pp [-0.049, +0.045];
+# cost ~+6.6 msg/day, 1.1% of the new coin-days are winners. The guard still
+# runs in SHADOW and logs `mode_range_shadow`; readout MRQ-OFF.
+# Rollback: True + restart.
+MODE_RANGE_QUALITY_GUARD_ENABLED: bool = False
 ALIGNMENT_15M_RANGE_MIN:  float = 4.0  # +5.9pp prec (23.0%->28.9%), blocks 49% entries
 TREND_15M_RANGE_MIN:      float = 4.0  # +17.1pp prec (29.9%->47.0%), blocks 57% entries
 ALIGNMENT_1H_RANGE_MIN:   float = 5.0  # +8.0pp prec (30.9%->38.9%), blocks 28% entries

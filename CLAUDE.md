@@ -704,6 +704,14 @@ change applied since then came from manual analysis. Minimum fix: validate
 `config_key` against `config.py` at generation time and drop hypotheses whose key
 is unknown. Status report: `docs/reports/2026-08-05-roadmap-status.md`.
 
+### mode_range_quality gate OFF — operator decision (2026-10-01)
+
+`MODE_RANGE_QUALITY_GUARD_ENABLED = False` (operator chose +3.43 pp early
+winner-days over ~+6.6 msg/day at 1.1% precision). The guard still runs in shadow
+and writes `mode_range_shadow`; readout MRQ-OFF (due 2026-10-16) compares the
+added entries with the rest. Rollback: True + restart. Spec:
+`docs/specs/features/mrq-off-1001-spec.md`.
+
 ### Gate locks re-judged by the goal; alert budget refuted (2026-10-01)
 
 `goal_validator.validate_gate_off` (gate removed entirely, L3 criterion): chop,
@@ -1031,6 +1039,7 @@ TREND_SCOUT_AUTO_APPLY_REQUIRES_L3 = True     # scout edits config only on an L3
 ML_PROMOTION_GATE_ENABLED = True              # nightly ML model replaces the live one unless clearly worse (ml_promotion_gate.py, 2026-09-29)
 ML_FLOOR_CALIBRATION_ENABLED = False          # per-model ML floor: SHADOW until readout ML-FLOOR-SHADOW (2026-09-29)
 ML_MODEL_HOT_RELOAD_ENABLED = True            # retrained ML model picked up without a restart (2026-09-29)
+MODE_RANGE_QUALITY_GUARD_ENABLED = False      # OFF by operator 2026-10-01; shadow-logged (mrq-off-1001-spec.md)
 ```
 
 ---
