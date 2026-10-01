@@ -614,16 +614,11 @@ def derive_next_steps(scorecard: dict, training: dict, dnt: dict,
             "gate": "Не называть per-mode P&L прибыльностью бота",
         })
     capture = scorecard.get("realized_potential") or {}
-    if capture.get("value") is None:
-        # Recomputing ZigZag EX1 cannot fix thin coverage -- the trades do not overlap
-        # the uptrends the labeler finds. The open question is the reference.
-        steps.append({
-            "priority": "P2", "id": "choose_ex1_reference",
-            "action": "Выбрать эталон потенциала для EX1 (ZigZag 4% не пересекается со сделками)",
-            "evidence": capture.get("reason") or "canonical EX1 is unknown",
-            "gate": "Не называть legacy proxy-mode EX1 реализованным потенциалом",
-        })
-    elif capture["value"] < capture["target"]:
+    # An unknown canonical EX1 is not a step (operator 2026-10-01: only worthwhile
+    # steps in the report): how much of a move the bot keeps is already measured by
+    # the North Star capture term and the exit validator's rocket-day replay. The
+    # scorecard still says "неизвестно".
+    if capture.get("value") is not None and capture["value"] < capture["target"]:
         steps.append({
             "priority": "P1", "id": "exit_monetization_replay",
             "action": "Проверить tail-hold, partial-exit и re-entry на максимальном периоде",

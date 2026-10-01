@@ -28,7 +28,7 @@
 | «bandit diagnostic …» | misleading | the bandit is OFF in the live path (`BANDIT_ENABLED = False`, ac33744) | labelled «бандит выключен в живом пути — на сигналы не влияет» |
 | «training↔live gap −97% … согласованы» | **false** | the off bandit's recall (3%) minus live buys (100%) | not computed while the bandit is off: «не применимо» |
 | step P0 «Восстановить полные рабочие дни» | not an action | past uptime cannot be restored; the window refills | removed (the uptime line stays; the verdict refuses incomparable windows) |
-| step P0 «Рассчитать EX1 в ZigZag-mode» | not doable as written | recomputation cannot raise coverage: trades do not overlap ZigZag(4%) uptrends | P2 «Выбрать эталон потенциала для EX1» |
+| step P0 «Рассчитать EX1 в ZigZag-mode» | not doable as written | recomputation cannot raise coverage: trades do not overlap ZigZag(4%) uptrends | removed (operator: only worthwhile steps; capture is measured by the North Star and the exit validator); the scorecard keeps «неизвестно» |
 | step order P0, P2, P1; `13.566739606126914%` | presentation | — | sorted by priority, one decimal |
 
 ## The trend verdict

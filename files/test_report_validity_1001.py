@@ -28,14 +28,15 @@ class TestGroundTruthStatus(unittest.TestCase):
 
 
 class TestSteps(unittest.TestCase):
-    def test_ex1_step_is_the_real_open_question_and_numbers_are_rounded(self):
+    def test_unknown_ex1_is_not_a_step_and_numbers_are_rounded(self):
         sc = {"north_star": {"status": "verified"}, "portfolio_alpha": {"value": -1.0},
               "realized_potential": {"value": None, "reason": "thin"},
               "signal_precision": {"value": 13.566739606126914, "target": 35.0},
               "message_rate": {"value": 31.133333333333333, "target_max": 10.0}}
         steps = {s["id"]: s for s in H.derive_next_steps(sc, {"evaluation_scope": "out_of_sample_time_holdout"},
                                                          {}, date(2026, 10, 1))}
-        self.assertEqual(steps["choose_ex1_reference"]["priority"], "P2")
+        # operator 2026-10-01: only worthwhile steps -- an unknown EX1 is not one
+        self.assertNotIn("choose_ex1_reference", steps)
         self.assertNotIn("restore_canonical_ex1", steps)
         self.assertIn("precision=13.6%", steps["honest_alert_budget_ranker"]["evidence"])
         self.assertIn("messages=31.1/d", steps["honest_alert_budget_ranker"]["evidence"])
