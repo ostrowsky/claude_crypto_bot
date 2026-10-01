@@ -322,6 +322,16 @@ def collect_scout_gates() -> dict:
 
 
 def compute_training_to_live_gap(training: dict, deploy: dict) -> dict:
+    try:
+        import config as _cfg
+        bandit_live = bool(getattr(_cfg, "BANDIT_ENABLED", False))
+    except Exception:
+        bandit_live = False
+    if not bandit_live:
+        # recall@20 here is the ENTRY BANDIT's; with the bandit off (ac33744) it
+        # decides nothing live, and "training 3% vs live 100% -> agreed" was
+        # printed on 2026-10-01 -- a comparison of two unrelated things.
+        return {"available": False, "reason": "bandit_off_live"}
     scope = training.get("evaluation_scope")
     if scope != "out_of_sample_time_holdout":
         return {
@@ -448,6 +458,24 @@ def _north_star_metric(md: dict) -> dict:
     return {}
 
 
+IMMUTABLE = "immutable_later_eod_klines"
+
+
+def ns_ground_truth_verified(ns: dict) -> bool:
+    """The North Star is computed on immutable later-EOD labels and not degraded.
+
+    2026-10-01: the scorecard wrote status "measured" while every consumer checked
+    for "verified", so the report announced "МЕТРИКА ПРЕДВАРИТЕЛЬНАЯ", a rolling-24h
+    ground truth, a critical red flag and a P0 step to build labels that had
+    existed since 2026-08-17 -- four false statements from one string mismatch.
+    """
+    return (ns or {}).get("label_provenance") == IMMUTABLE and not (ns or {}).get("primary_degraded")
+
+
+def _metric_on_immutable(m: dict) -> bool:
+    return (m or {}).get("label_provenance") == IMMUTABLE
+
+
 def build_canonical_scorecard(metrics_daily: dict) -> dict:
     """One current value per canonical business question.
 
@@ -470,9 +498,7 @@ def build_canonical_scorecard(metrics_daily: dict) -> dict:
             # "same_snapshot ... not immutable later EOD truth" while the value
             # came from immutable klines, which would have been a plain untruth
             # in a user-facing report.
-            "status": ("measured"
-                       if ns.get("label_provenance") == "immutable_later_eod_klines"
-                       else "provisional"),
+            "status": "verified" if ns_ground_truth_verified(ns) else "provisional",
             "provenance": ns.get("label_provenance")
                           or "same_snapshot_rolling_24h_label; not immutable later EOD truth",
             "metric": ns.get("metric"),
@@ -488,9 +514,10 @@ def build_canonical_scorecard(metrics_daily: dict) -> dict:
             "value": precision.get("precision_pct"), "target": 35.0,
             "unit": "pct", "n": precision.get("n_unique_entries"),
             "hits": precision.get("n_top20_entries"),
-            "status": "provisional",
-            "provenance": "top20 membership uses same-snapshot rolling-24h labels",
-            "source": "D1_D2_precision_msgrate",
+            "status": "measured" if _metric_on_immutable(precision) else "provisional",
+            "provenance": precision.get("label_provenance")
+                          or "top20 membership uses same-snapshot rolling-24h labels",
+            "source": precision.get("metric") or "D1_D2_precision_msgrate",
         },
         "message_rate": {
             "value": precision.get("unique_entries_per_day"), "target_max": 10.0,
@@ -500,9 +527,11 @@ def build_canonical_scorecard(metrics_daily: dict) -> dict:
         "time_to_signal": {
             "value": tts.get("median_h"), "target_max": 0.5,
             "unit": "hours", "n": tts.get("n"),
-            "status": "provisional",
-            "provenance": "winner set uses same-snapshot rolling-24h labels",
-            "source": "E1_time_to_signal",
+            "status": "measured" if _metric_on_immutable(tts) else "provisional",
+            "provenance": tts.get("label_provenance")
+                          or "winner set uses same-snapshot rolling-24h labels",
+            "definition": tts.get("definition"),
+            "source": tts.get("metric") or "E1_time_to_signal",
         },
         "realized_potential": _realized_potential_entry(
             md.get("EX1_realized_potential") or {}),
@@ -519,6 +548,10 @@ def build_canonical_scorecard(metrics_daily: dict) -> dict:
     }
 
 
+def _fmt1(v):
+    return f"{v:.1f}" if isinstance(v, (int, float)) else str(v)
+
+
 def derive_next_steps(scorecard: dict, training: dict, dnt: dict,
                       today: date) -> list[dict]:
     """Evidence-ranked work; never emits an unvalidated production change."""
@@ -531,14 +564,9 @@ def derive_next_steps(scorecard: dict, training: dict, dnt: dict,
             "evidence": ns.get("provenance") or "North-Star label provenance is unverified",
             "gate": "Текущий North Star считать предварительным, а не доказательством прогресса",
         })
-    if ns.get("days_full") is not None and ns.get("days_window") is not None \
-            and ns["days_full"] < ns["days_window"]:
-        steps.append({
-            "priority": "P0", "id": "restore_measurement_coverage",
-            "action": "Восстановить полные рабочие дни и наполнить сопоставимое 14-дневное окно",
-            "evidence": f"days_full={ns['days_full']}/{ns['days_window']}",
-            "gate": "Не оценивать тренд, пока denominators окон несопоставимы",
-        })
+    # A partial day in the window is not an action: past uptime cannot be restored
+    # and the window refills by itself. The report states it in the uptime line,
+    # and the verdict refuses incomparable endpoints (2026-10-01).
     if training.get("evaluation_scope") != "out_of_sample_time_holdout":
         steps.append({
             "priority": "P0", "id": "repair_training_evaluation",
@@ -571,9 +599,11 @@ def derive_next_steps(scorecard: dict, training: dict, dnt: dict,
         })
     capture = scorecard.get("realized_potential") or {}
     if capture.get("value") is None:
+        # Recomputing ZigZag EX1 cannot fix thin coverage -- the trades do not overlap
+        # the uptrends the labeler finds. The open question is the reference.
         steps.append({
-            "priority": "P0", "id": "restore_canonical_ex1",
-            "action": "Рассчитать и сохранить EX1 в ZigZag-mode с provenance и покрытием текущей policy",
+            "priority": "P2", "id": "choose_ex1_reference",
+            "action": "Выбрать эталон потенциала для EX1 (ZigZag 4% не пересекается со сделками)",
             "evidence": capture.get("reason") or "canonical EX1 is unknown",
             "gate": "Не называть legacy proxy-mode EX1 реализованным потенциалом",
         })
@@ -591,8 +621,8 @@ def derive_next_steps(scorecard: dict, training: dict, dnt: dict,
         steps.append({
             "priority": "P1", "id": "honest_alert_budget_ranker",
             "action": "Проверить time-held-out ranking при фиксированном alert budget до изменения BUY gates",
-            "evidence": f"precision={precision.get('value')}% (target {precision.get('target')}%), "
-                        f"messages={msg.get('value')}/d (max {msg.get('target_max')})",
+            "evidence": f"precision={_fmt1(precision.get('value'))}% (target {precision.get('target')}%), "
+                        f"messages={_fmt1(msg.get('value'))}/d (max {msg.get('target_max')})",
             "gate": "Улучшать frontier precision/recall, не покупать recall спамом по большинству символов",
         })
     return steps
@@ -1141,8 +1171,8 @@ def _ns_history() -> list[tuple[str, float]]:
         m = row.get("metrics") or row
         ns = m.get("NS_EarlyCapture_top20") or m.get("_compute_early_capture.py") or {}
         ec = ns.get("early_capture")
-        if ec is None:
-            continue
+        if ec is None or not ns_ground_truth_verified(ns):
+            continue                  # never compare across a label change (TH-04)
         try:
             day = str(row.get("ts", ""))[:10]
             if not day:
@@ -1167,8 +1197,8 @@ def _ns_history_with_meta() -> list[tuple[str, float, int | None]]:
         m = row.get("metrics") or row
         ns = m.get("NS_EarlyCapture_top20") or m.get("_compute_early_capture.py") or {}
         ec = ns.get("early_capture")
-        if ec is None:
-            continue
+        if ec is None or not ns_ground_truth_verified(ns):
+            continue                  # never compare across a label change (TH-04)
         day = str(row.get("ts", ""))[:10]
         if not day:
             continue
@@ -1330,9 +1360,14 @@ def _past_decisions_resume() -> list[str]:
         elif status == "helped":
             lines.append(f"  • {name} — ✅ помогло")
         elif status == "harmed":
-            misses = res.get("expected_misses") or []
+            unmeasured = set(res.get("unmeasured_expected") or [])
+            misses = [m for m in (res.get("expected_misses") or []) if m not in unmeasured]
             det = f" (просело: {_metric_plain.get(misses[0], misses[0])})" if misses else ""
             lines.append(f"  • {name} — ❌ не помогло / навредило{det}")
+        elif status == "guard_only":
+            v = ((res.get("portfolio_objectives") or {}).get("violations") or [{}])[0]
+            lines.append(f"  • {name} — ⚠️ целевые метрики не измерены; нарушено ограничение "
+                         f"{v.get('constraint')}: {v.get('observed', 0):+.4f} при пределе {v.get('limit', 0):.4f}")
         else:
             lines.append(f"  • {name} — ⚠️ эффект смешанный")
 
@@ -1356,6 +1391,14 @@ def _attribution_status(result: dict | None) -> str:
     rationale = [str(x).lower() for x in (result.get("rationale") or [])]
     if rationale and all("insufficient_data" in x for x in rationale):
         return "insufficient_data"
+    expected = set(result.get("expected_metrics") or [])
+    unmeasured = set(result.get("unmeasured_expected") or [])
+    viol = ((result.get("portfolio_objectives") or {}).get("violations") or [])
+    if expected and expected <= unmeasured:
+        # 2026-10-01: "не помогло (просело: realert_rate)" was printed for a
+        # decision none of whose metrics was measured; the verdict came only
+        # from a portfolio guard (maxdd +0.1003 vs a 0.1000 limit).
+        return "guard_only" if viol else "insufficient_data"
     if verdict in ("hit", "improvement", "win", "accept"):
         return "helped"
     if verdict in ("regression", "miss", "worse"):
@@ -1416,15 +1459,19 @@ def render_telegram(r: dict) -> str:
         out.append("")
 
     ec = ns_md.get("early_capture")
+    gt_ok = ns_ground_truth_verified(ns_md)
     if ec is not None:
-        out.append(f"<b>Главное:</b> предварительный North Star раннего захвата = {ec:.1%} "
-                   f"({p_trend}). Цель — 40%, минимально приемлемо 25%.")
+        out.append(f"<b>Главное:</b> {'' if gt_ok else 'предварительный '}North Star раннего захвата "
+                   f"= {ec:.1%} ({p_trend}). Цель — 40%, минимально приемлемо 25%.")
         out.append("Это составной score, а не доля пойманных монет: "
                    "coverage × реализованная часть движения × своевременность.")
-        out.append("⚠️ Ground truth пока provisional: label построен на rolling-24h snapshot, "
-                   "а не на неизменяемом later-EOD top-20.")
-        cov = funnel.get("coverage_pct_raw")
-        sm = funnel.get("silent_miss_pct")
+        if not gt_ok:
+            out.append("⚠️ Ground truth пока provisional: label построен на rolling-24h snapshot, "
+                       "а не на неизменяемом later-EOD top-20.")
+        cov = funnel.get("coverage_pct_raw") if _metric_on_immutable(funnel) else None
+        sm = funnel.get("silent_miss_pct") if _metric_on_immutable(funnel) else None
+        if cov is None and isinstance(ns_md.get("decomp_coverage"), (int, float)):
+            cov = 100.0 * ns_md["decomp_coverage"]     # same denominator as the North Star
         capm = ns_md.get("decomp_capture_mean")
         if cov is not None and capm is not None:
             caught = round(cov / 10.0)
@@ -1484,11 +1531,19 @@ def render_telegram(r: dict) -> str:
             value = item.get("value")
             return "неизвестно" if not isinstance(value, (int, float)) else f"{value:.{digits}f}{suffix}"
 
+        def _old(item: dict) -> str:
+            return " (устаревшая метка top-20)" if item.get("status") == "provisional" else ""
+
         out.append("🎯 <b>Канонический scorecard</b>")
-        out.append(f"  прибыль портфеля vs buy-and-hold: {_v(alpha, '%')} (цель &gt; 0%)")
-        out.append(f"  precision сигналов: {_v(precision, '%')} / 35%; "
+        a_note = ""
+        if isinstance(alpha.get("value"), (int, float)):
+            a_note = (f" — диагностика: бот {alpha.get('bot_return_pct', 0):+.1f}% против "
+                      f"{alpha.get('buy_and_hold_pct', 0):+.1f}% у удержания watchlist, "
+                      f"{alpha.get('window', '')}, равные слоты (у бота нет размера позиций)")
+        out.append(f"  прибыль портфеля vs buy-and-hold: {_v(alpha, '%')} (цель &gt; 0%){a_note}")
+        out.append(f"  precision сигналов: {_v(precision, '%')} / 35%{_old(precision)}; "
                    f"сообщений: {_v(msg, '/д')} / ≤10/д")
-        out.append(f"  время до сигнала: {_v(tts, 'ч', 2)} / ≤0.5ч; "
+        out.append(f"  время до сигнала: {_v(tts, 'ч', 2)} / ≤0.5ч{_old(tts)}; "
                    f"реализованный потенциал: {_v(ex1, '', 3)} / 0.50")
         out.append(f"  fast reversal: {_v(fr, '%')} / ≤8%; whipsaw: {_v(wh, '%')} / ≤5%")
         out.append("")
@@ -1522,6 +1577,7 @@ def render_telegram(r: dict) -> str:
     if steps:
         out.append("")
         out.append("🧭 <b>Следующие доказуемые шаги</b>")
+        steps = sorted(steps, key=lambda s: str(s.get("priority") or "P9"))
         for idx, step in enumerate(steps[:6], 1):
             out.append(f"  {idx}. [{step.get('priority', '?')}] {step.get('action')} — "
                        f"{step.get('evidence')}")
@@ -1555,8 +1611,13 @@ def _render_learning_block(r: dict) -> str | None:
     if th.get("legacy_ratio_suppressed"):
         lines.append("  legacy recall скрыт: в записи нет base rate, action rate и lift")
     elif isinstance(rec, (int, float)):
+        try:
+            import config as _cfg
+            off = "" if getattr(_cfg, "BANDIT_ENABLED", False) else " (бандит выключен в живом пути — на сигналы не влияет)"
+        except Exception:
+            off = ""
         lines.append(
-            f"  bandit diagnostic: recall={rec:.1%}, ENTER={action_rate:.1%}, "
+            f"  bandit diagnostic{off}: recall={rec:.1%}, ENTER={action_rate:.1%}, "
             f"base={base_rate:.1%}, lift={lift:.2f}×, precision={precision:.1%}; "
             f"scope={scope}"
         )
@@ -1574,6 +1635,8 @@ def _render_learning_block(r: dict) -> str | None:
         lines.append(f"  training↔live gap: {gap['value']:.1%} (валидный temporal holdout)")
     elif gap.get("reason") == "training_metric_not_out_of_sample":
         lines.append("  ❌ training↔live gap неизвестен: нет out-of-sample temporal holdout")
+    elif gap.get("reason") == "bandit_off_live":
+        lines.append("  training↔live gap: не применимо — бандит в живом пути выключен")
     return "\n".join(lines)
 
 

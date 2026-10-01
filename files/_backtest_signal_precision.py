@@ -12,6 +12,24 @@ sys.stdout.reconfigure(encoding="utf-8")
 ROOT = Path(__file__).resolve().parent.parent
 NOW = datetime.now(timezone.utc); CUT = NOW - timedelta(days=14)
 
+
+# v2 (2026-10-01): the winner set comes from the immutable later-EOD label store --
+# global top-20 then the watchlist, the North Star's own denominator. The legacy
+# `label_top20` is the same-snapshot rolling-24h label (TH-03) and used to be
+# printed under the name "watchlist∩global-top20". It travels beside as legacy_*.
+def _immutable_winners():
+    sys.path.insert(0, str(ROOT / "files"))
+    import immutable_labels as _IL
+    import label_store as _LS
+    import _compute_early_capture as _E
+    win, _ = _IL.winners_by_day(top_n=20, watchlist=_E.load_watchlist(), rank_before_filter=True)
+    labelled = {r["utc_day"] for r in _LS.LabelStore().records()}
+    return set(win), labelled, _LS
+
+
+IMMUTABLE = "immutable_later_eod_klines"
+LEGACY = "rolling_24h_same_snapshot"
+
 # top-20
 top20 = set()
 with io.open(ROOT/"files"/"top_gainer_dataset.jsonl", encoding="utf-8") as f:
@@ -56,11 +74,24 @@ print(f"\nRaw entries (incl re-entries): {total_entries_raw}")
 print(f"  Across {n_days} days  → avg {total_entries_raw/max(1,n_days):.1f} entries/day")
 print(f"  Unique-symbol entries/day:    {n_entries/max(1,n_days):.1f}")
 
+win_imm, labelled, _ = _immutable_winners()
+uniq_lab = {k for k in entries_uniq if k[0] in labelled}     # a day without labels is no data (TH-05)
+hits_imm = sum(1 for k in uniq_lab if k in win_imm)
+print(f"\nv2 immutable labels: {hits_imm}/{len(uniq_lab)} entries on winner-days "
+      f"({100*hits_imm/max(1,len(uniq_lab)):.1f}%), {len({k[0] for k in uniq_lab})} labelled days")
+
 metric = {
-    "metric": "D1_D2_precision_msgrate",
-    "n_unique_entries": n_entries,
-    "n_top20_entries": n_top20_entries,
-    "precision_pct": 100*n_top20_entries/max(1,n_entries),
+    "metric": "D1_D2_precision_msgrate_v2",
+    "label_provenance": IMMUTABLE,
+    "denominator": "global_top20_intersect_watchlist_from_label_store",
+    "n_unique_entries": len(uniq_lab),
+    "n_top20_entries": hits_imm,
+    "precision_pct": 100*hits_imm/max(1,len(uniq_lab)),
+    "days_labelled": len({k[0] for k in uniq_lab}),
+    "legacy_label_provenance": LEGACY,
+    "legacy_n_unique_entries": n_entries,
+    "legacy_n_top20_entries": n_top20_entries,
+    "legacy_precision_pct": 100*n_top20_entries/max(1,n_entries),
     "total_raw_entries": total_entries_raw,
     "n_days": n_days,
     "raw_entries_per_day": total_entries_raw/max(1,n_days),

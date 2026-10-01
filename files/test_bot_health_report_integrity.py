@@ -81,12 +81,26 @@ class CompletedCriticTests(unittest.TestCase):
         self.assertEqual(by_id["RF_uptime_gap"]["severity"], "critical")
 
     def test_training_gap_is_fail_closed_without_temporal_holdout(self):
-        gap = H.compute_training_to_live_gap(
-            {"evaluation_scope": "in_sample_post_fit", "recall_at_20": 1.0},
-            {"watchlist_top_bought_pct": 0.25},
-        )
+        import config
+        with mock.patch.object(config, "BANDIT_ENABLED", True):
+            gap = H.compute_training_to_live_gap(
+                {"evaluation_scope": "in_sample_post_fit", "recall_at_20": 1.0},
+                {"watchlist_top_bought_pct": 0.25},
+            )
         self.assertFalse(gap["available"])
         self.assertEqual(gap["reason"], "training_metric_not_out_of_sample")
+
+    def test_training_gap_is_not_computed_for_a_bandit_that_is_off(self):
+        # 2026-10-01: "training 3% vs live 100% -> agreed" compared the switched-off
+        # bandit's recall with live buys
+        import config
+        with mock.patch.object(config, "BANDIT_ENABLED", False):
+            gap = H.compute_training_to_live_gap(
+                {"evaluation_scope": "out_of_sample_time_holdout", "recall_at_20": 0.03},
+                {"watchlist_top_bought_pct": 1.0},
+            )
+        self.assertFalse(gap["available"])
+        self.assertEqual(gap["reason"], "bandit_off_live")
 
     def test_invalid_training_evidence_is_a_red_flag(self):
         flags = H.detect_red_flags(
@@ -196,14 +210,17 @@ class ComparableProgressTests(unittest.TestCase):
                                              "early_capture": 0.07}},
             {"ts": "2026-08-07T07:00:00Z",
              "_compute_early_capture.py": {"metric": "NS_EarlyCapture_top20",
+                                             "label_provenance": "immutable_later_eod_klines",
                                              "days_window": 14, "days_full": 5,
                                              "early_capture": 0.1088}},
             {"ts": "2026-08-07T09:00:00Z",
              "_compute_early_capture.py": {"metric": "NS_EarlyCapture_top20",
+                                             "label_provenance": "immutable_later_eod_klines",
                                              "days_window": 14, "days_full": 5,
                                              "early_capture": 0.1088}},
             {"ts": "2026-08-13T08:00:00Z",
              "_compute_early_capture.py": {"metric": "NS_EarlyCapture_top20",
+                                             "label_provenance": "immutable_later_eod_klines",
                                              "days_window": 14, "days_full": 10,
                                              "early_capture": 0.0702}},
         ]
@@ -225,10 +242,12 @@ class ComparableProgressTests(unittest.TestCase):
         rows = [
             {"ts": "2026-08-07T07:00:00Z",
              "_compute_early_capture.py": {"metric": "NS_EarlyCapture_top20",
+                                             "label_provenance": "immutable_later_eod_klines",
                                              "days_window": 14, "days_full": 10,
                                              "early_capture": 0.1088}},
             {"ts": "2026-08-13T08:00:00Z",
              "_compute_early_capture.py": {"metric": "NS_EarlyCapture_top20",
+                                             "label_provenance": "immutable_later_eod_klines",
                                              "days_window": 14, "days_full": 10,
                                              "early_capture": 0.0702}},
         ]
@@ -241,6 +260,28 @@ class ComparableProgressTests(unittest.TestCase):
 
         self.assertEqual(verdict[1], "СТАЛО ХУЖЕ")
         self.assertIn("~11 → ~7", verdict[2])
+
+    def test_progress_never_compares_across_a_label_change(self):
+        # 2026-10-01: rows on the rolling-24h label must not be an endpoint of a
+        # trend computed on immutable labels (TH-04)
+        rows = [
+            {"ts": "2026-08-07T07:00:00Z",
+             "_compute_early_capture.py": {"metric": "NS_EarlyCapture_top20",
+                                             "label_provenance": "rolling_24h_same_snapshot",
+                                             "days_window": 14, "days_full": 10,
+                                             "early_capture": 0.30}},
+            {"ts": "2026-08-13T08:00:00Z",
+             "_compute_early_capture.py": {"metric": "NS_EarlyCapture_top20",
+                                             "label_provenance": "immutable_later_eod_klines",
+                                             "days_window": 14, "days_full": 10,
+                                             "early_capture": 0.0702}},
+        ]
+        with tempfile.TemporaryDirectory() as td:
+            p = Path(td) / "metrics.jsonl"
+            p.write_text("\n".join(json.dumps(x) for x in rows) + "\n", encoding="utf-8")
+            with mock.patch.object(H.PL, "METRICS_DAILY", p):
+                self.assertEqual(H._ns_history(), [("2026-08-13", 0.0702)])
+                self.assertEqual(H._progress_verdict(ground_truth_verified=True)[1], "ПОКА НЕ ЯСНО")
 
     def test_progress_is_not_claimed_for_provisional_labels(self):
         verdict = H._progress_verdict(ground_truth_verified=False)
@@ -268,6 +309,7 @@ class RenderingIntegrityTests(unittest.TestCase):
                     "days_full": 10,
                 },
                 "C1_C2_coverage_funnel": {
+                    "label_provenance": "immutable_later_eod_klines",
                     "coverage_pct_raw": 61.54,
                     "silent_miss_pct": 11.54,
                 },
@@ -289,6 +331,20 @@ class RenderingIntegrityTests(unittest.TestCase):
         self.assertIn("critic: 2026-08-12 · final", text)
         self.assertIn("составной score", text)
         self.assertIn("Ground truth пока provisional", text)
+
+    def test_legacy_funnel_is_not_printed_as_global_top20(self):
+        # 2026-10-01: a rolling-24h, rank-inside-the-watchlist funnel was printed as
+        # "watchlist∩global-top20" (~6 of 10 vs the North Star's 8 of 10)
+        report = self._report()
+        report["metrics_daily_latest"]["metrics"]["C1_C2_coverage_funnel"] = {
+            "coverage_pct_raw": 20.0, "silent_miss_pct": 50.0}
+        with mock.patch.object(H, "_progress_verdict", return_value=("➖", "СТОИТ", "x")), \
+             mock.patch.object(H, "_action_needed_count", return_value=0), \
+             mock.patch.object(H, "_past_decisions_resume", return_value=[]):
+            text = H.render_telegram(report)
+        self.assertIn("~6 имели вход", text)          # from the North Star decomposition (0.6154)
+        self.assertNotIn("~2 имели вход", text)
+        self.assertNotIn("Совсем не видит", text)
 
     def test_unavailable_deployment_cannot_render_no_alerts(self):
         report = self._report()
@@ -390,7 +446,7 @@ class VersionedMetricLookupTests(unittest.TestCase):
             label_provenance="immutable_later_eod_klines"))
         ns = sc["north_star"]
         self.assertEqual(ns["provenance"], "immutable_later_eod_klines")
-        self.assertEqual(ns["status"], "measured")
+        self.assertEqual(ns["status"], "verified")
         self.assertEqual(ns["metric"], "NS_EarlyCapture_top20_v2")
 
     def test_a_snapshot_labelled_payload_stays_provisional(self):

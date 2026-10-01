@@ -29,6 +29,24 @@ NOW = datetime.now(timezone.utc)
 DAYS = 14
 CUT = NOW - timedelta(days=DAYS)
 
+
+# v2 (2026-10-01): the winner set comes from the immutable later-EOD label store --
+# global top-20 then the watchlist, the North Star's own denominator. The legacy
+# `label_top20` is the same-snapshot rolling-24h label (TH-03) and used to be
+# printed under the name "watchlist∩global-top20". It travels beside as legacy_*.
+def _immutable_winners():
+    sys.path.insert(0, str(ROOT / "files"))
+    import immutable_labels as _IL
+    import label_store as _LS
+    import _compute_early_capture as _E
+    win, _ = _IL.winners_by_day(top_n=20, watchlist=_E.load_watchlist(), rank_before_filter=True)
+    labelled = {r["utc_day"] for r in _LS.LabelStore().records()}
+    return set(win), labelled, _LS
+
+
+IMMUTABLE = "immutable_later_eod_klines"
+LEGACY = "rolling_24h_same_snapshot"
+
 # Canonical NS denominator is '#(top-20 in watchlist)' (CLAUDE.md s1).
 # top_gainer_dataset spans a broader learning universe (~3-4x watchlist), so
 # without this filter the funnel counts coins the bot CANNOT trade and reports
@@ -82,6 +100,16 @@ with io.open(ROOT / "files" / "bot_events.jsonl", encoding="utf-8") as f:
         if not reason:
             reason = e.get("reason_code") or e.get("reason","") or ""
         events_by[(d, sym)].append((ev, reason))
+
+# v2: classify the immutable winner set; the legacy set's coverage travels beside it
+legacy_top20_by_day = top20_by_day
+_win_imm, _labelled, _ = _immutable_winners()
+_cut_day = CUT.strftime("%Y-%m-%d")
+top20_by_day = defaultdict(set)
+for _d, _s in _win_imm:
+    if _d >= _cut_day:
+        top20_by_day[_d].add(_s)
+DENOMINATOR = "global_top20_intersect_watchlist_from_label_store"
 
 # 3) Classify each (date, top20_sym)
 classes = Counter()
@@ -176,8 +204,24 @@ print(f"\nuptime: {len(full_days)} full days counted; "
       + (f" ({', '.join(skipped_days)})" if skipped_days else ""))
 
 # METRIC_JSON for daily aggregator
+_leg_tot = _leg_ent = _leg_none = 0
+for _d, _syms in legacy_top20_by_day.items():
+    if _d not in full_days:
+        continue
+    for _s in _syms:
+        _ev = [x[0] for x in events_by.get((_d, _s), [])]
+        _leg_tot += 1
+        _leg_ent += "entry" in _ev
+        _leg_none += not _ev
+
 metric = {
-    "metric": "C1_C2_coverage_funnel",
+    "metric": "C1_C2_coverage_funnel_v2",
+    "label_provenance": IMMUTABLE,
+    "legacy_label_provenance": LEGACY,
+    "legacy_denominator": "top20_within_watchlist_from_top_gainer_dataset",
+    "legacy_n_top20_winners": _leg_tot,
+    "legacy_coverage_pct_raw": 100 * _leg_ent / max(1, _leg_tot),
+    "legacy_silent_miss_pct": 100 * _leg_none / max(1, _leg_tot),
     # Which top-20 this counts. Without it the rate is uninterpretable and a
     # later redefinition is undetectable.
     "denominator": DENOMINATOR,

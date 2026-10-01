@@ -704,6 +704,20 @@ change applied since then came from manual analysis. Minimum fix: validate
 `config_key` against `config.py` at generation time and drop hypotheses whose key
 is unknown. Status report: `docs/reports/2026-08-05-roadmap-status.md`.
 
+### Morning report: invalid statements removed (2026-10-01)
+
+One status mismatch ("measured" written, "verified" checked) printed four false
+statements daily: "МЕТРИКА ПРЕДВАРИТЕЛЬНАЯ", a rolling-24h ground truth, a critical
+red flag and a P0 step to build labels that exist since 08-17. Also fixed: the
+coverage funnel, signal precision and time-to-signal ran on the leaky
+`label_top20` while printed as watchlist∩global-top20 -> v2 on immutable labels
+(funnel 80% = North Star coverage; precision 13.6%; time-to-signal +3.5 h after
+the +2.5% crossing, measured from the crossing instead of ~6-hourly snapshots),
+legacy values kept as `legacy_*`; a decision with NO measured metric was reported
+as "просело: realert_rate"; the training<->live gap compared the switched-off
+bandit with live buys. The trend verdict uses immutable-label rows only. Spec:
+`docs/specs/features/report-validity-1001-spec.md`.
+
 ### Late entry: anatomy, and the crossing-entry fix REFUTED (2026-09-30)
 
 531 winner-days (03-01..09-28): early 11.3%, **late 55.6%**, never 26.2%, held 7%.
