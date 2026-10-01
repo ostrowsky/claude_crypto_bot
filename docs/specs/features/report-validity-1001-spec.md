@@ -50,6 +50,6 @@ so the truth harness and every consumer keep working.
 
 ## Tests
 
-`files/test_report_validity_1001.py` (11); `files/test_bot_health_report_integrity.py`
+`files/test_report_validity_1001.py` (9); `files/test_bot_health_report_integrity.py`
 updated to the corrected semantics (+3 tests: no trend across a label change, no
 gap for a bandit that is off, no legacy funnel under the global name) — 24 pass.

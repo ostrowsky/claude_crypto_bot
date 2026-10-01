@@ -548,6 +548,22 @@ def build_canonical_scorecard(metrics_daily: dict) -> dict:
     }
 
 
+def _alert_budget_tested(today, max_age_days: int = 30):
+    """The alert-budget ranking result if it was run in the last month, else None.
+
+    Tested 2026-10-01 (_backtest_alert_budget.py): a step that was already run
+    and refuted must not be offered again every morning as if it were open.
+    """
+    p = PL.RUNTIME / "backtests" / "alert_budget_result.json"
+    try:
+        r = json.loads(p.read_text(encoding="utf-8"))
+        if (today - date.fromisoformat(str(r.get("date")))).days <= max_age_days:
+            return r
+    except Exception:
+        pass
+    return None
+
+
 def _fmt1(v):
     return f"{v:.1f}" if isinstance(v, (int, float)) else str(v)
 
@@ -614,9 +630,21 @@ def derive_next_steps(scorecard: dict, training: dict, dnt: dict,
             "evidence": f"EX1 median={capture['value']:.3f} < target={capture['target']:.2f}; n={capture.get('n')}",
             "gate": "Не менять production SELL без положительного multi-objective backtest",
         })
+    # A lock the goal does not back is an operator decision, not a P0 chore
+    # (valid-proposals-1001-spec.md): it stays in force until decided.
+    for c in (dnt.get("contested") or []):
+        steps.append({
+            "priority": "P1", "id": f"decide_contested_gate_{c.get('name')}",
+            "action": f"Решить по фильтру {c.get('name')}: цель не подтверждает блокировку, "
+                      f"но снятие добавляет сообщения низкой точности",
+            "evidence": str(c.get("goal_evidence") or "")[:220],
+            "gate": "Фильтр остаётся включённым до решения оператора",
+        })
     precision = scorecard.get("signal_precision") or {}
     msg = scorecard.get("message_rate") or {}
-    if ((isinstance(precision.get("value"), (int, float)) and precision["value"] < precision["target"])
+    budget_done = _alert_budget_tested(today)
+    if budget_done is None and (
+            (isinstance(precision.get("value"), (int, float)) and precision["value"] < precision["target"])
             or (isinstance(msg.get("value"), (int, float)) and msg["value"] > msg["target_max"])):
         steps.append({
             "priority": "P1", "id": "honest_alert_budget_ranker",

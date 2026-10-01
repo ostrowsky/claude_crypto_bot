@@ -219,6 +219,13 @@ def validate(hyp: dict, since: str = SINCE_DEFAULT, cfg_module=None, events_path
     if new_v == cur_v:
         return {**base, "verdict": "reject", "reason": "diff.to equals the live value"}
     new = dict(cur, **{key: new_v})
+    return _validate_spec(spec, key, cur, new, cur_v, new_v, base, since, cfg_module, events_path,
+                          full_days, bars_loader, winners)
+
+
+def _validate_spec(spec, key, cur, new, cur_v, new_v, base, since, cfg_module, events_path,
+                   full_days, bars_loader, winners) -> dict:
+    """The shared judgement: rows a spec admits or removes, scored by the goal."""
     window = max(since, spec.valid_since or since)
 
     old_events = RV.EVENTS
@@ -378,6 +385,33 @@ def validate(hyp: dict, since: str = SINCE_DEFAULT, cfg_module=None, events_path
             f"{trade['current'].get('mean', 0):+.2f}% (n={len(cc)}); combined-current {pt:+.3f} pp "
             f"[{lo:+.3f}, {hi:+.3f}]; months agree {agree:.0%} of {len(scored)}")
     return {**report, "verdict": decide(direction, d_pp, lo, hi, agree), "reason": desc}
+
+
+def validate_gate_off(gate_codes, since: str = SINCE_DEFAULT, *, tf=None, control_mode: str = "",
+                      cfg_module=None, events_path=None, full_days=None, bars_loader=None,
+                      winners=None) -> dict:
+    """What if the gate were removed ENTIRELY? (2026-10-01, gate-locks-goal-1001-spec.md)
+
+    The do_not_touch locks were verified on 2026-05-28 by a 5-bar return proxy.
+    This re-judges a lock by the goal criterion: every row the gate blocked on the
+    day is admitted (with the downstream pass rate p), everything else as in
+    validate(). A lock is CONFIRMED when removal is rejected; an "accept" means the
+    lock is not supported by the goal and goes to the operator -- never applied.
+    """
+    if cfg_module is None:
+        import config as cfg_module
+    codes = frozenset(gate_codes)
+    missing = [c for c in codes if c not in RV.STAGE]
+    key = "GATE_OFF:" + "/".join(sorted(codes))
+    base = {"validator": "goal_validator.gate_off", "config_key": key, "since": since,
+            "criterion": "winner-days entered before the +2.5% crossing; per-trade non-inferiority -0.10 pp"}
+    if missing:
+        return {**base, "verdict": "needs_data",
+                "reason": f"gate code(s) {missing} have no pipeline stage: blocks are not replayable"}
+    spec = RV.ReplaySpec(codes, tf, lambda e, cfg: bool(e["_blocked_here"]) if cfg.get("_on") else False,
+                         ("_on",), frozenset({"relax"}), "gate removed entirely", control_mode=control_mode)
+    return _validate_spec(spec, key, {"_on": True}, {"_on": False}, 1.0, 0.0, base, since, cfg_module,
+                          events_path, full_days, bars_loader, winners)
 
 
 def combine(goal_res: dict | None, peak_res: dict) -> dict:

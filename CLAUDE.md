@@ -704,6 +704,18 @@ change applied since then came from manual analysis. Minimum fix: validate
 `config_key` against `config.py` at generation time and drop hypotheses whose key
 is unknown. Status report: `docs/reports/2026-08-05-roadmap-status.md`.
 
+### Gate locks re-judged by the goal; alert budget refuted (2026-10-01)
+
+`goal_validator.validate_gate_off` (gate removed entirely, L3 criterion): chop,
+open_cluster_cap and ml_proba_zone (current model era, 09-07..) CONFIRMED;
+**mode_range_quality UNSUPPORTED by the goal** (+3.43 pp early winner-days,
+trades non-inferior) but removing it adds ~6.6 msg/day at 1.1% precision of new
+coin-days -> moved to `contested`, left ON, operator decision (report P1). mtf and
+cooldown never appear as blocked events -> not replayable. Alert-budget ranking
+REFUTED: at 3/5/10 msg/day precision rises to 0.47/0.36/0.25 (vs 0.11) but early
+winner catches drop to 0-1 of 18 -- the precise scores already contain the answer
+(late). Spec: `docs/specs/features/valid-proposals-1001-spec.md`.
+
 ### Morning report: invalid statements removed (2026-10-01)
 
 One status mismatch ("measured" written, "verified" checked) printed four false
