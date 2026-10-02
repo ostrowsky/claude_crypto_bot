@@ -1036,6 +1036,7 @@ INCIDENT_ANALYST_ENABLED = True               # daily: where each winner was los
 READOUTS_ENABLED = True                       # pre-registered readouts of live changes (readouts.py, 2026-09-29)
 L3_EXIT_VALIDATOR_ENABLED = True              # L3 can test exit / leader-mode keys (exit_validator.py, 2026-09-29)
 TREND_SCOUT_AUTO_APPLY_REQUIRES_L3 = True     # scout edits config only on an L3 accept (2026-09-29)
+TREND_SCOUT_TG_ONLY_ACTIONABLE = True         # scout writes to Telegram only for L3-backed changes (2026-10-02, scout-tg-actionable-1002-spec.md)
 ML_PROMOTION_GATE_ENABLED = True              # nightly ML model replaces the live one unless clearly worse (ml_promotion_gate.py, 2026-09-29)
 ML_FLOOR_CALIBRATION_ENABLED = False          # per-model ML floor: SHADOW until readout ML-FLOOR-SHADOW (2026-09-29)
 ML_MODEL_HOT_RELOAD_ENABLED = True            # retrained ML model picked up without a restart (2026-09-29)

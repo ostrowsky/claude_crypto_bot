@@ -133,6 +133,7 @@ class ScoutReport:
     applied: list[dict]            # {"param": ..., "old": ..., "new": ...}
     telegram_text: str = ""
     has_findings: bool = False
+    pending_l3_ok: list = field(default_factory=list)   # risky proposals L3 accepted
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -750,6 +751,21 @@ def l3_verdict(param: str, value: float, *, validators=None, now=None) -> dict:
     return res
 
 
+def _tg_only_actionable() -> bool:
+    """Telegram only for changes the goal backs (operator 2026-10-02).
+
+    The 4-hourly report announced "Пропустил 48" on scout's own trend score and put
+    COOLDOWN_BARS 19 -> 15 (ret5 +0.07%, win 50%) to the operator -- noise. Now a
+    report is sent only when a change was applied (which already needs an L3
+    accept) or a risky proposal has an L3 accept; everything else goes to the log.
+    """
+    try:
+        import config as _cfg
+        return bool(getattr(_cfg, "TREND_SCOUT_TG_ONLY_ACTIONABLE", False))
+    except Exception:
+        return True
+
+
 def _l3_gate_enabled() -> bool:
     try:
         import config as _cfg
@@ -853,6 +869,11 @@ def _build_telegram_text(report: ScoutReport) -> str:
         vr for vr in report.validated
         if vr.verdict == "approve" and vr.proposal.rule.risk in ("medium", "high")
     ]
+    if _tg_only_actionable():
+        # only what the goal backs is put to the operator (2026-10-02)
+        ok = {(p["param"], float(p["new_value"])) for p in report.pending_l3_ok}
+        pending = [vr for vr in pending
+                   if (vr.proposal.config_param, float(vr.proposal.proposed_value)) in ok]
     if pending:
         lines.append("\n⚠️ <b>Требует подтверждения:</b>")
         for vr in pending:
@@ -1043,6 +1064,22 @@ async def run_pipeline(
     else:
         log.info("Phase 5: dry_run — пропускаем применение изменений")
 
+    # Risky proposals are never auto-applied; put to the operator only when L3
+    # accepts them (2026-10-02, scout-tg-actionable-1002-spec.md)
+    pending_l3_ok = []
+    if _tg_only_actionable():
+        for vr in validated:
+            if vr.verdict == "approve" and vr.proposal.rule.risk in ("medium", "high"):
+                try:
+                    v = await asyncio.to_thread(l3_verdict, vr.proposal.config_param, vr.proposal.proposed_value)
+                except Exception as e:
+                    v = {"verdict": "error", "reason": repr(e)}
+                if v.get("verdict") == "accept":
+                    pending_l3_ok.append({"param": vr.proposal.config_param, "new_value": vr.proposal.proposed_value})
+        findings = bool(applied or pending_l3_ok)
+    else:
+        findings = bool(proposals or applied)
+
     # Собираем отчёт
     report = ScoutReport(
         ts=ts,
@@ -1053,7 +1090,8 @@ async def run_pipeline(
         proposals=proposals,
         validated=validated,
         applied=applied,
-        has_findings=bool(proposals or applied),
+        has_findings=findings,
+        pending_l3_ok=pending_l3_ok,
     )
     report.telegram_text = _build_telegram_text(report)
 

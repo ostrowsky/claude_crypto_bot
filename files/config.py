@@ -1436,6 +1436,10 @@ L3_EXIT_VALIDATOR_ENABLED: bool = True
 # proxy (ret5 >= 0, win >= 40% over 4h) moved CLONE_SIGNAL_GUARD_MAX_SIMILAR 4 -> 23.
 # Rollback: False -> the old proxy auto-apply.
 TREND_SCOUT_AUTO_APPLY_REQUIRES_L3: bool = True
+# trend-scout writes to Telegram only when a change was applied or a risky
+# proposal has an L3 accept (operator 2026-10-02: no noise reports).
+# Rollback: False -> the old report on every proposal.
+TREND_SCOUT_TG_ONLY_ACTIONABLE: bool = True
 # Nightly ML signal model replaces the live one unless CLEARLY worse (95% upper
 # bound < 0) on AUC, recall or precision at the live floor, on rows neither model
 # trained on (ml_promotion_gate.py). Rollback: False -> overwrite every night.

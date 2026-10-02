@@ -902,6 +902,7 @@ INCIDENT_ANALYST_ENABLED = True               # ежедневно: где по�
 READOUTS_ENABLED = True                       # проверки живых изменений по заранее записанным критериям (readouts.py, 2026-09-29)
 L3_EXIT_VALIDATOR_ENABLED = True              # L3 проверяет ключи выхода / режима лидера (exit_validator.py, 2026-09-29)
 TREND_SCOUT_AUTO_APPLY_REQUIRES_L3 = True     # scout меняет конфиг только по accept L3 (2026-09-29)
+TREND_SCOUT_TG_ONLY_ACTIONABLE = True         # scout пишет в Telegram только про изменения, принятые L3 (2026-10-02, scout-tg-actionable-1002-spec.md)
 ML_PROMOTION_GATE_ENABLED = True              # ночная ML-модель заменяет живую, если не явно хуже (ml_promotion_gate.py, 2026-09-29)
 ML_FLOOR_CALIBRATION_ENABLED = False          # порог ML под модель: SHADOW до проверки ML-FLOOR-SHADOW (2026-09-29)
 ML_MODEL_HOT_RELOAD_ENABLED = True            # переобученная ML-модель подхватывается без перезапуска (2026-09-29)
