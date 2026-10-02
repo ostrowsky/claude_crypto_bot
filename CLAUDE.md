@@ -704,6 +704,15 @@ change applied since then came from manual analysis. Minimum fix: validate
 `config_key` against `config.py` at generation time and drop hypotheses whose key
 is unknown. Status report: `docs/reports/2026-08-05-roadmap-status.md`.
 
+### "BTC leads SOL/ETH with a bigger move" — REFUTED (2026-10-03)
+
+462 days, 93 coins: SOL/ETH beta to BTC 1.24–1.37 (not "several times"); they move
+in the SAME 15m bar (corr 0.80/0.86, next-bar lead ~0). After a BTC +0.5% hour
+(414 events) SOL had already made +1.08% inside it; 4h after: P(up) 55% vs base
+50%; trend-end 55–57% vs 49–50%; buying at the event loses after fees; BTC event
+days do not change which coins become top-20 winners. Do not re-test BTC-led
+entries/exits on price data. Spec: `docs/specs/features/btc-leads-alts-1003-spec.md`.
+
 ### mode_range_quality gate OFF — operator decision (2026-10-01)
 
 `MODE_RANGE_QUALITY_GUARD_ENABLED = False` (operator chose +3.43 pp early
