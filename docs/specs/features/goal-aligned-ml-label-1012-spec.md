@@ -144,9 +144,10 @@ context and never change the verdict.
    reachable days is not +7 pp of entries.
 
 **ICP 2026-10-11 (illustration).** At 60% admission, the control retrained on this
-population already admits ICP's 13:00 candidate. The live model, trained on
-`ml_dataset.jsonl` (mostly March–April signal rows), scored it 0.023 and
-blocked it. The 10-11 day is not in the graded set: its crossing is not yet in
+population already admits ICP's 13:00 candidate. The live model scored it 0.023
+and blocked it. Whether the training population explains this was tested in
+[`ml-label-followups-1012`](ml-label-followups-1012-spec.md) Test 2: it does
+not (refuted). The 10-11 day is not in the graded set: its crossing is not yet in
 the label store.
 
 **Not done, and not to be done by reading these numbers.** Changing the per-trade

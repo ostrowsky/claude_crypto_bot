@@ -720,6 +720,15 @@ and CatBoost, at matched 60% admission:
 Do not re-test the 24h-move labels. Spec:
 `docs/specs/features/goal-aligned-ml-label-1012-spec.md`.
 
+Follow-ups the same day (`ml-label-followups-1012-spec.md`):
+- **Exploratory, same data.** Counting trades the way the bot takes them (one
+  position per coin plus the cooldown), the GOAL label's trade delta is +0.045 pp
+  [−0.076, +0.154]. That is non-inferior, so the label is worth a forward SHADOW.
+  This does not reverse the verdict above.
+- **Pre-registered, refuted.** Training the live label on the bot's candidates
+  instead of `ml_dataset.jsonl` gives −0.88 pp [−2.64, +0.66]. The training
+  population is not the lever.
+
 ### "BTC leads SOL/ETH with a bigger move" — REFUTED (2026-10-03)
 
 462 days, 93 coins: SOL/ETH beta to BTC 1.24–1.37 (not "several times"); they move

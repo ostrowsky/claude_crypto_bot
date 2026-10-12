@@ -163,14 +163,16 @@ class Coin:
                           for k, v in days.items() if len(v) == DAY_BARS and self.l[v].min() > 0}
 
 
-def load_rows(path, names, M):
-    """Deduplicated critic candidates as (meta, feature_vector)."""
+def load_rows(path, names, M, keep=None):
+    """Deduplicated candidates as (meta, feature_vector); `keep(row)` filters raw rows."""
     seen, meta, X = set(), [], []
     with io.open(path, "rb") as fh:
         for raw in fh:
             try:
                 r = json.loads(raw)
             except Exception:
+                continue
+            if keep is not None and not keep(r):
                 continue
             tf = str(r.get("tf") or "")
             if tf not in TF_LEN or not r.get("sym") or not r.get("ts_signal"):
@@ -194,7 +196,11 @@ def load_rows(path, names, M):
 
 # ---------------------------------------------------------------- main
 
-def main():
+def prepare():
+    """Critic candidates with labels, live-trail trades and the winner-day tables.
+
+    Shared with _backtest_ml_label_followups.py so both scripts grade the same rows.
+    """
     import config as cfg
     import goal_validator as GV
     import immutable_labels as IL
@@ -248,12 +254,17 @@ def main():
         m["peak24"] = p24
         m["early"] = early
         fl = GV.trail_floor(m["mode"], cfg)
+        m["exit"] = None
         if tf == "15m":
             r = GV.live_trail(co.c, co.atr, i, K, fl, 96) if i + 96 < len(co.c) else None
+            if r:
+                m["exit"] = co.t[r[0]] + TF_LEN[tf]
         else:
             ih = co.h1_idx.get(m["ts"])
             r = (GV.live_trail(co.h1_c, co.h1_atr, ih, K, fl, 48)
                  if ih is not None and ih + 48 < len(co.h1_c) else None)
+            if r:
+                m["exit"] = co.h1_t[r[0]] + TF_LEN[tf]
         pnl.append(r[1] if r else float("nan"))
     meta = [meta[j] for j in keep]
     X = X[keep]
@@ -261,6 +272,14 @@ def main():
     print("resolvable decision bars: %d (dropped %s); with complete labels: %d; with a complete trade: %d"
           % (len(meta), dict(miss), sum(1 for x in lab if x), int(np.isfinite(pnl).sum())))
     print("period: %s .. %s" % (min(m["ts"] for m in meta).date(), max(m["ts"] for m in meta).date()))
+    import types
+    return types.SimpleNamespace(meta=meta, X=X, lab=lab, pnl=pnl, win=win, dl=dl, K=K, coins=coins,
+                                 names=names, M=M, GV=GV, cfg=cfg)
+
+
+def main():
+    P = prepare()
+    meta, X, lab, pnl, win, dl, M, GV = P.meta, P.X, P.lab, P.pnl, P.win, P.dl, P.M, P.GV
 
     labelled = [x for x in lab if x]
     print("\nlabel base rates (all rows with complete labels, n=%d):" % len(labelled))
