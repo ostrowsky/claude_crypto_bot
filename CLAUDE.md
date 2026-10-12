@@ -704,6 +704,22 @@ change applied since then came from manual analysis. Minimum fix: validate
 `config_key` against `config.py` at generation time and drop hypotheses whose key
 is unknown. Status report: `docs/reports/2026-08-05-roadmap-status.md`.
 
+### ML gate label "size of the day's move" — REFUTED; goal label promising, not shown safe (2026-10-12)
+
+Trigger: ICP 10-11. The gate scored 0.023 a candidate that then climbed +13% slowly.
+`peak5_2.0` asks "+2% in 75 min", a volatility question. Walk-forward by month
+over 57 588 bot candidates (03-24..10-12, 454 winner-days), with the same features
+and CatBoost, at matched 60% admission:
+- 24h-peak labels (≥5%, ≥10%, ≥2× the coin's usual daily range) change early
+  winner-days by −0.2..−0.4 pp. They pick bigger later moves, not earlier entries.
+- The goal label itself (early row of a top-20 winner-day) reaches **+7.05 pp
+  [+3.52, +10.57]**, gaining in all 6 months. Its per-trade lower bound is −0.22,
+  under −0.10, so by the pre-registered rule it is refuted.
+- Ceiling: the downstream gates are ignored.
+
+Do not re-test the 24h-move labels. Spec:
+`docs/specs/features/goal-aligned-ml-label-1012-spec.md`.
+
 ### "BTC leads SOL/ETH with a bigger move" — REFUTED (2026-10-03)
 
 462 days, 93 coins: SOL/ETH beta to BTC 1.24–1.37 (not "several times"); they move
