@@ -452,7 +452,211 @@ def readout_mrq_off(r: dict, ctx: dict) -> dict:
     return out
 
 
-FNS = {"readout_e4": readout_e4, "readout_mrq_off": readout_mrq_off, "readout_leader_exit": readout_leader_exit,
+GS_NULL_MAX = 0.05          # share of shadow rows without a score
+GS_ZERO_DAYS = 2            # comparable days with no shadow row at all
+GS_MODEL_AGE_DAYS = 3.0     # nightly model older than this at the latest event
+GS_GOAL_PP = 0.5
+GS_NONINF_PP = -0.10
+
+
+def goal_shadow_admit(rows: list) -> set:
+    """Indices the shadow admits: per ISO week, the top round(s*n) by goal_score, where
+    s is the share the live gate admitted that week; a null score is never admitted."""
+    by = collections.defaultdict(list)
+    for k, x in enumerate(rows):
+        y, w, _ = x["dec"].isocalendar()
+        by[(y, w)].append(k)
+    out = set()
+    for ks in by.values():
+        n = int(round(sum(1 for k in ks if rows[k]["live_pass"]) / len(ks) * len(ks)))
+        sc = sorted((k for k in ks if rows[k]["goal_score"] is not None), key=lambda k: -rows[k]["goal_score"])
+        out.update(sc[:n])
+    return out
+
+
+def goal_shadow_days(W, entries, rows, shadow_pass, in_position, p):
+    """Per winner-day contribution (gained - lost) and the count entered early now.
+    entries: [(sym, dt, row index or None)]."""
+    ent, by_sym = collections.defaultdict(list), collections.defaultdict(list)
+    for e in entries:
+        ent[e[0]].append(e)
+    for j, x in enumerate(rows):
+        by_sym[x["sym"]].append(j)
+    d, now = [], 0
+    for _day, sym, op, dd in W:
+        early = [e for e in ent.get(sym, ()) if op <= e[1] < dd]
+        if early:
+            now += 1
+            lost = all(e[2] is not None and rows[e[2]]["live_pass"] and e[2] not in shadow_pass for e in early)
+            d.append(-1.0 if lost else 0.0)
+            continue
+        k = sum(1 for j in by_sym.get(sym, ()) if j in shadow_pass and not rows[j]["live_pass"]
+                and op <= rows[j]["dec"] < dd and not in_position(sym, rows[j]["dec"]))
+        d.append(1 - (1 - p) ** k if k else 0.0)
+    return d, now
+
+
+def goal_shadow_verdict(d_pp, d_lo, t_lo, t_hi) -> str:
+    if d_pp >= GS_GOAL_PP and d_lo > 0 and t_lo >= GS_NONINF_PP:
+        return "KEEP"
+    if d_pp <= 0 or t_hi < GS_NONINF_PP:
+        return "ROLLBACK_SUGGESTED"
+    return "INCONCLUSIVE"
+
+
+def goal_shadow_anomaly(rows, comparable, model_age_days) -> bool:
+    if rows and sum(1 for x in rows if x["goal_score"] is None) / len(rows) > GS_NULL_MAX:
+        return True
+    have = {x["dec"].strftime("%Y-%m-%d") for x in rows}
+    if sum(1 for d in comparable if d not in have) >= GS_ZERO_DAYS:
+        return True
+    return model_age_days is not None and model_age_days > GS_MODEL_AGE_DAYS
+
+
+def readout_ml_goal_shadow(r: dict, ctx: dict) -> dict:
+    """GOAL-label ML model in shadow vs the live gate (ml-goal-shadow-1012-spec.md):
+    at the live gate's weekly admitted share, would it reach more winner-days before
+    the crossing, with trades (as the bot takes them) no worse?"""
+    import config as cfg
+    import goal_validator as GV
+    import indicators as I
+    import _backtest_trend_start_detector as TD
+    evs = scan_events(r["window_from"], {"ml_goal_shadow"})
+    days = list(ctx["days"])
+    seen, rows = set(), []
+    for e in evs:
+        tf = str(e.get("tf") or "")
+        if tf not in GV.STEP or not e.get("sym") or not isinstance(e.get("bar_ts"), (int, float)):
+            continue
+        k = (e["sym"], tf, int(e["bar_ts"]))
+        if k in seen:
+            continue
+        seen.add(k)
+        bo = datetime.fromtimestamp(int(e["bar_ts"]) / 1000, timezone.utc)
+        rows.append({"sym": e["sym"], "tf": tf, "bo": bo, "dec": bo + GV.STEP[tf], "mode": e.get("mode"),
+                     "live_pass": bool(e.get("live_pass")),
+                     "goal_score": float(e["goal_score"]) if isinstance(e.get("goal_score"), (int, float)) else None,
+                     "trained_at": e.get("model_trained_at"), "ts": e["_dt"]})
+    age = None
+    if rows and rows[-1]["trained_at"]:
+        try:
+            age = (rows[-1]["ts"] - _dt(rows[-1]["trained_at"])).total_seconds() / 86400
+        except Exception:
+            age = None
+    out = {"days": len(days), "rows": len(rows), "null_scores": sum(1 for x in rows if x["goal_score"] is None),
+           "live_admitted_share": round(sum(x["live_pass"] for x in rows) / len(rows), 3) if rows else None,
+           "model_age_days_at_last_row": round(age, 2) if age is not None else None}
+    out["_anomaly"] = goal_shadow_anomaly(rows, [d for d in days if d > r["window_from"]], age)
+    out["_n_trades"] = 0
+    if not rows:
+        out["note"] = "no shadow rows yet"
+        return out
+    shadow = goal_shadow_admit(rows)
+    idx = {(x["sym"], x["tf"], x["bo"]): j for j, x in enumerate(rows)}
+    entries, windows = GV.load_bot_log(r["window_from"])
+    ent = []
+    for sym, lst in entries.items():
+        for d, tf, mode, k in lst:
+            j = idx.get((sym, tf, GV.bar_open(d, tf) - GV.STEP[tf])) if tf in GV.STEP else None
+            ent.append((sym, d, j, tf, mode, k))
+    live_rows = [j for j, x in enumerate(rows) if x["live_pass"]]
+    p = sum(1 for e in ent if e[2] is not None) / max(1, len(live_rows))
+
+    def in_position(sym, d):
+        return any(a <= d <= b for a, b in windows.get(sym, ()))
+    dset = set(days)
+    W = [w for w in GV.winner_days(r["window_from"], dset) if w[0] in dset]
+    contrib, now = goal_shadow_days(W, [(e[0], e[1], e[2]) for e in ent], rows, shadow, in_position, p)
+    rnd = random.Random(1012)
+    n = len(W)
+    if n:
+        bs = sorted(100 * sum(rnd.choices(contrib, k=n)) / n for _ in range(BOOT))
+        goal = {"winner_days": n, "entered_early_now": now, "delta_pp": round(100 * sum(contrib) / n, 2),
+                "lo95": round(bs[int(0.025 * BOOT)], 2), "hi95": round(bs[int(0.975 * BOOT) - 1], 2),
+                "days_lost": sum(1 for c in contrib if c < 0), "expected_gained": round(sum(c for c in contrib if c > 0), 2)}
+    else:
+        goal = {"winner_days": 0}
+    out.update(goal=goal, shadow_admitted=len(shadow), downstream_p=round(p, 3))
+
+    # ---- per trade, calibrated live trail
+    cache = {}
+
+    def series(sym, tf):
+        if (sym, tf) not in cache:
+            b = TD.load_bars(sym, tf) or []
+            if b:
+                import numpy as np
+                h = np.array([x[2] for x in b], float)
+                lo_ = np.array([x[3] for x in b], float)
+                c = np.array([x[4] for x in b], float)
+                t = [x[0] if x[0].tzinfo else x[0].replace(tzinfo=timezone.utc) for x in b]
+                cache[(sym, tf)] = (t, c, I._atr(h, lo_, c, cfg.ATR_PERIOD), {x: i for i, x in enumerate(t)})
+            else:
+                cache[(sym, tf)] = None
+        return cache[(sym, tf)]
+    ks = sorted(float(e[5]) for e in ent if isinstance(e[5], (int, float)))
+    K = ks[len(ks) // 2] if ks else 2.0
+    cooldown = int(getattr(cfg, "COOLDOWN_BARS", 19))
+    cur, rem, add = [], [], []
+    for sym, d, j, tf, mode, k in ent:
+        s = series(sym, tf) if tf in GV.STEP else None
+        i = s[3].get(GV.bar_open(d, tf) - GV.STEP[tf]) if s else None
+        res = GV.live_trail(s[1], s[2], i, float(k) if isinstance(k, (int, float)) else K,
+                            GV.trail_floor(mode, cfg), GV.MAX_BARS[tf]) if i is not None else None
+        if res:
+            item = (d.strftime("%Y-%m-%d"), res[1])
+            cur.append(item)
+            if j is not None and rows[j]["live_pass"] and j not in shadow:
+                rem.append(item)
+    busy = {}
+    for j in sorted((j for j in shadow if not rows[j]["live_pass"]), key=lambda j: rows[j]["dec"]):
+        x = rows[j]
+        if (busy.get(x["sym"]) and x["dec"] < busy[x["sym"]]) or in_position(x["sym"], x["dec"]):
+            continue
+        s = series(x["sym"], x["tf"])
+        i = s[3].get(x["bo"]) if s else None
+        res = GV.live_trail(s[1], s[2], i, K, GV.trail_floor(x["mode"], cfg), GV.MAX_BARS[x["tf"]]) \
+            if i is not None else None
+        if not res:
+            continue
+        add.append((x["dec"].strftime("%Y-%m-%d"), res[1]))
+        busy[x["sym"]] = s[0][res[0]] + GV.STEP[x["tf"]] * (1 + cooldown)
+    out["_n_trades"] = len(add)
+    trade = {"current": len(cur), "removed": len(rem), "added": len(add), "trail_k_median": K}
+    if cur:
+        ud = sorted({t[0] for t in cur + add})
+
+        def comb(pick):
+            sc = sum(v * pick[dd] for dd, v in cur if dd in pick)
+            nc = sum(pick[dd] for dd, _ in cur if dd in pick)
+            sr = sum(v * pick[dd] for dd, v in rem if dd in pick)
+            nr = sum(pick[dd] for dd, _ in rem if dd in pick)
+            sa = sum(v * pick[dd] for dd, v in add if dd in pick)
+            na = sum(pick[dd] for dd, _ in add if dd in pick)
+            if nc == 0:
+                return None
+            den = nc - nr + p * na
+            return ((sc - sr + p * sa) / den if den > 0 else 0.0) - sc / nc
+        pt = comb({dd: 1 for dd in ud})
+        bs = []
+        for _ in range(BOOT):
+            pick = collections.Counter(rnd.choices(ud, k=len(ud)))
+            v = comb(pick)
+            if v is not None:
+                bs.append(v)
+        bs.sort()
+        trade.update(combined_minus_current_pp=round(pt, 3), lo95=round(bs[int(0.025 * len(bs))], 3),
+                     hi95=round(bs[int(0.975 * len(bs)) - 1], 3),
+                     current_mean=round(sum(v for _, v in cur) / len(cur), 3),
+                     added_mean=round(sum(v for _, v in add) / len(add), 3) if add else None)
+    out["per_trade"] = trade
+    if n and "lo95" in trade:
+        out["_verdict"] = goal_shadow_verdict(goal["delta_pp"], goal["lo95"], trade["lo95"], trade["hi95"])
+    return out
+
+
+FNS = {"readout_ml_goal_shadow": readout_ml_goal_shadow,
+       "readout_e4": readout_e4, "readout_mrq_off": readout_mrq_off, "readout_leader_exit": readout_leader_exit,
        "readout_leader_alert": readout_leader_alert, "readout_ml_floor_shadow": readout_ml_floor_shadow,
        "readout_ml_reload": readout_ml_reload}
 

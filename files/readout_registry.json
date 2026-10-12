@@ -159,6 +159,31 @@
     "otherwise": "inconclusive -> keep and re-read"
    },
    "rollback": "MODE_RANGE_QUALITY_GUARD_ENABLED = True + restart"
+  },
+  {
+   "id": "ML-GOAL-SHADOW",
+   "title": "GOAL-label ML model in shadow (KEEP = propose switching the gate to it, ROLLBACK = drop it)",
+   "kind": "computed",
+   "fn": "readout_ml_goal_shadow",
+   "flag": "ML_GOAL_SHADOW_ENABLED",
+   "switched_on_utc": "2026-10-12T00:00:00Z",
+   "window_from": "2026-10-13",
+   "due": "2026-11-23",
+   "min_days": 28,
+   "min_trades": 20,
+   "spec": "docs/specs/features/ml-goal-shadow-1012-spec.md",
+   "expected": {
+    "backtest_goal_delta_pp": 7.05,
+    "backtest_goal_ci": "[+4.19, +9.91] (95%, 6/6 months, reachable ceiling without downstream gates)",
+    "backtest_trade_delta_pp_as_taken": "+0.045 [-0.076, +0.154] (exploratory)"
+   },
+   "criteria": {
+    "anomaly": "> 5% of shadow rows without a score, OR >= 2 comparable days without a shadow row, OR the model older than 3 days at the latest row",
+    "keep": "at the live gate's weekly admitted share: winner-days entered before the crossing delta >= +0.5 pp AND its lower 95% > 0 AND per-trade combined-minus-current lower 95% >= -0.10 pp",
+    "rollback": "delta <= 0 OR per-trade upper 95% < -0.10 pp",
+    "otherwise": "inconclusive"
+   },
+   "rollback": "ML_GOAL_SHADOW_ENABLED = False + restart"
   }
  ]
 }

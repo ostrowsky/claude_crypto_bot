@@ -231,6 +231,26 @@ def log_mode_range_shadow(sym: str, tf: str, mode: str, price: float, reason: st
     })
 
 
+def log_ml_goal_shadow(sym: str, tf: str, bar_ts: int, mode, price: float, goal_score, ml_proba: float,
+                       ml_min: float, ml_max: float, live_pass: bool, model_trained_at) -> None:
+    """The GOAL-label shadow model's score beside the live ML gate decision
+    (ml-goal-shadow-1012-spec.md). No decision reads it."""
+    _write({
+        "event": "ml_goal_shadow",
+        "sym": sym,
+        "tf": tf,
+        "bar_ts": bar_ts,
+        "mode": mode,
+        "price": price,
+        "goal_score": goal_score,
+        "ml_proba": ml_proba,
+        "ml_min": ml_min,
+        "ml_max": ml_max,
+        "live_pass": live_pass,
+        "model_trained_at": model_trained_at,
+    })
+
+
 def log_ml_model_reload(old_model, new_model, label_version, mtime: float) -> None:
     """The live ML model was swapped without a restart (monitor._maybe_reload_ml_model)."""
     _write({

@@ -422,6 +422,28 @@ def retrain_ml_signal_model() -> Dict:
         return {"status": "error", "error": str(e)}
 
 
+def retrain_ml_goal_shadow() -> Dict:
+    """GOAL-label ML model in SHADOW (ml-goal-shadow-1012-spec.md): retrained nightly
+    after the live gate model; best-effort, never breaks the cycle."""
+    try:
+        import config as _cfg
+        if not getattr(_cfg, "ML_GOAL_SHADOW_ENABLED", False):
+            return {"status": "disabled"}
+        import subprocess, sys
+        from pathlib import Path
+        files_dir = Path(__file__).resolve().parent
+        proc = subprocess.run([sys.executable, str(files_dir / "ml_goal_shadow.py")],
+                              capture_output=True, text=True, timeout=1800)
+        if proc.returncode != 0:
+            log.error("ml_goal_shadow retrain failed: %s", proc.stderr[-500:])
+            return {"status": "error", "stderr": proc.stderr[-500:]}
+        log.info("ml_goal_shadow retrained: %s", proc.stdout.strip()[-300:])
+        return {"status": "ok"}
+    except Exception as e:
+        log.error("ml_goal_shadow retrain exception: %s", e)
+        return {"status": "error", "error": str(e)}
+
+
 def retrain_ml_candidate_ranker() -> Dict:
     """
     19.04.2026: retrain candidate ranker nightly. Was a constant predictor
@@ -643,6 +665,7 @@ async def run_full_cycle(
         rk_result = retrain_ml_candidate_ranker()
         mem_result = refresh_rl_memory()
         model_result["ml_signal_model"] = sig_result
+        model_result["ml_goal_shadow"] = retrain_ml_goal_shadow()    # ml-goal-shadow-1012-spec.md
         model_result["ml_candidate_ranker"] = rk_result
         model_result["rl_memory"] = mem_result
 

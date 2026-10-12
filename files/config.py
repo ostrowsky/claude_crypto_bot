@@ -1464,6 +1464,17 @@ ML_FLOOR_CALIBRATED_MAX: float = 0.60       # or opens the gate completely
 ML_MODEL_HOT_RELOAD_ENABLED: bool = True
 ML_MODEL_RELOAD_CHECK_SEC: int = 60
 ML_MODEL_RELOAD_MIN_AGE_SEC: int = 10
+# GOAL-label ML model in SHADOW (2026-10-12, ml-goal-shadow-1012-spec.md). The live
+# gate's label peak5_2.0 ("+2% within 5 bars") is a volatility question: it scored
+# ICP 0.023 at the start of a +13% climb. Trained on the goal itself (an early row
+# of a top-20 winner-day) the same model reached +7.05 pp more winner-days before
+# the crossing in a walk-forward backtest, trades no worse as the bot takes them --
+# on data already looked at, without the downstream gates. ml_goal_shadow.py trains
+# it nightly; monitor logs its score at the ML gate (event ml_goal_shadow); no
+# decision reads it. Readout ML-GOAL-SHADOW, due 2026-11-23. Rollback: False.
+ML_GOAL_SHADOW_ENABLED: bool = True
+ML_GOAL_SHADOW_MODEL_FILE: str = "ml_goal_shadow_model.json"
+ML_GOAL_SHADOW_RELOAD_CHECK_SEC: int = 60
 # H1 earliness (2026-06-29): scan-promote decoupled watchlist coins to attack the
 # silent-miss bucket (top-20 the bot never sees, ~23%). Backtest: silent-miss
 # top-20 flag 6x baseline + are MORE decoupled than entered winners. SHADOW first:

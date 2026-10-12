@@ -704,6 +704,23 @@ change applied since then came from manual analysis. Minimum fix: validate
 `config_key` against `config.py` at generation time and drop hypotheses whose key
 is unknown. Status report: `docs/reports/2026-08-05-roadmap-status.md`.
 
+### GOAL-label ML model in SHADOW (2026-10-12)
+
+The next step after the two tests below: `ml_goal_shadow.py` trains the GOAL-label
+model every night after the live retrain. `monitor.py` scores every candidate
+that reaches the ML hard-block decision and logs `ml_goal_shadow` (shadow score,
+live score, floor, live pass). No decision reads it.
+
+Readout `ML-GOAL-SHADOW` runs on unseen days, due 2026-11-23, with these
+criteria fixed in advance:
+- the shadow admits the same weekly share as the live gate;
+- KEEP if winner-days entered before the crossing gain ≥ +0.5 pp with a lower
+  bound > 0, and the per-trade lower bound is ≥ −0.10 pp;
+- ROLLBACK if the gain is ≤ 0.
+
+Rollback: `ML_GOAL_SHADOW_ENABLED=False`. Spec:
+`docs/specs/features/ml-goal-shadow-1012-spec.md`.
+
 ### ML gate label "size of the day's move" — REFUTED; goal label promising, not shown safe (2026-10-12)
 
 Trigger: ICP 10-11. The gate scored 0.023 a candidate that then climbed +13% slowly.
@@ -1071,6 +1088,7 @@ READOUTS_ENABLED = True                       # pre-registered readouts of live 
 L3_EXIT_VALIDATOR_ENABLED = True              # L3 can test exit / leader-mode keys (exit_validator.py, 2026-09-29)
 TREND_SCOUT_AUTO_APPLY_REQUIRES_L3 = True     # scout edits config only on an L3 accept (2026-09-29)
 TREND_SCOUT_TG_ONLY_ACTIONABLE = True         # scout writes to Telegram only for L3-backed changes (2026-10-02, scout-tg-actionable-1002-spec.md)
+ML_GOAL_SHADOW_ENABLED = True                 # GOAL-label ML model scored in SHADOW at the ML gate, no decision reads it (2026-10-12, ml-goal-shadow-1012-spec.md)
 ML_PROMOTION_GATE_ENABLED = True              # nightly ML model replaces the live one unless clearly worse (ml_promotion_gate.py, 2026-09-29)
 ML_FLOOR_CALIBRATION_ENABLED = False          # per-model ML floor: SHADOW until readout ML-FLOOR-SHADOW (2026-09-29)
 ML_MODEL_HOT_RELOAD_ENABLED = True            # retrained ML model picked up without a restart (2026-09-29)

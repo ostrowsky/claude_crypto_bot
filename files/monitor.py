@@ -265,6 +265,20 @@ def _ml_general_score(
         return None
 
 
+def _ml_goal_shadow_log(sym, tf, mode, feat, data, i, is_bull_day, ml_proba, ml_min, ml_max) -> None:
+    """Score the candidate with the GOAL-label SHADOW model and log it beside the live
+    score (ml-goal-shadow-1012-spec.md). No decision reads it; never raises."""
+    try:
+        import ml_goal_shadow
+        s = ml_goal_shadow.score(sym=sym, tf=tf, signal_type=mode, is_bull_day=is_bull_day, feat=feat,
+                                 data=data, i=i, btc_vs_ema50=float(getattr(config, "_btc_vs_ema50", 0.0)))
+        botlog.log_ml_goal_shadow(sym, tf, int(data["t"][i]), mode, float(data["c"][i]), s, float(ml_proba),
+                                  float(ml_min), float(ml_max), not (ml_proba < ml_min or ml_proba > ml_max),
+                                  ml_goal_shadow.model_trained_at())
+    except Exception:
+        pass
+
+
 def _ml_trend_nonbull_score(sym: str, tf: str, feat: dict, data: np.ndarray, i: int) -> Optional[float]:
     if not getattr(config, "ML_ENABLE_TREND_NONBULL_FILTER", False):
         return None
@@ -4527,6 +4541,12 @@ async def _poll_coin(
                         if _cal is not None:
                             _min = _cal
                     _max = float(getattr(config, "ML_GENERAL_HARD_BLOCK_MAX", 1.01))
+                    if getattr(config, "ML_GOAL_SHADOW_ENABLED", False):
+                        # GOAL-label model in SHADOW (ml-goal-shadow-1012-spec.md): logged
+                        # beside the live score; no decision reads it; fails open.
+                        await asyncio.to_thread(
+                            _ml_goal_shadow_log, sym, tf, preview_mode, feat, data, i,
+                            is_bull_day_now, ml_proba, _min, _max)
                     if ml_proba < _min or ml_proba > _max:
                         reason = f"ML proba {ml_proba:.3f} outside profitable zone [{_min:.2f},{_max:.2f}]"
                         _log_critic_candidate(
