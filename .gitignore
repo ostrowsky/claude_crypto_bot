@@ -95,3 +95,5 @@ files/positioning_history.jsonl
 .runtime/positioning_recorder.log
 peak_label_cache.json
 files/ml_goal_shadow_model.json
+# demo trader (separate app) runtime data
+trader/runtime/
