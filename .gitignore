@@ -94,6 +94,26 @@ skills/*/__pycache__/
 files/positioning_history.jsonl
 .runtime/positioning_recorder.log
 peak_label_cache.json
-files/ml_goal_shadow_model.json
 # demo trader (separate app) runtime data
 trader/runtime/
+files/ml_goal_shadow_model.json
+# local artifacts kept out of git (2026-10-16): partial dataset rewrites, locks, caches,
+# model backups / side models, runtime data files, stray root copies, scratch
+files/*.jsonl.*.tmp
+files/*.jsonl.lock
+files/_daily_closes_cache.json
+files/_hourly_cache.json
+files/_hourly_ohlcv*.json
+files/*.pre_*.json
+files/*.immutable.json
+files/*.candidate.json
+files/*.cbm
+files/fast_reversal_*.json
+files/decoupling_promote_shadow.jsonl
+files/portfolio_vs_target.jsonl
+files/top_gainer_dataset_v2.jsonl
+/bot_events.jsonl
+/positions.json
+/.chat_ids
+/nul
+tmp_skill_inspect/

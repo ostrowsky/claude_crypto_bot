@@ -178,6 +178,18 @@ def _ml_floor_calibrated() -> Optional[float]:
     return min(hi, max(lo, float(f)))
 
 
+def _ml_floor_admission(is_bull_day: bool) -> Optional[float]:
+    """The loaded model's matched-admission floor (ml-admission-match-1009-spec.md),
+    clamped like the calibrated one; None if the model carries none."""
+    af = (_load_ml_model_payload() or {}).get("admission_floor") or {}
+    f = af.get("bull_day" if is_bull_day else "default")
+    if not isinstance(f, (int, float)) or isinstance(f, bool):
+        return None
+    lo = float(getattr(config, "ML_FLOOR_CALIBRATED_MIN", 0.02))
+    hi = float(getattr(config, "ML_FLOOR_CALIBRATED_MAX", 0.60))
+    return min(hi, max(lo, float(f)))
+
+
 def _load_ml_segment_payloads() -> dict:
     raw = _load_ml_model_payload()
     return raw.get("segment_model_payloads", {}) if isinstance(raw, dict) else {}
@@ -4535,7 +4547,13 @@ async def _poll_coin(
                         _min = float(getattr(config, "ML_GENERAL_HARD_BLOCK_BULL_DAY_MIN", 0.28))
                     else:
                         _min = float(getattr(config, "ML_GENERAL_HARD_BLOCK_MIN", 0.35))
-                    if getattr(config, "ML_FLOOR_CALIBRATION_ENABLED", False):
+                    if getattr(config, "ML_PROMOTION_MATCHED_ADMISSION_ENABLED", False):
+                        # the model's own floor at the admitted share it was promoted at
+                        # (ml-admission-match-1009-spec.md); none = fixed floor
+                        _adm = _ml_floor_admission(bool(is_bull_day_now))
+                        if _adm is not None:
+                            _min = _adm
+                    elif getattr(config, "ML_FLOOR_CALIBRATION_ENABLED", False):
                         # per-model floor (agent-tasks-0929-spec.md §7); off = fixed floor
                         _cal = _ml_floor_calibrated()
                         if _cal is not None:

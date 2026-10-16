@@ -168,6 +168,17 @@ label ranked a rolling 24h window and counted overnight spikes — moves the bot
 could not catch — as misses. Still far from the 0.40 target; what changed is that
 it can be trusted. Delisted pairs remain unrecoverable (TH-05).
 
+### Goal update: daily revenue — in a separate trader app (operator, 2026-10-10)
+
+The operator's next phase: a bot that trades a Binance **demo** account by itself (buy,
+exchange-side TP/SL, sell) with **daily revenue** as its target metric. It is built as a
+**separate application, `trader/`**, and must not modify this signal bot (operator,
+2026-10-10). This bot's metrics and its North Star are unchanged. Baseline that frames the
+trader's work (`trader/_backtest_daily_revenue_baseline.py`, 5 753 real signals of this bot,
+03-03..10-10): trading them as-is loses −0.83%/day after 0.20% fees, all 8 months negative; the
+E1 equity replay with 8 bps/side costs gives −1.17%/day on Jul–Oct. Roadmap:
+`docs/specs/features/autonomous-trading-roadmap-1010-spec.md`.
+
 ### Goal update: leaders only (operator, 2026-09-27)
 
 "Catch one, at most three day-leaders and hold them as long as it takes,
@@ -704,6 +715,103 @@ change applied since then came from manual analysis. Minimum fix: validate
 `config_key` against `config.py` at generation time and drop hypotheses whose key
 is unknown. Status report: `docs/reports/2026-08-05-roadmap-status.md`.
 
+### Weakness exits vs holding on the trail — REJECTED by the margin (2026-10-05)
+
+Replay of 4 313 trades since 03-01: replacing WEAK RSI divergence / RSI overbought / quality
+recheck / EMA fan / volume exhaustion exits (1 049 trades changed) by holding on the P-1 trail
+gives **rocket-days +1.10 pp [+0.62, +1.63], 8/8 months positive, winners +1.04 pp**, but all
+trades −0.035 pp [−0.105, +0.039] — the non-inferiority bound misses −0.10 by 0.005, so the
+pre-registered rule rejects it and the margin is not relaxed. This is where rocket capture
+leaks. **Time split (same day): of 12 narrowings chosen on Mar–Jun, only "WEAK RSI divergence
+with profit at the signal ≥ +0.5% (fixed, all modes) → hold on the trail" passed; on Jul–Oct it
+is ACCEPTED: rocket-days +0.89 pp [+0.27, +1.65], all trades +0.011 [−0.075, +0.105], 4/4
+months.** The candidate grid was written after seeing the full-period table (disclosed), so the
+clean confirmation is a shadow readout after X-9c (10-12). Live H5 thresholds are per mode
+(0.3/0.5/0.7%) — the tested rule is a fixed 0.5%. Spec: `docs/specs/features/weak-exits-1005-spec.md`.
+
+### Leader exit across the UTC day reset — REFUTED (2026-10-05)
+
+The lost-lead exit ranks by return since the UTC open, so ranks are noise right after
+midnight: in the replay since 03-01, **428 of 1 038** lost-lead exits fall in the 00 UTC
+hour (live 09-29..10-04: 13 of 48). Removing it does not pay: skipping the check for the
+first 2 h of the day — rocket-days −0.01 pp [−0.29, +0.30]; ranking on the trailing 24 h —
+−0.33 pp [−0.82, +0.24]; all trades ~0; months agree 38%. A leader's move is mostly done by
+midnight. Do not re-test day-reset variants of the lost-lead rule. X-9c readout (6/14 days on
+10-05: rocket-day trades +0.74% [−0.85, +2.22], n=21) continues to 10-12. Spec:
+`docs/specs/features/leader-midnight-1005-spec.md`.
+
+### Model health in the morning report (2026-10-05)
+
+`pipeline_drift.py` said "drift_detected" on 164 of 166 daily runs since May (KS on model
+outputs), never had a single `ranker_proba` row (not logged in critic_dataset) and fed nothing.
+`files/model_health.py` (flag `MODEL_HEALTH_ENABLED`, reporting only) adds: AUC of `ml_proba`
+against its OWN target (peak ≥ 2% within 5 bars) — **0.72–0.75 over 15 days since 09-21, base
+17–21%**; input-feature drift by PSI, alert only after 3 days (`btc_vs_ema50` = regime, never
+alerts) — 40 of 139 backfilled days, four volatility-regime episodes; one run manifest per
+nightly retrain. Reference only: IC of `ml_proba` with the forward 10-bar return is **−0.14
+[−0.21, −0.08]** — the gate picks big upside excursions that end worse 2.5 h later (ties to the
+weak capture factor). Spec: `docs/specs/features/model-health-1005-spec.md`.
+
+### Demo trader — a SEPARATE application in `trader/` (2026-10-10)
+
+The demo-account trader does not touch the signal bot: no import from `files/`, no
+`config.py` flag, no runtime file of the bot. It READS three bot things only:
+`files/bot_events.jsonl`, `history/*.csv`, `files/.env` (the two `BINANCE_DEMO_*` variables);
+it writes only `trader/runtime/`. Its own brief is `trader/README.md`, its config
+`trader/trader_config.py`, its tests `trader/run_tests.py` (a trader test asserts that no
+bot file imports a trader module). Scheduled task `CryptoBot_MicrostructureRecorder` runs
+`trader/run_recorder.cmd` every 5 min (read-only + public data). Do not add trading code to `files/`.
+Since 2026-10-12 a second task, `CryptoBot_TraderShadow`, runs `trader/run_shadow.cmd`
+every 5 min: E7 paper portfolios P0 (bot exits) vs P4 (X4, 8% trail), readout no earlier than 2026-11-09
+(`docs/specs/features/e7-shadow-portfolio-1012-spec.md`).
+Audit (2026-10-12): every Binance request of the trader and every trader decision (enter/skip with a
+reason code, exits, day marks) go to `trader/runtime/audit/{exchange,decisions}/YYYY-MM-DD.jsonl`,
+append-only, no secrets; summary `trader/audit_report.py` (`docs/specs/features/trader-audit-log-1012-spec.md`).
+Phase D (2026-10-13): task `CryptoBot_TraderDaily` (02:20 local) runs `trader/run_daily.cmd`: ledger of demo fills
+(myTrades), the day's revenue from equity marks with ledger reconciliation and the USDC drift split off, benchmarks,
+report `trader/runtime/reports/YYYY-MM-DD.txt`; Claude task `crypto-trader-daily-report` posts it to the chat at 09:00.
+No Telegram. Direction words need ≥ 10 counted days (`daily_revenue.MIN_DAYS_DIRECTION`)
+(`docs/specs/features/demo-ledger-d-1013-spec.md`).
+Phase C (2026-10-13): `trader/executor.py` executes the E7 book X4 at `TRADING_SCALE` 0.02 with a
+catastrophe stop 3% below the policy stop on the exchange; task `CryptoBot_TraderExecutor` (every 5 min,
+IgnoreNew) keeps it running. `TRADING_ENABLED = False` -> C1 paper mode, no order. Control by files in
+`trader/runtime/executor/control/` (PAUSE, FLATTEN, RESET_NOTED). C0 smoke and C2 demo need the operator
+(`docs/specs/features/demo-execution-c-1013-spec.md`).
+
+### ML promotion at matched admission — SHADOW (2026-10-09)
+
+The promotion gate kept the 10-01 ML model **7 nights running** (10-02..10-08), "clearly worse on
+precision at the live floor". Each candidate was a logistic model with the SAME AUC (10-08: 0.655 vs
+0.654) whose scores sit higher, so the fixed floor 0.15 admitted ~84% of rows instead of ~66%.
+Offline on the trainer's test split (891 rows, 08-26..10-08): at an equal admitted share the
+candidate is neither better nor worse (precision −0.5 pp [−2.3, +1.2], winner-day rows −1.6 pp
+[−6.8, +3.3]). The freeze is a floor artifact and cost nothing measurable this week. A floor
+chosen on the first half held the share on the second half within 2 pp. Recall and winner reach
+there were −5 pp, intervals reaching −13 pp, hence SHADOW. Now every night the gate gives the
+candidate its own `admission_floor` (the score at the incumbent's admitted share, bull/other
+days), logs the matched decision, and logs how yesterday's candidate at its stored floor did on
+rows newer than its holdout. Every candidate is now saved to `ml_signal_model.candidate.json`.
+`ML_PROMOTION_MATCHED_ADMISSION_ENABLED = False`. True switches BOTH halves: the gate decides at
+matched admission, and the bot's ML gate reads the model's `admission_floor` (ahead of
+`ML_FLOOR_CALIBRATION_ENABLED`). Readout ML-ADMISSION-MATCH is due 2026-10-30. Promoting the
+logistic at 0.15 instead (+5.8 pp winner rows, −3.8 pp precision) would loosen the gate, which is
+an operator choice and not part of this change. Maximum-period walk-forward (5 939 rows, 03-24..10-08):
+with a sensible anchor matched = fixed on the goal (27/41 winner-days both); anchored on a one-week model
+the chain froze an 11% share and reached 10/42 vs 27/42 -- matching freezes the incumbent's operating
+point, so the readout flags ANOMALY if that share leaves [0.50, 0.85]. Spec:
+`docs/specs/features/ml-admission-match-1009-spec.md`.
+
+### Volatility-forecast trail (σ̂ instead of ATR) — REFUTED (2026-10-05)
+
+Baseline re-measured first: NS v2 0.122 (30d, n=122) / 0.100 (240d, n=558); coverage
+0.73–0.81, **capture 0.22–0.25 is the weak factor**. Hypothesis: replace ATR in the trail
+buffer by a HAR forecast of next-hour volatility (fit before 2026-03-01, width matched).
+On 15m bars σ̂ predicts next-hour log volatility no better than ATR (OOS R² 0.330 vs
+0.328; 4h 0.562 vs 0.546). Replay of 4 313 trades since 03-01 (exit_validator engine):
+rocket-days −0.04 pp [−0.36, +0.25], all −0.044 pp [−0.082, −0.006], months agree 38% —
+not accepted. Do not re-test σ̂/HAR/GARCH buffers on 15m data. Spec:
+`docs/specs/features/sigma-trail-1005-spec.md`.
+
 ### GOAL-label ML model in SHADOW (2026-10-12)
 
 The next step after the two tests below: `ml_goal_shadow.py` trains the GOAL-label
@@ -1093,6 +1201,8 @@ ML_PROMOTION_GATE_ENABLED = True              # nightly ML model replaces the li
 ML_FLOOR_CALIBRATION_ENABLED = False          # per-model ML floor: SHADOW until readout ML-FLOOR-SHADOW (2026-09-29)
 ML_MODEL_HOT_RELOAD_ENABLED = True            # retrained ML model picked up without a restart (2026-09-29)
 MODE_RANGE_QUALITY_GUARD_ENABLED = False      # OFF by operator 2026-10-01; shadow-logged (mrq-off-1001-spec.md)
+MODEL_HEALTH_ENABLED = True                   # morning-report model health: own-target AUC, input PSI, run manifests (2026-10-05, model-health-1005-spec.md)
+ML_PROMOTION_MATCHED_ADMISSION_ENABLED = False  # SHADOW: ML promotion + live floor at the incumbent's admitted share (2026-10-09, ml-admission-match-1009-spec.md)
 ```
 
 ---
@@ -1147,6 +1257,10 @@ by a ticker. It fails OPEN: if more than 25% of the universe looks stale that is
 a broken store, not a dead market, so the filter stands down and says so.
 
 **IMMUTABLE — DO NOT EXPAND.** These are the specific coins the user has access to for trading. Adding other symbols is pointless regardless of backtest results. If a top-gainer today is not in this list — that's expected and acceptable, not a bug to fix.
+
+**Scope (operator decision #2, 2026-10-14):** this rule covers the SIGNAL BOT's watchlist only. The demo trader (`trader/`)
+trades ALL pairs tradable on the Binance spot market. Its universe is `trader/runtime/trading/universe.json` (`trader/trading_universe.py`),
+not `files/watchlist.json`. The signal bot's watchlist stays 93 coins and is not changed by this decision.
 
 ---
 

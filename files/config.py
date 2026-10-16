@@ -1313,7 +1313,7 @@ CLONE_SIGNAL_GUARD_ENABLED: bool = True
 CLONE_SIGNAL_GUARD_TF: tuple = ("15m",)
 CLONE_SIGNAL_GUARD_MODES: tuple = ("impulse_speed", "breakout", "retest", "alignment", "trend")
 CLONE_SIGNAL_GUARD_WINDOW_BARS: int = 8
-CLONE_SIGNAL_GUARD_MAX_SIMILAR: int = 17  # was 4 — 116 blocks in recent events: FLUX/ORDI blocked by clone guard  # scout:23.08.2026 was 17
+CLONE_SIGNAL_GUARD_MAX_SIMILAR: int = 23  # was 4 — 116 blocks in recent events: FLUX/ORDI blocked by clone guard  # scout:29.09.2026 was 22
 CLONE_SIGNAL_GUARD_MAX_SAME_GROUP: int = 1
 CLONE_SIGNAL_GUARD_OVERRIDE_SCORE: float = 90.0
 CLONE_SIGNAL_GUARD_OVERRIDE_RANKER_FINAL: float = 0.50
@@ -1425,6 +1425,11 @@ INCIDENT_L2_WINDOW_DAYS: int = 14
 # "too early" until the minimum comparable days exist. Rollback: False.
 READOUTS_ENABLED: bool = True
 READOUTS_LLM_SUMMARY_ENABLED: bool = True
+# Model health (model_health.py, model-health-1005-spec.md): drift of ML-gate
+# scores by PSI (effect size, not a KS p-value that fires on 164 of 166 days),
+# ml_proba quality as IC vs the forward 10-bar return, and one manifest per
+# nightly retrain. Reporting only -- no trading decision reads it. Rollback: False.
+MODEL_HEALTH_ENABLED: bool = True
 # L3 exit validator (exit_validator.py, task 3): LEADER_EXIT_* and
 # TRAIL_MIN_BUFFER_PCT_<MODE> hypotheses replayed on every real 15m trade since
 # 2026-03-01; judged by the paired rocket-day difference + all-trade
@@ -1455,6 +1460,18 @@ ML_FLOOR_CALIBRATION_ENABLED: bool = False
 ML_FLOOR_TARGET_RECALL: float = 0.80        # chosen by the pre-registered walk-forward rule
 ML_FLOOR_CALIBRATED_MIN: float = 0.02       # clamps: a calibrated floor never blacks out
 ML_FLOOR_CALIBRATED_MAX: float = 0.60       # or opens the gate completely
+# Matched-admission promotion (2026-10-09, ml-admission-match-1009-spec.md). The
+# promotion gate kept the 10-01 model 7 nights running: each logistic candidate had
+# the SAME AUC but higher scores, so the fixed 0.15 floor admitted ~84% of rows vs
+# ~66% and precision fell mechanically. At an equal admitted share the candidate
+# was not worse (precision -0.5 pp [-2.3, +1.2], winner rows -1.6 pp [-6.8, +3.3]).
+# The gate now computes every night a floor per candidate that admits the
+# incumbent's share, and logs the matched decision. SHADOW (False): decisions and
+# the live gate keep the fixed floor. True: the decision uses the matched
+# comparison AND the bot reads the model's admission_floor (takes precedence over
+# ML_FLOOR_CALIBRATION_ENABLED) -- together, never one without the other. Readout
+# ML-ADMISSION-MATCH. Rollback: False + restart.
+ML_PROMOTION_MATCHED_ADMISSION_ENABLED: bool = False
 # Hot reload of ml_signal_model.json (operator 2026-09-29, spec §8). The model was
 # read once per process, so the nightly retrain reached the gate only at a restart.
 # Now the file's mtime is checked every ML_MODEL_RELOAD_CHECK_SEC; a changed, settled

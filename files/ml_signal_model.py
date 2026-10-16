@@ -1346,18 +1346,32 @@ def main() -> None:
         # 2026-09-29: the live model is replaced only if the new one is not
         # clearly worse on rows neither trained on (ml_promotion_gate.py).
         import ml_promotion_gate as MPG
+        # yesterday's candidate, for the out-of-sample check of its matched floor
+        # (ml-admission-match-1009-spec.md); read before tonight's overwrites it
+        prev_cand = None
         try:
-            gate = MPG.evaluate(args.model_out, payload, holdout)
+            prev_cand = json.loads(args.model_out.with_name(args.model_out.stem + ".candidate.json")
+                                   .read_text(encoding="utf-8"))
+        except Exception:
+            pass
+        try:
+            gate = MPG.evaluate(args.model_out, payload, holdout, prev_candidate=prev_cand)
         except Exception as e:  # a broken gate must not block learning
             gate = {"decision": "promote", "ungated": True, "reason": f"gate error: {e!r}"[:200]}
+        if gate.get("admission_floor"):
+            # the candidate's own floor at the incumbent's admitted share; the bot
+            # reads it only while ML_PROMOTION_MATCHED_ADMISSION_ENABLED
+            payload["admission_floor"] = gate["admission_floor"]
         MPG.log_decision(gate)
         report["promotion"] = gate
         print("[ml] promotion gate: %s -- %s" % (gate.get("decision"), gate.get("reason")))
+    cand = args.model_out.with_name(args.model_out.stem + ".candidate.json")
+    if gate is not None:
+        # always kept, promoted or not: tomorrow's gate checks its matched floor on new rows
+        save_json(cand, payload)
     if gate is None or gate.get("decision") == "promote":
         save_json(args.model_out, payload)
     else:
-        cand = args.model_out.with_name(args.model_out.stem + ".candidate.json")
-        save_json(cand, payload)
         print(f"[ml] incumbent kept; candidate saved to {cand}")
         # the kept model gets its calibrated floor re-measured on tonight's
         # held-out rows (it never trained on them), so the shadow floor stays

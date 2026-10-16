@@ -13,7 +13,12 @@
    "min_days": 14,
    "min_trades": 5,
    "spec": "docs/specs/features/p0-validation-0925-spec.md",
-   "expected": {"goal_before_pct": 11.0, "goal_expected_pct": 14.0, "goal_upper_pct": 18.8, "downstream_p": "0.24..0.42"},
+   "expected": {
+    "goal_before_pct": 11.0,
+    "goal_expected_pct": 14.0,
+    "goal_upper_pct": 18.8,
+    "downstream_p": "0.24..0.42"
+   },
    "criteria": {
     "keep": "combined (all 15m trend entries) minus the non-relaxed ones: lower 95% >= -0.10 pp AND at least one relaxed entry before a winner's +2.5% crossing",
     "rollback": "upper 95% of the same difference < -0.10 pp",
@@ -33,7 +38,11 @@
    "min_days": 14,
    "min_trades": 10,
    "spec": "docs/specs/features/leader-exit-x6-spec.md",
-   "expected": {"switched_share_of_15m_trades": 0.256, "rocket_day_mean_trade_pct": 3.3, "old_exit_rocket_day_mean_pct": 1.70},
+   "expected": {
+    "switched_share_of_15m_trades": 0.256,
+    "rocket_day_mean_trade_pct": 3.3,
+    "old_exit_rocket_day_mean_pct": 1.7
+   },
    "criteria": {
     "anomaly": "any 1h position switched, a position switched twice, or a switched position without an exit after 7 days + 1 day",
     "keep": "no anomaly AND mean pnl of 15m trades on rocket-days >= +1.70% (the old exits' backtest level) with n >= min_trades",
@@ -54,7 +63,10 @@
    "min_days": 14,
    "min_trades": 10,
    "spec": "docs/specs/features/leader-alert-spec.md",
-   "expected": {"top3_watchlist_hit": 0.69, "global_top20_hit": 0.77},
+   "expected": {
+    "top3_watchlist_hit": 0.69,
+    "global_top20_hit": 0.77
+   },
    "criteria": {
     "keep": "Wilson 95% upper bound of the watchlist top-3 hit rate >= 0.69 (not shown worse than the backtest)",
     "rollback": "Wilson 95% upper bound < 0.69",
@@ -71,7 +83,9 @@
    "due": "2026-10-02",
    "min_days": 7,
    "spec": "docs/specs/features/poll-heartbeat-spec.md",
-   "criteria": {"keep": ">= 90% of the bucket explained (research readout by the scheduled Claude task)"}
+   "criteria": {
+    "keep": ">= 90% of the bucket explained (research readout by the scheduled Claude task)"
+   }
   },
   {
    "id": "LEADER-POSITIONING",
@@ -82,7 +96,9 @@
    "due": "2026-10-18",
    "min_days": 45,
    "spec": "docs/specs/features/leader-mode-spec.md",
-   "criteria": {"keep": "a train-chosen rule holds on the time-split test (research readout by the scheduled Claude task)"}
+   "criteria": {
+    "keep": "a train-chosen rule holds on the time-split test (research readout by the scheduled Claude task)"
+   }
   },
   {
    "id": "ML-FLOOR-SHADOW",
@@ -159,6 +175,41 @@
     "otherwise": "inconclusive -> keep and re-read"
    },
    "rollback": "MODE_RANGE_QUALITY_GUARD_ENABLED = True + restart"
+  },
+  {
+   "id": "ML-ADMISSION-MATCH",
+   "title": "ML promotion at matched admission, in shadow (KEEP = switch it on, ROLLBACK = keep the fixed floor)",
+   "kind": "computed",
+   "fn": "readout_ml_admission_match",
+   "flag": "ML_PROMOTION_MATCHED_ADMISSION_ENABLED",
+   "switched_on_utc": "2026-10-09T12:00:00Z",
+   "window_from": "2026-10-10",
+   "due": "2026-10-30",
+   "min_days": 14,
+   "min_trades": 350,
+   "spec": "docs/specs/features/ml-admission-match-1009-spec.md",
+   "expected": {
+    "offline_share_diff_transfer": -0.02,
+    "offline_precision_diff_matched": -0.005,
+    "offline_precision_diff_ci": [
+     -0.023,
+     0.012
+    ],
+    "offline_winner_rows_diff_matched": -0.016,
+    "rows_per_night": 20,
+    "walkforward_max_period_reach": {
+     "fixed": "27/41",
+     "matched": "27/41",
+     "anchor_one_week_model": "10/42 vs 27/42"
+    }
+   },
+   "criteria": {
+    "anomaly": "a gate night with matched_error, or an incumbent admitted share (admission_floor.incumbent_share) outside [0.50, 0.85]: matching would lock in an operating point the fixed floor never had over the maximum period",
+    "keep": "switch ML_PROMOTION_MATCHED_ADMISSION_ENABLED on: on rows newer than each candidate's holdout, the 95% interval of (candidate at its stored floor - incumbent at the live floor) admitted share lies inside [-0.07, +0.07], precision difference lower 95% >= -0.03, and winner-day rows admitted not clearly worse (upper 95% >= 0)",
+    "rollback": "admitted-share interval entirely outside [-0.07, +0.07], precision difference upper 95% < -0.03, or winner-day rows admitted clearly worse (upper 95% < 0): keep the fixed floor",
+    "otherwise": "inconclusive"
+   },
+   "rollback": "ML_PROMOTION_MATCHED_ADMISSION_ENABLED = False + restart"
   },
   {
    "id": "ML-GOAL-SHADOW",

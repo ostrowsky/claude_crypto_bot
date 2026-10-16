@@ -135,6 +135,11 @@ def main():
     # Cheap (sub-second) and catches market-regime shift BEFORE recall@20
     # collapses. Drift reports go to .runtime/pipeline/drift/.
     results.append(run_step("drift", [py, f"{files}/pipeline_drift.py"]))
+    # 2026-10-05 (model-health-1005-spec.md): the KS step above says "drift" on
+    # 164 of 166 runs and nobody reads it. model_health measures drift by effect
+    # size (PSI) and whether ml_proba still ranks candidates (IC vs ret_10);
+    # notify prints its block. Honours MODEL_HEALTH_ENABLED.
+    results.append(run_step("model health", [py, f"{files}/model_health.py"], timeout=900))
 
     # Attribution — normalised delta + bootstrap CI for every approved decision
     # that has both a pinned baseline and >= 4 post-apply health reports.

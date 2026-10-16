@@ -1151,7 +1151,28 @@ def build_agent_blocks(target_date: date) -> list[str]:
             out.append(b)
     except Exception as e:
         print(f"[notify] ml gate line skipped: {e}")
+    try:
+        b = build_model_health_block(target_date)
+        if b:
+            out.append(b)
+    except Exception as e:
+        print(f"[notify] model health block skipped: {e}")
     return out
+
+
+def build_model_health_block(target_date: date) -> str | None:
+    """Drift by PSI, ml_proba quality and last night's retrain manifests (model_health.py).
+
+    Shown only when today's report exists, so a stale file never speaks for today.
+    """
+    import config as _cfg
+    if not getattr(_cfg, "MODEL_HEALTH_ENABLED", False):
+        return None
+    import model_health as MH
+    latest, history = MH.load_latest()
+    if not latest or latest.get("day") != target_date.isoformat():
+        return None
+    return MH.render_block(latest, history, MH.last_manifests())
 
 
 def build_ml_gate_line(log_path=None) -> str | None:
@@ -1172,8 +1193,14 @@ def build_ml_gate_line(log_path=None) -> str | None:
                     last = json.loads(line)
     except Exception:
         pass
-    return (f"<b>ML-модель</b>: оставлена прежняя ({n} ноч. подряд) — "
+    line = (f"<b>ML-модель</b>: оставлена прежняя ({n} ноч. подряд) — "
             f"{last.get('reason', 'новая модель явно хуже')}")
+    m = last.get("matched") or {}
+    if m.get("decision") and not last.get("matched_live"):
+        # shadow of ml-admission-match-1009-spec.md: same exam at an equal admitted share
+        line += ("; на равной доле пропуска была бы " +
+                 ("принята" if m["decision"] == "promote" else "тоже отклонена"))
+    return line
 
 
 def build_full_message(

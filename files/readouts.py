@@ -452,6 +452,102 @@ def readout_mrq_off(r: dict, ctx: dict) -> dict:
     return out
 
 
+PROMOTION_LOG = ROOT / ".runtime" / "ml_promotion_log.jsonl"
+ADM_SHARE_TOL = 0.07       # |admitted share difference| the matched floor may drift on new rows
+ADM_PREC_TOL = 0.03        # precision may not be shown worse by more than this
+ADM_SHARE_BAND = (0.50, 0.85)  # incumbent's admitted share outside this = ANOMALY
+
+
+def readout_ml_admission_match(r: dict, ctx: dict) -> dict:
+    """Matched-admission floor in SHADOW: on rows that arrived after a candidate was
+    built, does the candidate at its stored floor admit the incumbent's share, with
+    no clearly worse precision or winner-day reach? Rows come from the nightly
+    `transfer` blocks of ml_promotion_log.jsonl (ml-admission-match-1009-spec.md)."""
+    recs = []
+    try:
+        for line in open(PROMOTION_LOG, encoding="utf-8"):
+            if line.strip():
+                recs.append(json.loads(line))
+    except Exception:
+        pass
+    recs = [x for x in recs if str(x.get("ts", ""))[:10] >= r["window_from"]]
+    errors = [x["ts"] for x in recs if x.get("matched_error")]
+    seen, rows, nights = set(), [], 0
+    for x in recs:
+        tr = x.get("transfer") or {}
+        new = 0
+        for ts, sym, y, a_old, a_new in tr.get("rows") or []:
+            if (ts, sym) in seen:
+                continue
+            seen.add((ts, sym))
+            rows.append((ts[:10], sym, int(y), int(a_old), int(a_new)))
+            new += 1
+        nights += 1 if new else 0
+    floors = [x.get("admission_floor") for x in recs if x.get("admission_floor")]
+    # matching freezes the operating point: a share far outside what the fixed floor
+    # admitted over the maximum period (0.56..0.75 by block) is locked in, not corrected
+    # (walk-forward anchored on a one-week model: 10 vs 27 of 42 winner-days)
+    off_band = sorted({"%s %s=%.3f" % (str(x.get("ts", ""))[:10], k, v)
+                       for x in recs for k, v in ((x.get("admission_floor") or {}).get("incumbent_share") or {}).items()
+                       if isinstance(v, (int, float)) and not (ADM_SHARE_BAND[0] <= v <= ADM_SHARE_BAND[1])})
+    out = {"days": nights, "nights_logged": len(recs), "rows": len(rows), "share_off_band": off_band,
+           "matched_decisions": collections.Counter((x.get("matched") or {}).get("decision") for x in recs),
+           "fixed_decisions": collections.Counter(x.get("decision") for x in recs if not x.get("matched_live")),
+           "last_admission_floor": floors[-1] if floors else None, "gate_errors": errors}
+    out["_n_trades"] = len(rows)
+    out["_anomaly"] = bool(errors or off_band)
+    if not rows:
+        out["note"] = "no rows newer than a candidate's holdout yet"
+        return out
+    try:
+        import exit_validator as EV
+        _, winners = EV.day_labels()
+    except Exception:
+        winners = set()
+    rnd = random.Random(29)
+
+    def stat(rs):
+        n = len(rs)
+        ao, an = sum(x[3] for x in rs), sum(x[4] for x in rs)
+        tpo, tpn = sum(1 for x in rs if x[3] and x[2]), sum(1 for x in rs if x[4] and x[2])
+        w = [x for x in rs if (x[0], x[1]) in winners]
+        return {"share_diff": (an - ao) / n,
+                "prec_diff": (tpn / an - tpo / ao) if an and ao else None,
+                "win_diff": (sum(x[4] for x in w) - sum(x[3] for x in w)) / len(w) if w else None}
+
+    point = stat(rows)
+    bs = {k: [] for k in point}
+    for _ in range(BOOT):
+        st = stat(rnd.choices(rows, k=len(rows)))
+        for k, v in st.items():
+            if v is not None:
+                bs[k].append(v)
+
+    def ci(k):
+        v = sorted(bs[k])
+        if not v or point[k] is None:
+            return None
+        return {"mean": round(point[k], 4), "lo95": round(v[int(0.025 * len(v))], 4),
+                "hi95": round(v[int(0.975 * len(v)) - 1], 4), "n": len(v)}
+    sh, pr, wn = ci("share_diff"), ci("prec_diff"), ci("win_diff")
+    n = len(rows)
+    out.update(admitted_old=round(sum(x[3] for x in rows) / n, 3), admitted_new=round(sum(x[4] for x in rows) / n, 3),
+               base_rate=round(sum(x[2] for x in rows) / n, 3),
+               winner_rows=sum(1 for x in rows if (x[0], x[1]) in winners),
+               share_diff=sh, precision_diff=pr, winner_rows_admitted_diff=wn)
+    # winner-day rows are ~10% of rows: a guard (not clearly worse), not a target
+    win_worse = bool(wn and wn["hi95"] < 0)
+    if sh and pr and (sh["lo95"] > ADM_SHARE_TOL or sh["hi95"] < -ADM_SHARE_TOL or pr["hi95"] < -ADM_PREC_TOL
+                      or win_worse):
+        out["_verdict"] = "ROLLBACK_SUGGESTED"
+    elif sh and pr and -ADM_SHARE_TOL <= sh["lo95"] and sh["hi95"] <= ADM_SHARE_TOL \
+            and pr["lo95"] >= -ADM_PREC_TOL:
+        out["_verdict"] = "KEEP"
+    else:
+        out["_verdict"] = "INCONCLUSIVE"
+    return out
+
+
 GS_NULL_MAX = 0.05          # share of shadow rows without a score
 GS_ZERO_DAYS = 2            # comparable days with no shadow row at all
 GS_MODEL_AGE_DAYS = 3.0     # nightly model older than this at the latest event
@@ -658,7 +754,7 @@ def readout_ml_goal_shadow(r: dict, ctx: dict) -> dict:
 FNS = {"readout_ml_goal_shadow": readout_ml_goal_shadow,
        "readout_e4": readout_e4, "readout_mrq_off": readout_mrq_off, "readout_leader_exit": readout_leader_exit,
        "readout_leader_alert": readout_leader_alert, "readout_ml_floor_shadow": readout_ml_floor_shadow,
-       "readout_ml_reload": readout_ml_reload}
+       "readout_ml_reload": readout_ml_reload, "readout_ml_admission_match": readout_ml_admission_match}
 
 
 # ---------------------------------------------------------------- runner

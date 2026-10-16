@@ -176,7 +176,7 @@ class TestPromotionGate(unittest.TestCase):
         src = (HERE / "ml_signal_model.py").read_text(encoding="utf-8")
         self.assertIn("ML_PROMOTION_GATE_ENABLED", src)
         self.assertIn('"_holdout"', src)
-        self.assertIn("MPG.evaluate(args.model_out, payload, holdout)", src)
+        self.assertIn("MPG.evaluate(args.model_out, payload, holdout", src)
         import config
         self.assertTrue(config.ML_PROMOTION_GATE_ENABLED)
 

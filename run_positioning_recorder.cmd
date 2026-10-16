@@ -27,6 +27,16 @@ echo ==== %DATE% %TIME% snapshot ==== >> "%LOG%"
 "%PY%" positioning_recorder.py snapshot >> "%LOG%" 2>&1
 if errorlevel 1 echo SNAPSHOT FAILED with errorlevel %errorlevel% >> "%LOG%"
 
+echo ---- %DATE% %TIME% portfolio vs target ---- >> "%LOG%"
+REM Does the portfolio hold the day's biggest movers? On 2026-08-21 four
+REM watchlist coins reached the day's top-50 by move -- ENA +47%, BCH +35%,
+REM CRV +23%, ZRO +22% -- and BOTH bots held none of them. One day of that is
+REM an anecdote; recorded for months it answers whether the pipeline
+REM systematically buys the middle of moderate moves instead of the start of
+REM large ones. Reads both bots' own positions.json, so nothing is hand-typed.
+"%PY%" portfolio_target_recorder.py snapshot >> "%LOG%" 2>&1
+if errorlevel 1 echo PORTFOLIO SNAPSHOT FAILED with errorlevel %errorlevel% >> "%LOG%"
+
 echo ---- %DATE% %TIME% resolve ---- >> "%LOG%"
 "%PY%" positioning_recorder.py resolve --horizon 8 >> "%LOG%" 2>&1
 if errorlevel 1 echo RESOLVE FAILED with errorlevel %errorlevel% >> "%LOG%"

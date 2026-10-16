@@ -658,6 +658,20 @@ async def run_full_cycle(
     # Step 4: Model retrain
     model_result = {}
     if retrain_model:
+        # 2026-10-05 (model-health-1005-spec.md): one run manifest per retrain --
+        # model hash before/after, git HEAD, config hash, dataset size, result.
+        # Best-effort like the retrains themselves; a manifest never breaks a cycle.
+        mh, files_dir = None, Path(__file__).resolve().parent
+        try:
+            import config as _cfg
+            if getattr(_cfg, "MODEL_HEALTH_ENABLED", False):
+                import model_health as mh
+        except Exception as e:
+            log.warning("model_health unavailable: %s", e)
+        plan = (("top_gainer_model", "top_gainer_model.json", "top_gainer_dataset.jsonl"),
+                ("ml_signal_model", "ml_signal_model.json", "ml_dataset.jsonl"),
+                ("ml_candidate_ranker", "ml_candidate_ranker.json", "critic_dataset.jsonl"))
+        before = {n: (mh.sha256_file(files_dir / m) if mh else None) for n, m, _ in plan}
         model_result = retrain_top_gainer_model()
         # 19.04.2026: also refresh ml_signal_model, candidate ranker, rl_memory.
         # All best-effort — failures don't break the cycle.
@@ -668,6 +682,13 @@ async def run_full_cycle(
         model_result["ml_goal_shadow"] = retrain_ml_goal_shadow()    # ml-goal-shadow-1012-spec.md
         model_result["ml_candidate_ranker"] = rk_result
         model_result["rl_memory"] = mem_result
+        if mh:
+            results = {"top_gainer_model": {k: v for k, v in model_result.items()
+                                            if not isinstance(v, dict)},
+                       "ml_signal_model": sig_result, "ml_candidate_ranker": rk_result}
+            for n, m, ds in plan:
+                mh.record_retrain(n, files_dir / m, before[n], dataset_path=files_dir / ds,
+                                  result=results.get(n))
 
     # Step 5: Report
     report_text = build_progress_report(collect_result, train_result, model_result)
