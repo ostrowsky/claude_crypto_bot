@@ -5405,6 +5405,11 @@ async def _poll_coin(
                         ),
                     )
                     return
+                elif _cg_result.cluster_size >= int(getattr(config, "CORR_CAP_RELAXED_FROM", 2)):
+                    # cap 2 -> 3 (corr-cap3-live-1016-spec.md): the old cap would have
+                    # blocked this candidate; logged for readout CORR-CAP3 only.
+                    botlog.log_corr_cap_relaxed(sym, tf, float(c[i]), int(_cg_result.cluster_size),
+                                                float(_cg_result.max_rho), str(_cg_result.peer_sym))
 
             port_ok, port_reason = _check_portfolio_limits(
                 sym,
@@ -6792,6 +6797,7 @@ async def monitoring_loop(state: MonitorState, send: SendFn) -> None:
                                     log.info("CORR GUARD PRUNE SHADOW would-prune %s: %s", _pc.symbol, _pc.reason)
                                     continue
                                 log.info("CORR GUARD PRUNE %s: %s", _pc.symbol, _pc.reason)
+                                botlog.log_corr_prune(_pc.symbol, _pc.reason)
                                 # Форсируем выход: устанавливаем trail_stop выше текущей цены.
                                 # Следующий poll-цикл (через POLL_SEC) закроет позицию
                                 # стандартным ATR-trail путём — отправит SELL + запишет в critic/botlog.

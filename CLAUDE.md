@@ -812,6 +812,19 @@ rocket-days −0.04 pp [−0.36, +0.25], all −0.044 pp [−0.082, −0.006], m
 not accepted. Do not re-test σ̂/HAR/GARCH buffers on 15m data. Spec:
 `docs/specs/features/sigma-trail-1005-spec.md`.
 
+### correlation_guard cluster cap 2 → 3 — LIVE (2026-10-16)
+
+Operator-approved after the compromise test below. `CORR_MAX_PER_CLUSTER = 3`
+applies to entry AND prune; pruning was not in the backtest. New events (no
+decision reads them):
+- `corr_cap_relaxed`: a candidate the old cap would have blocked;
+- `corr_prune`: an enforced prune.
+
+Readout `CORR-CAP3` due 2026-11-13: keep if ≥ 1 winner-day is gained, trades are
+non-inferior, and max drawdown and worst day are each no more than 10% deeper
+with the relaxed trades. Rollback: set the cap back to 2. Spec:
+`docs/specs/features/corr-cap3-live-1016-spec.md`.
+
 ### correlation_guard re-judged by the goal — a trade-off, operator's call (2026-10-16)
 
 Trigger: INJ 10-15. The guard blocked three early candidates (16% / 60% / 78%

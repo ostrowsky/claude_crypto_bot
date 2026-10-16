@@ -751,7 +751,109 @@ def readout_ml_goal_shadow(r: dict, ctx: dict) -> dict:
     return out
 
 
-FNS = {"readout_ml_goal_shadow": readout_ml_goal_shadow,
+CAP3_MATCH = timedelta(minutes=30)
+CAP3_TAIL_TOL = 0.10
+CAP3_NONINF_PP = -0.10
+
+
+def cap3_relaxed_flags(trades, relaxed) -> list:
+    """Per (entry, exit) pair: True if the same coin and timeframe logged corr_cap_relaxed
+    within CAP3_MATCH before the entry (corr-cap3-live-1016-spec.md)."""
+    by = collections.defaultdict(list)
+    for e in relaxed:
+        by[(e.get("sym"), e.get("tf"))].append(e["_dt"])
+    out = []
+    for en, _ex in trades:
+        ts = by.get((en.get("sym"), en.get("tf")), ())
+        out.append(any(en["_dt"] - CAP3_MATCH <= t <= en["_dt"] for t in ts))
+    return out
+
+
+def _maxdd(seq):
+    peak = dd = acc = 0.0
+    for v in seq:
+        acc += v
+        peak = max(peak, acc)
+        dd = min(dd, acc - peak)
+    return dd
+
+
+def cap3_tail(daily: dict):
+    """daily: {day: [(pnl, relaxed)]} -> (dd_with, dd_without, worst_with, worst_without)."""
+    days = sorted(daily)
+    w = [sum(v for v, _ in daily[d]) for d in days]
+    wo = [sum(v for v, rl in daily[d] if not rl) for d in days]
+    return float(_maxdd(w)), float(_maxdd(wo)), float(min(w) if w else 0.0), float(min(wo) if wo else 0.0)
+
+
+def cap3_verdict(days_gained, t_lo, t_hi, *, dd_with, dd_without, worst_with, worst_without) -> str:
+    tail_bad = dd_with < dd_without * (1 + CAP3_TAIL_TOL) or worst_with < worst_without * (1 + CAP3_TAIL_TOL)
+    if t_hi < CAP3_NONINF_PP or tail_bad:
+        return "ROLLBACK_SUGGESTED"
+    if days_gained >= 1 and t_lo >= CAP3_NONINF_PP:
+        return "KEEP"
+    return "INCONCLUSIVE"
+
+
+def readout_corr_cap3(r: dict, ctx: dict) -> dict:
+    """correlation_guard cluster cap 2 -> 3 (corr-cap3-live-1016-spec.md)."""
+    import goal_validator as GV
+    evs = scan_events(r["window_from"], {"entry", "exit", "corr_cap_relaxed", "corr_prune"})
+    days = set(ctx["days"])
+    trades = [(en, ex) for en, ex in pair_trades([e for e in evs if e["event"] in ("entry", "exit")])
+              if en["ts"][:10] in days and isinstance(ex.get("pnl_pct"), (int, float))]
+    relaxed = [e for e in evs if e["event"] == "corr_cap_relaxed"]
+    prunes = [e for e in evs if e["event"] == "corr_prune"]
+    flags = cap3_relaxed_flags(trades, relaxed)
+    pr_size = collections.Counter()
+    for e in prunes:
+        m = re.search(r"size (\d+)->", str(e.get("reason", "")))
+        pr_size[int(m.group(1)) if m else -1] += 1
+    out = {"days": len(days), "trades": len(trades), "relaxed_trades": sum(flags),
+           "relaxed_events": len(relaxed), "prunes": len(prunes), "prunes_by_cluster_size": dict(pr_size)}
+    out["_n_trades"] = sum(flags)
+    if not trades:
+        out["note"] = "no closed trades yet"
+        return out
+    pn = [float(ex["pnl_pct"]) for _en, ex in trades]
+    rel = [v for v, f in zip(pn, flags) if f]
+    keep = [v for v, f in zip(pn, flags) if not f]
+    out.update(mean_all=round(sum(pn) / len(pn), 3), mean_relaxed=round(sum(rel) / len(rel), 3) if rel else None,
+               mean_without=round(sum(keep) / len(keep), 3) if keep else None)
+    # goal: winner-days whose early entries are all relaxed trades
+    W = [w for w in GV.winner_days(min(days), days) if w[0] in days] if days else []
+    gained = 0
+    for _day, sym, op, dd in W:
+        early = [f for (en, _ex), f in zip(trades, flags) if en["sym"] == sym and op <= en["_dt"] < dd]
+        gained += bool(early) and all(early)
+    out.update(winner_days=len(W), days_gained=gained)
+    # per trade: all trades minus the same without the relaxed ones, trade bootstrap
+    rnd = random.Random(1016)
+    if rel and keep:
+        pt = sum(pn) / len(pn) - sum(keep) / len(keep)
+        bs = []
+        for _ in range(BOOT):
+            a, b = rnd.choices(keep, k=len(keep)), rnd.choices(rel, k=len(rel))
+            bs.append((sum(a) + sum(b)) / (len(a) + len(b)) - sum(a) / len(a))
+        bs.sort()
+        t_lo, t_hi = bs[int(0.025 * BOOT)], bs[int(0.975 * BOOT) - 1]
+        out["per_trade"] = {"combined_minus_without_pp": round(pt, 3), "lo95": round(t_lo, 3), "hi95": round(t_hi, 3)}
+    else:
+        t_lo = t_hi = 0.0
+    daily = collections.defaultdict(list)
+    for (en, _ex), v, f in zip(trades, pn, flags):
+        daily[en["ts"][:10]].append((v, f))
+    dd_w, dd_wo, wst_w, wst_wo = cap3_tail(daily)
+    out["tail"] = {"max_drawdown_with": round(dd_w, 1), "max_drawdown_without": round(dd_wo, 1),
+                   "worst_day_with": round(wst_w, 1), "worst_day_without": round(wst_wo, 1)}
+    if rel and keep:
+        out["_verdict"] = cap3_verdict(gained, t_lo, t_hi, dd_with=dd_w, dd_without=dd_wo,
+                                       worst_with=wst_w, worst_without=wst_wo)
+    return out
+
+
+FNS = {"readout_corr_cap3": readout_corr_cap3,
+       "readout_ml_goal_shadow": readout_ml_goal_shadow,
        "readout_e4": readout_e4, "readout_mrq_off": readout_mrq_off, "readout_leader_exit": readout_leader_exit,
        "readout_leader_alert": readout_leader_alert, "readout_ml_floor_shadow": readout_ml_floor_shadow,
        "readout_ml_reload": readout_ml_reload, "readout_ml_admission_match": readout_ml_admission_match}

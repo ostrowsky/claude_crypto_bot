@@ -251,6 +251,18 @@ def log_ml_goal_shadow(sym: str, tf: str, bar_ts: int, mode, price: float, goal_
     })
 
 
+def log_corr_cap_relaxed(sym: str, tf: str, price: float, cluster_size: int, max_rho: float, peer_sym: str) -> None:
+    """A candidate passed correlation_guard that the old cluster cap would have blocked
+    (corr-cap3-live-1016-spec.md). No decision reads it."""
+    _write({"event": "corr_cap_relaxed", "sym": sym, "tf": tf, "price": price,
+            "cluster_size": cluster_size, "max_rho": max_rho, "peer_sym": peer_sym})
+
+
+def log_corr_prune(sym: str, reason: str) -> None:
+    """An enforced correlation-cluster prune (until 2026-10-16 only in stderr)."""
+    _write({"event": "corr_prune", "sym": sym, "reason": reason})
+
+
 def log_ml_model_reload(old_model, new_model, label_version, mtime: float) -> None:
     """The live ML model was swapped without a restart (monitor._maybe_reload_ml_model)."""
     _write({

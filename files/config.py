@@ -1347,7 +1347,12 @@ CORR_GUARD_WINDOW_BARS: int = 48                 # окно в барах (~2 с
 CORR_GUARD_THRESHOLD: float = 0.65              # порог кластеризации (базовый)
 CORR_GUARD_THRESHOLD_BULL: float = 0.60         # порог в бычий день (строже)
 CORR_GUARD_THRESHOLD_BEAR: float = 0.99         # порог в медвежий день (фактически off)
-CORR_MAX_PER_CLUSTER: int = 2                    # макс. позиций в одном кластере
+# 2026-10-16 (corr-cap3-live-1016-spec.md, operator-approved): 2 -> 3, for entry AND
+# prune. Backtest over the whole enforcement period: +1.08 pp early winner-days
+# [+0.27, +2.43], trades non-inferior, max drawdown +9.9% (bound 10%, marginal);
+# pruning was not in the backtest. Readout CORR-CAP3 due 2026-11-13. Rollback: 2.
+CORR_MAX_PER_CLUSTER: int = 3                    # макс. позиций в одном кластере
+CORR_CAP_RELAXED_FROM: int = 2                   # old cap: candidates passing at this cluster size are logged (corr_cap_relaxed)
 CORR_MARGINAL_WEIGHTING: bool = True             # штраф score при ранжировании дублей
 CORR_PRUNE_ENABLED: bool = True                  # закрывать раздувшиеся кластеры
 CORR_PRUNE_PROFIT_PROTECT_PCT: float = 2.0       # не закрывать позиции с PnL > этого %

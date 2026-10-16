@@ -235,6 +235,30 @@
     "otherwise": "inconclusive"
    },
    "rollback": "ML_GOAL_SHADOW_ENABLED = False + restart"
+  },
+  {
+   "id": "CORR-CAP3",
+   "title": "correlation_guard cluster cap 2 -> 3 (entry and prune)",
+   "kind": "computed",
+   "fn": "readout_corr_cap3",
+   "flag": "CORR_MAX_PER_CLUSTER",
+   "switched_on_utc": "2026-10-16T00:00:00Z",
+   "window_from": "2026-10-17",
+   "due": "2026-11-13",
+   "min_days": 21,
+   "min_trades": 10,
+   "spec": "docs/specs/features/corr-cap3-live-1016-spec.md",
+   "expected": {
+    "backtest_goal_delta_pp": "+1.08 [+0.27, +2.43] (97.5%, 293 winner-days, ceiling via p=0.791)",
+    "backtest_trade_delta_pp": "-0.020 [-0.067, +0.028]",
+    "backtest_max_drawdown": "+9.9% (bound 10%, marginal); pruning not modelled"
+   },
+   "criteria": {
+    "keep": "days gained (winner-days whose early entries are all relaxed trades) >= 1 AND per-trade (all minus without relaxed) lower 95% >= -0.10 pp AND max drawdown and worst day each no more than 10% deeper with the relaxed trades",
+    "rollback": "per-trade upper 95% < -0.10 pp OR max drawdown / worst day more than 10% deeper",
+    "otherwise": "inconclusive"
+   },
+   "rollback": "CORR_MAX_PER_CLUSTER = 2 + restart"
   }
  ]
 }
