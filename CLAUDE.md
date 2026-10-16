@@ -812,6 +812,21 @@ rocket-days −0.04 pp [−0.36, +0.25], all −0.044 pp [−0.082, −0.006], m
 not accepted. Do not re-test σ̂/HAR/GARCH buffers on 15m data. Spec:
 `docs/specs/features/sigma-trail-1005-spec.md`.
 
+### correlation_guard re-judged by the goal — a trade-off, operator's call (2026-10-16)
+
+Trigger: INJ 10-15. The guard blocked three early candidates (16% / 60% / 78%
+into a +32.5% move), and the bot entered at 95%. Over the enforcement period
+(07-07 .. 10-16, 293 winner-days), removing the guard gives:
+- **+2.77 to +2.95 pp** of early winner-days (CI lower bound > +1.1), with the
+  downstream p measured at 0.79–0.85;
+- an unchanged mean trade (−0.003 pp [−0.089, +0.078]);
+- clustered losing days: worst day −94.8% → −113.7% and max drawdown +30%
+  (exploratory; the pre-registered tail test conditioned on the wrong days).
+
+Validator defect: `validate_gate_off` reported p = 1.0 because blocks from the
+portfolio limit (which runs after the guard) have no stage and fall out of the
+population. Spec: `docs/specs/features/corr-guard-goal-1016-spec.md`.
+
 ### GOAL-label ML model in SHADOW (2026-10-12)
 
 The next step after the two tests below: `ml_goal_shadow.py` trains the GOAL-label
