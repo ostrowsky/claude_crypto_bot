@@ -827,6 +827,12 @@ Validator defect: `validate_gate_off` reported p = 1.0 because blocks from the
 portfolio limit (which runs after the guard) have no stage and fall out of the
 population. Spec: `docs/specs/features/corr-guard-goal-1016-spec.md`.
 
+Compromises (pre-registered, `corr-guard-compromise-1016-spec.md`):
+- **cluster cap 3:** +1.08 pp [+0.27, +2.43], trades non-inferior, drawdown
+  +9.9%. Supported, but marginal against the 10% bound.
+- **pre-crossing exemption:** refuted. The drawdown is +25%: the candidates
+  the guard blocks on shock days are exactly the early ones.
+
 ### GOAL-label ML model in SHADOW (2026-10-12)
 
 The next step after the two tests below: `ml_goal_shadow.py` trains the GOAL-label
