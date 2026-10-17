@@ -37,6 +37,7 @@ _cfg.CORR_MAX_PER_CLUSTER = 2
 _cfg.CORR_MARGINAL_WEIGHTING = True
 _cfg.CORR_PRUNE_ENABLED = True
 _cfg.CORR_PRUNE_PROFIT_PROTECT_PCT = 2.0
+_cfg.CORR_PRUNE_MIN_BARS = 4
 _cfg.CORR_CACHE_TTL_MIN = 15
 
 # The stub must be visible only while `correlation_guard` binds its `config`
@@ -62,6 +63,7 @@ class _FakePos:
     symbol: str
     entry_price: float
     ranker_final_score: float = -0.5
+    bars_elapsed: int = 0          # same default as monitor.OpenPosition
 
 
 def _make_cache(pairs: Dict[tuple, float]) -> cg.CorrelationCache:
@@ -318,10 +320,15 @@ class TestMarginalScore(unittest.TestCase):
 
 class TestPruneCandidates(unittest.TestCase):
 
-    def _make_positions(self, specs):
-        """specs = [(sym, entry_price, ranker_final_score)]"""
+    def _make_positions(self, specs, bars_elapsed=10):
+        """specs = [(sym, entry_price, ranker_final_score)]
+
+        Positions are aged past CORR_PRUNE_MIN_BARS by default so the age
+        guard does not mask what each test checks.
+        """
         return {
-            sym: _FakePos(symbol=sym, entry_price=ep, ranker_final_score=rfs)
+            sym: _FakePos(symbol=sym, entry_price=ep, ranker_final_score=rfs,
+                          bars_elapsed=bars_elapsed)
             for sym, ep, rfs in specs
         }
 
@@ -375,6 +382,18 @@ class TestPruneCandidates(unittest.TestCase):
         result = cg.prune_candidates(pos, {"A": 1.0, "B": 1.0, "C": 1.0}, cache)
         self.assertEqual(len(result), 0)
         _cfg.CORR_PRUNE_ENABLED = True  # restore
+
+    def test_prune_skips_young_position(self):
+        # C — худший по ranker, но моложе CORR_PRUNE_MIN_BARS → не закрывать
+        pairs = {("A", "B"): 0.80, ("A", "C"): 0.80, ("B", "C"): 0.80}
+        cache = _make_cache(pairs)
+        pos = self._make_positions([("A", 1.0, -0.2), ("B", 1.0, -0.4), ("C", 1.0, -0.6)])
+        prices = {"A": 1.0, "B": 1.0, "C": 1.0}
+        pos["C"].bars_elapsed = 3
+        self.assertEqual(cg.prune_candidates(pos, prices, cache), [])
+        pos["C"].bars_elapsed = 4  # ровно на пороге → уже можно
+        result = cg.prune_candidates(pos, prices, cache)
+        self.assertEqual([r.symbol for r in result], ["C"])
 
     def test_prune_two_from_four(self):
         # Кластер из 4 → закрываем 2 худших, оставляем 2 лучших
