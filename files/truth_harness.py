@@ -295,6 +295,59 @@ def _canonical_status(report: dict) -> tuple[dict, dict]:
     return metrics, metrics.get("NS_EarlyCapture_top20") or {}
 
 
+METRICS_DAILY_MAX_AGE_HOURS = 36.0
+
+
+def _parse_ts(value) -> datetime | None:
+    try:
+        t = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    return t if t.tzinfo else t.replace(tzinfo=timezone.utc)
+
+
+def _audit_metrics_freshness(audit: Audit, root: Path, report: dict) -> None:
+    """TH-05: a metrics_daily value older than ~36 h is not today's.
+
+    2026-10-12..10-19 the L0 step was killed by its timeout every morning,
+    metrics_daily.jsonl stopped at 10-11, and the report kept printing the
+    10-11 North Star as current with status "verified".
+    """
+    audit.checked("TH05_STALE_METRICS")
+    gen = _parse_ts(report.get("generated_at")) or datetime.now(timezone.utc)
+    md_ts = (report.get("metrics_daily_latest") or {}).get("ts")
+    md_t = _parse_ts(md_ts)
+    status = ((report.get("canonical_scorecard") or {}).get("north_star") or {}).get("status")
+    if md_t is not None and (gen - md_t).total_seconds() / 3600 > METRICS_DAILY_MAX_AGE_HOURS             and status != "stale":
+        audit.add("TH05_STALE_METRICS", "TH-05", "error",
+                  "Health report presents an old metrics_daily row as current",
+                  f"metrics_daily ts={md_ts}, report generated={report.get('generated_at')}, "
+                  f"north_star status={status}",
+                  "Mark metrics_daily-derived values stale (bot_health_report).")
+
+    audit.checked("TH05_METRICS_DAILY_NOT_REFRESHED")
+    path = root / ".runtime" / "metrics_daily.jsonl"
+    if not path.exists():
+        return
+    last = None
+    try:
+        with path.open("rb") as f:
+            f.seek(0, 2)
+            f.seek(max(0, f.tell() - 65536))
+            for line in f.read().decode("utf-8", "replace").splitlines():
+                if line.strip().startswith("{"):
+                    last = line
+        ts = json.loads(last).get("ts") if last else None
+    except (OSError, ValueError):
+        ts = None
+    t = _parse_ts(ts)
+    if t is None or (gen - t).total_seconds() / 3600 > METRICS_DAILY_MAX_AGE_HOURS:
+        audit.add("TH05_METRICS_DAILY_NOT_REFRESHED", "TH-05", "error",
+                  "metrics_daily.jsonl has no recent row; the L0 metrics step is not producing output",
+                  f"last row ts={ts}",
+                  "Check .runtime/pipeline/orch/*.json for the L0 metrics step.")
+
+
 def audit_health_report(audit: Audit, root: Path = ROOT,
                         today: date | None = None) -> None:
     audit.checked("TH10_HEALTH_REPORT")
@@ -325,7 +378,8 @@ def audit_health_report(audit: Audit, root: Path = ROOT,
         # c237d91. Accepting the word unconditionally would let any future
         # provenance regression quietly relabel itself as measured, so the
         # provenance is checked rather than the vocabulary.
-        ok = ns_status in ("verified", "provisional") or (
+        # "stale" discloses that the value is not today's (TH-05, 2026-10-20).
+        ok = ns_status in ("verified", "provisional", "stale") or (
             ns_status == "measured"
             and score_ns.get("provenance") == "immutable_later_eod_klines")
         if not ok:
@@ -333,6 +387,8 @@ def audit_health_report(audit: Audit, root: Path = ROOT,
                       "Health report does not disclose provisional North-Star labels",
                       f"status={ns_status or 'missing'}; "
                       f"provenance={score_ns.get('provenance') or 'unknown'}")
+
+    _audit_metrics_freshness(audit, root, report)
 
     training = report.get("training_health") or {}
     if training.get("recall_at_20") is not None:

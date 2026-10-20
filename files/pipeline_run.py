@@ -35,6 +35,12 @@ if hasattr(sys.stdout, "reconfigure"):
 ORCH_DIR = PL.PIPELINE / "orch"
 ORCH_DIR.mkdir(parents=True, exist_ok=True)
 
+# report_metrics_daily.py runs nine scripts inside its own budget
+# (DEFAULT_BUDGET_SEC) and writes its row before that budget ends. This
+# timeout must sit above the budget: at 600 s it killed the script every
+# morning from 2026-10-12 to 10-19 before it could write anything.
+L0_METRICS_TIMEOUT_SEC = 1800
+
 
 def run_step(name: str, args: list[str], timeout: int = 300) -> dict:
     started = time.time()
@@ -61,8 +67,12 @@ def run_step(name: str, args: list[str], timeout: int = 300) -> dict:
             "stdout_tail": last, "stderr_tail": res.stderr[-500:],
         }
     except subprocess.TimeoutExpired:
+        # Printed: for eight days the log showed only "cmd:" and then the next
+        # step, so a step killed every morning read as one that ran.
+        print(f"[orch] {name} TIMEOUT after {timeout}s -- killed, its output is lost")
         return {"step": name, "ok": False, "error": "timeout", "duration_sec": timeout}
     except OSError as e:
+        print(f"[orch] {name} failed to start: {e}")
         return {"step": name, "ok": False, "error": str(e)}
 
 
@@ -95,7 +105,8 @@ def main():
     # Runs at ~01:00 UTC, ~30 min after the EOD learning job (00:30 UTC)
     # resolves critic_dataset labels, so the backtests see fresh outcomes.
     results.append(run_step(
-        "L0 metrics", [py, f"{files}/report_metrics_daily.py"], timeout=600))
+        "L0 metrics", [py, f"{files}/report_metrics_daily.py"],
+        timeout=L0_METRICS_TIMEOUT_SEC))
 
     # L1 — daily health
     l1_args = [py, f"{files}/bot_health_report.py"]

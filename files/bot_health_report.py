@@ -189,14 +189,25 @@ def collect_per_mode_signals() -> dict:
     return {"available": bool(modes), "modes": modes}
 
 
-def collect_metrics_daily_latest() -> dict:
-    """Last entry of .runtime/metrics_daily.jsonl — north-star + backtest metrics."""
-    records = list(PL.iter_jsonl(PL.METRICS_DAILY))
-    if not records:
-        return {"available": False}
-    latest = records[-1]
+# A metrics_daily row older than this is not "today" (2026-10-20: the report
+# printed the 10-11 North Star as current, "verified", for nine mornings while
+# the L0 step was killed by its timeout and appended nothing).
+METRICS_DAILY_MAX_AGE_HOURS = 36.0
+
+
+def _row_age_hours(ts, now: datetime) -> float | None:
+    try:
+        t = datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    if t.tzinfo is None:
+        t = t.replace(tzinfo=timezone.utc)
+    return round((now - t).total_seconds() / 3600.0, 1)
+
+
+def _extract_metrics(row: dict) -> dict:
     extract = {}
-    for key, sub in latest.items():
+    for key, sub in row.items():
         if not isinstance(sub, dict):
             continue
         if key == "ts":
@@ -216,7 +227,36 @@ def collect_metrics_daily_latest() -> dict:
                 if base != value:
                     extract.setdefault(base, sub)
                 break
-    return {"available": True, "ts": latest.get("ts"), "metrics": extract}
+    return extract
+
+
+def collect_metrics_daily_latest(now: datetime | None = None,
+                                 max_age_hours: float = METRICS_DAILY_MAX_AGE_HOURS) -> dict:
+    """Last entry of .runtime/metrics_daily.jsonl — north-star + backtest metrics.
+
+    Every metric carries `_as_of` (the ts of the row it came from) and `_stale`.
+    A metric absent from the latest row (its script timed out or was skipped)
+    is taken from the newest row that has it, so the value is not blanked, and
+    is marked stale by its own age, so it is not passed off as today's (TH-05).
+    """
+    now = now or datetime.now(timezone.utc)
+    records = list(PL.iter_jsonl(PL.METRICS_DAILY))
+    if not records:
+        return {"available": False}
+    latest = records[-1]
+    merged: dict = {}
+    for row in reversed(records):
+        ts = row.get("ts")
+        age = _row_age_hours(ts, now)
+        stale = age is None or age > max_age_hours
+        for name, sub in _extract_metrics(row).items():
+            if name in merged:
+                continue
+            merged[name] = dict(sub, _as_of=ts, _age_hours=age, _stale=stale)
+    age = _row_age_hours(latest.get("ts"), now)
+    return {"available": True, "ts": latest.get("ts"), "metrics": merged,
+            "age_hours": age, "max_age_hours": max_age_hours,
+            "stale": age is None or age > max_age_hours}
 
 
 def collect_mode_curtail() -> dict:
@@ -490,7 +530,7 @@ def build_canonical_scorecard(metrics_daily: dict) -> dict:
     ex1 = (md.get("EX1_realized_potential") or {}).get("top20") or {}
     fr = md.get("Q1_Q3_fast_reversal") or {}
     whipsaw = md.get("Q2_whipsaw_rate") or {}
-    return {
+    card = {
         "north_star": {
             "value": ns.get("early_capture"), "target": 0.40,
             "acceptable_floor": 0.25, "unit": "ratio",
@@ -546,6 +586,23 @@ def build_canonical_scorecard(metrics_daily: dict) -> dict:
             "source": "Q2_whipsaw_rate",
         },
     }
+    # Freshness overrides every other status: a verified value from nine days
+    # ago is not today's value (2026-10-20).
+    sources = {"north_star": ns, "signal_precision": precision,
+               "message_rate": precision, "time_to_signal": tts,
+               "realized_potential": md.get("EX1_realized_potential") or {},
+               "fast_reversal": fr, "whipsaw": whipsaw}
+    all_stale = bool((metrics_daily or {}).get("stale"))
+    for key, src in sources.items():
+        if not src:
+            continue
+        item = card[key]
+        item["as_of"] = src.get("_as_of")
+        if src.get("_stale") or all_stale:
+            item["status"] = "stale"
+        elif not item.get("status"):
+            item["status"] = "measured"
+    return card
 
 
 def _alert_budget_tested(today, max_age_days: int = 30):
@@ -573,7 +630,15 @@ def derive_next_steps(scorecard: dict, training: dict, dnt: dict,
     """Evidence-ranked work; never emits an unvalidated production change."""
     steps: list[dict] = []
     ns = scorecard.get("north_star") or {}
-    if ns.get("status") != "verified":
+    if ns.get("status") == "stale":
+        steps.append({
+            "priority": "P0", "id": "restore_metrics_daily",
+            "action": "Восстановить ежедневный расчёт метрик (L0 report_metrics_daily.py): "
+                      "North Star не пересчитан",
+            "evidence": f"последний расчёт North Star: {ns.get('as_of') or 'unknown'}",
+            "gate": "Не судить о прогрессе по устаревшему значению",
+        })
+    elif ns.get("status") != "verified":
         steps.append({
             "priority": "P0", "id": "restore_eod_ground_truth",
             "action": "Создать неизменяемые later-EOD top-20 labels и пересчитать всю историю North Star",
@@ -952,7 +1017,21 @@ def build_report(today: date) -> dict:
         deploy, per_mode, gap, scout, critic_raw, metrics_daily,
         training=training, do_not_touch=dnt, today=today,
     )
-    if scorecard["north_star"].get("status") != "verified":
+    if scorecard["north_star"].get("status") == "stale":
+        red_flags.append({
+            "id": "RF_metrics_daily_stale",
+            "metric": "metrics_daily_age_hours",
+            "value": metrics_daily.get("age_hours"),
+            "threshold": metrics_daily.get("max_age_hours"),
+            "severity": "critical",
+            "evidence": {"north_star_as_of": scorecard["north_star"].get("as_of"),
+                         "latest_row_ts": metrics_daily.get("ts")},
+            "root_cause_hypothesis": (
+                "L0 report_metrics_daily.py не записал строку (timeout/сбой шага "
+                "оркестратора) — см. .runtime/pipeline/orch/*.json"
+            ),
+        })
+    elif scorecard["north_star"].get("status") != "verified":
         red_flags.append({
             "id": "RF_north_star_ground_truth_provisional",
             "metric": "north_star_label_provenance",
@@ -984,6 +1063,7 @@ def build_report(today: date) -> dict:
             "days_window": scorecard["north_star"].get("days_window"),
             "days_full": scorecard["north_star"].get("days_full"),
             "reason": scorecard["north_star"].get("provenance"),
+            "as_of": scorecard["north_star"].get("as_of"),
         },
         "canonical_scorecard": scorecard,
         "deployment_critic_diagnostic": deployment_diagnostic,
@@ -1256,7 +1336,8 @@ def _per100(frac: float) -> int:
     return max(0, round(frac * 100))
 
 
-def _progress_verdict(*, ground_truth_verified: bool = False) -> tuple[str, str, str]:
+def _progress_verdict(*, ground_truth_verified: bool = False,
+                      stale_as_of: str | None = None) -> tuple[str, str, str]:
     """Line-1 answer in PLAIN words: developing / flat / worse.
     Judged only on the North Star over the longest history (§0).
 
@@ -1266,6 +1347,9 @@ def _progress_verdict(*, ground_truth_verified: bool = False) -> tuple[str, str,
     endpoints produced "СТАЛО ХУЖЕ ~11 -> ~7" out of pure window growth. A
     headline verdict built on incomparable samples is worse than none.
     """
+    if stale_as_of:
+        return ("❔", "ДАННЫЕ УСТАРЕЛИ",
+                f"метрики не пересчитаны с {stale_as_of}; тренд не оценивается")
     if not ground_truth_verified:
         return ("❔", "МЕТРИКА ПРЕДВАРИТЕЛЬНАЯ",
                 "тренд не оценивается до пересчёта на immutable later-EOD labels")
@@ -1472,8 +1556,11 @@ def render_telegram(r: dict) -> str:
     rf = r.get("red_flags") or []
 
     score_ns = ((r.get("canonical_scorecard") or {}).get("north_star") or {})
+    ns_stale_as_of = (str(score_ns.get("as_of") or "?")[:10]
+                      if score_ns.get("status") == "stale" else None)
     p_emoji, p_head, p_trend = _progress_verdict(
         ground_truth_verified=score_ns.get("status") == "verified",
+        stale_as_of=ns_stale_as_of,
     )
     n_act = _action_needed_count()
     if n_act:
@@ -1498,6 +1585,9 @@ def render_telegram(r: dict) -> str:
     ec = ns_md.get("early_capture")
     gt_ok = ns_ground_truth_verified(ns_md)
     if ec is not None:
+        if ns_stale_as_of:
+            out.append(f"⚠️ <b>North Star устарел:</b> последний расчёт {ns_stale_as_of}, "
+                       f"ниже — значения того дня, а не сегодняшние.")
         out.append(f"<b>Главное:</b> {'' if gt_ok else 'предварительный '}North Star раннего захвата "
                    f"= {ec:.1%} ({p_trend}). Цель — 40%, минимально приемлемо 25%.")
         out.append("Это составной score, а не доля пойманных монет: "
@@ -1569,6 +1659,8 @@ def render_telegram(r: dict) -> str:
             return "неизвестно" if not isinstance(value, (int, float)) else f"{value:.{digits}f}{suffix}"
 
         def _old(item: dict) -> str:
+            if item.get("status") == "stale":
+                return f" (устарело, от {str(item.get('as_of') or '?')[:10]})"
             return " (устаревшая метка top-20)" if item.get("status") == "provisional" else ""
 
         out.append("🎯 <b>Канонический scorecard</b>")
@@ -1581,8 +1673,8 @@ def render_telegram(r: dict) -> str:
         out.append(f"  precision сигналов: {_v(precision, '%')} / 35%{_old(precision)}; "
                    f"сообщений: {_v(msg, '/д')} / ≤10/д")
         out.append(f"  время до сигнала: {_v(tts, 'ч', 2)} / ≤0.5ч{_old(tts)}; "
-                   f"реализованный потенциал: {_v(ex1, '', 3)} / 0.50")
-        out.append(f"  fast reversal: {_v(fr, '%')} / ≤8%; whipsaw: {_v(wh, '%')} / ≤5%")
+                   f"реализованный потенциал: {_v(ex1, '', 3)} / 0.50{_old(ex1) if ex1.get('status') == 'stale' else ''}")
+        out.append(f"  fast reversal: {_v(fr, '%')} / ≤8%{_old(fr)}; whipsaw: {_v(wh, '%')} / ≤5%{_old(wh)}")
         out.append("")
 
     out.append("📋 <b>Прошлые решения</b> (помогли или нет):")

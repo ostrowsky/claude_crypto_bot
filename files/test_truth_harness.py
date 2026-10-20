@@ -139,6 +139,45 @@ class HealthTruthTests(unittest.TestCase):
         self.assertIn("TH02_INVALID_GAP", ids)
         self.assertIn("TH02_PROXY_AS_PROGRESS", ids)
 
+    def _stale_report(self, status: str) -> dict:
+        # 2026-10-20: metrics_daily stopped at 10-11 and the report kept
+        # calling the 10-11 North Star verified.
+        report = self._base_report()
+        report["generated_at"] = "2026-10-20T07:30:00Z"
+        report["metrics_daily_latest"]["ts"] = "2026-10-11T07:00:04+00:00"
+        report["canonical_scorecard"]["north_star"]["status"] = status
+        return report
+
+    def test_stale_metrics_reported_as_verified_is_rejected(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._write_health(root, self._stale_report("verified"))
+            audit = H.Audit("full")
+            H.audit_health_report(audit, root, today=date(2026, 10, 20))
+        self.assertIn("TH05_STALE_METRICS", _ids(audit))
+
+    def test_stale_metrics_disclosed_as_stale_pass(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._write_health(root, self._stale_report("stale"))
+            audit = H.Audit("full")
+            H.audit_health_report(audit, root, today=date(2026, 10, 20))
+        ids = _ids(audit)
+        self.assertNotIn("TH05_STALE_METRICS", ids)
+        self.assertNotIn("TH03_NORTH_STAR_DISCLOSURE", ids)
+
+    def test_metrics_daily_file_not_refreshed_is_flagged(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            report = self._base_report()
+            report["generated_at"] = "2026-10-20T07:30:00Z"
+            self._write_health(root, report)
+            (root / ".runtime" / "metrics_daily.jsonl").write_text(
+                json.dumps({"ts": "2026-10-11T07:00:04+00:00"}) + "\n", encoding="utf-8")
+            audit = H.Audit("full")
+            H.audit_health_report(audit, root, today=date(2026, 10, 20))
+        self.assertIn("TH05_METRICS_DAILY_NOT_REFRESHED", _ids(audit))
+
     def test_expired_gate_evidence_is_rejected(self):
         report = self._base_report()
         report["do_not_touch"] = {

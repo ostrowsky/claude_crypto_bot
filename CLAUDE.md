@@ -533,6 +533,31 @@ user cmd window stays the normal manual path.
 
 ## 7. Known issues & fixes
 
+### metrics_daily went stale for 9 days; the report called it verified (2026-10-20, FIXED)
+
+From 10-12 to 10-20 the orchestrator's `L0 metrics` step hit its 600 s timeout
+on every run. The nine metric scripts ran in sequence (180 s each), and the row
+was appended only at the end. They take 428 s when run alone, and the 07:00 run
+shares the CPU with other jobs.
+
+So `.runtime/metrics_daily.jsonl` stopped at 10-11. `run_step` printed nothing
+on a timeout, and the morning report showed the 10-11 North Star as today's
+with status `verified`.
+
+What changed:
+- `report_metrics_daily.py` runs everything inside one budget
+  (`DEFAULT_BUDGET_SEC = 1500`). The North Star runs first, a script the budget
+  does not reach is recorded `skipped_budget`, and the row is always written.
+- `pipeline_run.L0_METRICS_TIMEOUT_SEC = 1800`, and timeouts are now printed.
+- `bot_health_report`: any metrics_daily value older than 36 h
+  (`METRICS_DAILY_MAX_AGE_HOURS`) gets status `stale` with its `as_of` date.
+  The report then shows «ДАННЫЕ УСТАРЕЛИ», the P0 step `restore_metrics_daily`
+  and the red flag `RF_metrics_daily_stale`.
+- The truth harness checks `TH05_STALE_METRICS` and
+  `TH05_METRICS_DAILY_NOT_REFRESHED`.
+
+Spec: `docs/specs/features/metrics-daily-stale-1020-spec.md`.
+
 ### Decoupling signal — SHADOW (2026-05-07)
 Validated (365d/1h, train/holdout, no lookahead): a watchlist coin that is
 BOTH high-vol AND decoupled from the market (low trailing corr to the
