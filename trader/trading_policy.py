@@ -48,6 +48,7 @@ class Exits:
     leader: tuple | None = None         # leader-mode params as sorted (key, value) pairs (h3 X2/X3)
     rsi_min_profit: float = 0.005       # rsi_hold: profit at the signal bar needed to hold (fixed, all modes)
     hold_after_bars: int = 96           # rsi_hold: latest exit = signal bar + this
+    learned_id: str | None = None       # learned: id in learned_exits.REGISTRY (trader-learning-loop-f-1020-spec.md F2)
 
 
 @dataclass(frozen=True)
@@ -70,6 +71,8 @@ class TradingPolicy:
         d = asdict(self)
         if d["admission"].get("regime") is None:   # field added 2026-10-15: running policies keep their epoch
             d["admission"].pop("regime", None)
+        if d["exits"].get("learned_id") is None:   # field added 2026-10-20, same reason
+            d["exits"].pop("learned_id", None)
         blob = json.dumps(d, sort_keys=True, default=str)
         return hashlib.sha256(blob.encode()).hexdigest()[:16]
 
@@ -152,6 +155,8 @@ def exit_plan(policy: TradingPolicy, grid, cand: dict, floor_of=None):
             if r is not None:
                 return r
         return real
+    if E.kind == "learned":
+        return _learned_exit(policy, grid, cand, floor_of)
     if j is None or ie is None:
         return None
     C, H, L, O, A = grid.C, grid.H, grid.L, grid.O, grid.ATR
@@ -189,6 +194,29 @@ def exit_plan(policy: TradingPolicy, grid, cand: dict, floor_of=None):
                 return q, float(tp), "tp", dist
         return (last, float(C[last, j]), "time", dist) if math.isfinite(C[last, j]) else None
     raise ValueError(E.kind)
+
+
+def _learned_exit(policy: TradingPolicy, grid, cand: dict, floor_of=None):
+    """F2: the X4 plan, cut short where the registered learned policy exits earlier (15m only)."""
+    from dataclasses import replace as _replace
+    import learned_exits as LE
+    agent = LE.get(policy.exits.learned_id)                 # KeyError for an unknown id
+    E = policy.exits
+    x4 = exit_plan(_replace(policy, exits=Exits(kind="p1_trail", floor_override=E.floor_override, max_bars=E.max_bars)),
+                   grid, cand, floor_of)
+    if x4 is None or cand.get("tf") != "15m":
+        return x4
+    ie = cand["ie"]
+    path = LE.path_from_grid(grid, cand, x4_plan=x4, max_bars=E.max_bars)
+    if path is None:
+        return x4
+    b = int(agent.exit_bar(path))
+    if b >= path["x4_exit"] or b < 1:
+        return x4
+    px = grid.C[ie + b, cand["j"]]
+    if not math.isfinite(px):
+        return x4
+    return ie + b, float(px), "learned", x4[3]
 
 
 def _is_rsi_divergence(reason) -> bool:

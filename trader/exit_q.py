@@ -92,7 +92,7 @@ class TreeRegressor:
             build = est = np.ones(len(y), dtype=bool)
         self._leaves = []
         self.tree = self._grow(X, y, np.flatnonzero(build), 0)
-        leaf = np.array([self._leaf_of(x) for x in X[est]])
+        leaf = self.leaves(X[est]) if est.any() else np.empty(0, dtype=np.int64)
         ye, ge = y[est], g[est]
         stats = []
         for k in range(len(self._leaves)):
@@ -110,11 +110,28 @@ class TreeRegressor:
         self.stats = stats
         return self
 
+    def leaves(self, X):
+        """Leaf id of every row, vectorised."""
+        X = np.atleast_2d(np.asarray(X, dtype=float))
+        out = np.empty(len(X), dtype=np.int64)
+        stack = [(self.tree, np.arange(len(X)))]
+        while stack:
+            n, idx = stack.pop()
+            if "leaf" in n:
+                out[idx] = n["leaf"]
+                continue
+            m = X[idx, n["f"]] <= n["q"]
+            stack.append((n["l"], idx[m]))
+            stack.append((n["r"], idx[~m]))
+        return out
+
     def predict(self, X):
-        return np.array([self.stats[self._leaf_of(x)][0] for x in np.atleast_2d(X)])
+        mean = np.array([m for m, _ in self.stats])
+        return mean[self.leaves(X)]
 
     def predict_se(self, X):
-        return np.array([self.stats[self._leaf_of(x)][1] for x in np.atleast_2d(X)])
+        se = np.array([v for _, v in self.stats])
+        return se[self.leaves(X)]
 
 
 def default_model():
@@ -138,28 +155,58 @@ class ExitPolicy:
         se = float(self.model.predict_se(s[None, :])[0])
         return (1 - p["cost"]) - c > self.delta + self.z * se
 
+    def _states(self, paths):
+        """All decision states t = 1..T-1 of all paths, stacked: (X, path index, t)."""
+        X, P, Tt = [], [], []
+        for i, p in enumerate(paths):
+            for t in range(1, self._horizon(p)):
+                X.append(state(p["close"], t))
+                P.append(i)
+                Tt.append(t)
+        if not X:
+            return np.zeros((0, N_STATE)), np.zeros(0, dtype=np.int64), np.zeros(0, dtype=np.int64)
+        return np.array(X), np.array(P, dtype=np.int64), np.array(Tt, dtype=np.int64)
+
+    def _exit_mask(self, X, cost):
+        if self.model is None or not len(X):
+            return np.zeros(len(X), dtype=bool)
+        return (1 - cost) - self.model.predict(X) > self.delta + self.z * self.model.predict_se(X)
+
     def fit(self, paths):
-        feats = [[state(p["close"], t) for t in range(self._horizon(p))] for p in paths]
+        X, P, Tt = self._states(paths)
+        cost = np.array([p["cost"] for p in paths])[P] if len(P) else np.zeros(0)
         for _ in range(max(1, self.n_iter)):
-            X, Y, G = [], [], []
-            for gi, (p, fs) in enumerate(zip(paths, feats)):
+            ex = self._exit_mask(X, cost)
+            Y = np.empty(len(X))
+            k = 0
+            for i, p in enumerate(paths):                            # value under the current policy, backward
                 close, T = np.asarray(p["close"], dtype=float), self._horizon(p)
-                e0 = close[0]
-                V = close[T] / e0 * (1 - p["cost"])                 # forced exit at the X4 bar / horizon
-                vals = [None] * (T + 1)
-                vals[T] = V
-                for t in range(T - 1, 0, -1):                       # value under the current policy
-                    if self._exits_at(p, t, fs[t]):
-                        V = close[t] / e0 * (1 - p["cost"])
-                    vals[t] = V
-                for t in range(1, T):
-                    X.append(fs[t])
-                    Y.append(vals[t + 1] / (close[t] / e0))         # continuation ratio
-                    G.append(gi)
-            if not X:
+                n = T - 1
+                if n <= 0:
+                    continue
+                e0, c = close[0], p["cost"]
+                V = close[T] / e0 * (1 - c)                          # forced exit at the X4 bar / horizon
+                for t in range(T - 1, 0, -1):
+                    r = k + t - 1                                    # row of (path i, bar t)
+                    Y[r] = V / (close[t] / e0)                       # continuation ratio seen at bar t
+                    if ex[r]:
+                        V = close[t] / e0 * (1 - c)
+                k += n
+            if not len(X):
                 break
-            self.model = self.factory().fit(np.array(X), np.array(Y), groups=np.array(G))
+            self.model = self.factory().fit(X, Y, groups=P)
         return self
+
+    def exit_bars(self, paths) -> list:
+        X, P, Tt = self._states(paths)
+        cost = np.array([p["cost"] for p in paths])[P] if len(P) else np.zeros(0)
+        ex = self._exit_mask(X, cost)
+        out = [self._horizon(p) for p in paths]
+        for r in np.flatnonzero(ex):                                 # rows are in (path, t) order: first hit wins
+            i = int(P[r])
+            if Tt[r] < out[i]:
+                out[i] = int(Tt[r])
+        return out
 
     def exit_bar(self, p) -> int:
         T = self._horizon(p)
