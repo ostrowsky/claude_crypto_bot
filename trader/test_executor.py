@@ -733,8 +733,11 @@ class TestBoundary(unittest.TestCase):
         self.assertTrue(str(E.EXEC_DIR).startswith(str(TC.RUNTIME)))
 
     def test_config_flags_exist_and_trading_off(self):
+        """C2 since 2026-10-20 (operator): trading may be on, but only on the demo account."""
         import trader_config as TC
-        self.assertFalse(TC.TRADING_ENABLED)
+        self.assertIn(TC.TRADING_MODE, ("paper", "demo"))           # mainnet is not a value
+        if TC.TRADING_ENABLED:
+            self.assertEqual(TC.TRADING_MODE, "demo")
         for k in ("TRADING_SCALE", "TRADING_MIN_ORDER_USDT", "TRADING_MAX_EXPOSURE_USDT", "TRADING_DAILY_LOSS_LIMIT_USDT",
                   "TRADING_KILL_SWITCH_USDT", "TRADING_CATASTROPHE_GAP_PCT", "TRADING_TRAIL_UPDATE_MIN_PCT",
                   "TRADING_MAX_UNPROTECTED_SEC", "TRADING_POLL_SEC", "TRADING_PROTECT_RETRIES", "TRADING_RECONCILE_SEC",

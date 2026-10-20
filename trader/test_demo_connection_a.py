@@ -207,8 +207,8 @@ class TestSeparateApp(unittest.TestCase):
 class TestWiring(unittest.TestCase):
     def test_flags(self):
         import trader_config as TC
-        self.assertFalse(TC.TRADING_ENABLED)
-        self.assertEqual(TC.TRADING_MODE, "paper")
+        self.assertIn(TC.TRADING_MODE, ("paper", "demo"))           # C2 since 2026-10-20 (operator decision)
+        self.assertEqual(TC.TRADING_ENABLED, TC.TRADING_MODE == "demo")
         self.assertTrue(TC.MICROSTRUCTURE_RECORDER_ENABLED)
 
     def test_hosts_are_code_constants(self):

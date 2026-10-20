@@ -26,8 +26,8 @@ ENV_FILE = BOT_FILES / ".env"
 POSITIONING = BOT_FILES / "positioning_history.jsonl"   # E8, read-only (rewritten by the bot's recorder)
 
 # ── phase A (demo-connection-a-1010-spec.md) ──────────────────────────────────
-TRADING_ENABLED: bool = False            # phase C; until then the client only reads and dry-runs
-TRADING_MODE: str = "paper"              # "paper" | "demo"; mainnet is not a value
+TRADING_ENABLED: bool = True             # C2 ON 2026-10-20 (operator); rollback = False + restart executor
+TRADING_MODE: str = "demo"               # "paper" | "demo"; mainnet is not a value (C1 paper until 2026-10-20)
 TRADING_WEIGHT_BUDGET_SHARE: float = 0.5
 TRADING_EQUITY_SNAPSHOT_SEC: int = 300
 MICROSTRUCTURE_RECORDER_ENABLED: bool = True

@@ -692,7 +692,7 @@ Telegram не используется. Направление («выше/ни�
 (`docs/specs/features/demo-ledger-d-1013-spec.md`).
 Этап C (2026-10-13): `trader/executor.py` исполняет книгу X4 из E7 в масштабе `TRADING_SCALE` 0.02, аварийный стоп
 на бирже на 3% ниже стопа стратегии; задача `CryptoBot_TraderExecutor` (каждые 5 мин, второй экземпляр не
-запускается) держит его запущенным. `TRADING_ENABLED = False` → бумажный режим C1, ордеров нет. Управление —
+запускается) держит его запущенным. **C2 включён 2026-10-20** (оператор): `TRADING_ENABLED = True`, `TRADING_MODE = "demo"` — реальные ордера только на демо-счёте; гейт C после 7 дней (не раньше 10-27). Откат: `TRADING_ENABLED = False`. Управление —
 файлами в `trader/runtime/executor/control/` (PAUSE, FLATTEN, RESET_NOTED). Пробный прогон C0 и демо C2 — по
 решению оператора (`docs/specs/features/demo-execution-c-1013-spec.md`).
 

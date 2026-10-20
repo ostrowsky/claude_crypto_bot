@@ -774,7 +774,7 @@ No Telegram. Direction words need ≥ 10 counted days (`daily_revenue.MIN_DAYS_D
 (`docs/specs/features/demo-ledger-d-1013-spec.md`).
 Phase C (2026-10-13): `trader/executor.py` executes the E7 book X4 at `TRADING_SCALE` 0.02 with a
 catastrophe stop 3% below the policy stop on the exchange; task `CryptoBot_TraderExecutor` (every 5 min,
-IgnoreNew) keeps it running. `TRADING_ENABLED = False` -> C1 paper mode, no order. Control by files in
+IgnoreNew) keeps it running. **C2 ON since 2026-10-20** (`TRADING_ENABLED = True`, `TRADING_MODE = "demo"`, operator): real orders on the DEMO account only; gate C after 7 days (>= 10-27). Rollback: `TRADING_ENABLED = False`. Control by files in
 `trader/runtime/executor/control/` (PAUSE, FLATTEN, RESET_NOTED). C0 smoke and C2 demo need the operator
 (`docs/specs/features/demo-execution-c-1013-spec.md`).
 
