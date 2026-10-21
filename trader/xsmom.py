@@ -13,6 +13,8 @@ xsmom-daily-money-1021-spec.md. Nothing deployed: reads the phase-B history (tra
   money        fill_model at first_close with the fee convention of execution_replay.run; equity marked at
                00:00 UTC by the close of d-1; R_d by daily_revenue.aggregate                  (spec §4.4)
   controls     matched_random (same sells/buys per step, random names), ewu_chooser (the whole universe)
+  S1 reversal  Config(side="reversal") buys the K LOWEST scores; min_age_days drops pairs listed less than that many
+               days before d (s1-reversal-universe-1021-spec.md). Defaults keep XSMOM unchanged.
 
 Days are 'YYYY-MM-DD' strings in every public function.
 """
@@ -130,6 +132,14 @@ class Panel:
             self._lev = np.array([s.endswith("USDT") and TU.is_leveraged(s[:-4], bases) for s in self.syms], dtype=bool)
         return self._lev
 
+    def first_bar_rows(self) -> np.ndarray:
+        """Per pair, the first row with any bar (n if none)."""
+        key = ("first_bar", self.n)
+        if key not in self._cache:
+            any_ = self.has_bar.any(axis=0) if self.n else np.zeros(len(self.syms), dtype=bool)
+            self._cache[key] = np.where(any_, self.has_bar.argmax(axis=0), self.n) if self.n else np.zeros(len(self.syms), dtype=int)
+        return self._cache[key]
+
     def last_bar_rows(self) -> np.ndarray:
         """Per pair, the last row with any bar (-1 if none)."""
         if not self.n:
@@ -173,15 +183,19 @@ class Config:
     filter_min_pairs: int = FILTER_MIN_PAIRS
     delist_haircut: float = DELIST_HAIRCUT
     min_trade_usdt: float = MIN_TRADE_USDT
+    side: str = "momentum"                # "momentum" (XSMOM) | "reversal" (S1)
+    min_age_days: int = 0                  # S1: first bar at least this many days before the decision day
 
     @property
     def name(self) -> str:
-        return f"{'MF' if self.market_filter else 'M'}_L{self.L}_H{self.H}_K{self.K}"
+        base = "R" if self.side == "reversal" else "M"
+        return f"{base}{'F' if self.market_filter else ''}_L{self.L}_H{self.H}_K{self.K}"
 
 
 def universe(p: Panel, day: str, cfg) -> list:
     r = p.row(day)
-    key = ("uni", r if r <= p.n else ("beyond", r, p.n), cfg.L, cfg.n_liq, cfg.liq_days, cfg.liq_min_days)
+    key = ("uni", r if r <= p.n else ("beyond", r, p.n), cfg.L, cfg.n_liq, cfg.liq_days, cfg.liq_min_days,
+           cfg.min_age_days)
     if key in p._cache:
         return list(p._cache[key])
     out = []
@@ -190,6 +204,8 @@ def universe(p: Panel, day: str, cfg) -> list:
         ok = p.complete[a] & p.complete[b] & ~p.leveraged()
         liq = _liq(p, r, cfg)
         ok &= np.isfinite(liq)
+        if cfg.min_age_days > 0:
+            ok &= p.first_bar_rows() <= r - cfg.min_age_days
         idx = np.flatnonzero(ok)
         if len(idx):
             order = idx[np.lexsort((idx, -liq[idx]))]     # liquidity desc, ties by name (syms are sorted)
@@ -216,6 +232,10 @@ def scores(p: Panel, day: str, L: int, syms) -> dict:
 
 def top_k(sc: dict, K: int) -> list:
     return [s for s, _ in sorted(sc.items(), key=lambda kv: (-kv[1], kv[0]))[:K]]
+
+
+def bottom_k(sc: dict, K: int) -> list:
+    return [s for s, _ in sorted(sc.items(), key=lambda kv: (kv[1], kv[0]))[:K]]
 
 
 def market_on(p: Panel, day: str, syms, cfg) -> bool:
@@ -256,6 +276,19 @@ def ewu_chooser(ctx: Ctx) -> list:
     return list(ctx.universe)
 
 
+def reversal_chooser(ctx: Ctx) -> list:
+    return bottom_k(ctx.scores, ctx.cfg.K)
+
+
+def btc_chooser(ctx: Ctx) -> list:
+    """Reference: BTC bought on the first day and held (S1 spec §5)."""
+    return ["BTCUSDT"]
+
+
+def default_chooser(cfg: Config):
+    return reversal_chooser if cfg.side == "reversal" else momentum_chooser
+
+
 def matched_random(moves: dict, seed: int):
     """Random names with the candidate's turnover: at (tranche, day) sell n_sell random held names and buy n_buy
     random universe names not held (spec §6). Deterministic by seed."""
@@ -275,7 +308,7 @@ def matched_random(moves: dict, seed: int):
 # ------------------------------------------------------------------ rotation
 def rotate(panel: Panel, cfg: Config, fm, day_from: str, day_to: str, chooser=None,
            start_equity: float = START_EQUITY) -> dict:
-    chooser = chooser or momentum_chooser
+    chooser = chooser or default_chooser(cfg)
     W = panel.cut(day_to)                       # nothing at or after day_to is visible
     r0, r1 = W.row(day_from), W.row(day_to)
     n_tr = 1 if cfg.H <= 1 else int(cfg.H)
@@ -418,3 +451,13 @@ def to_e1_candidates(trades) -> list:
                     "exit_price": t["exit_px_raw"], "real_pnl": t["ret_pct"], "mode": "xsmom", "trail_k": None})
     out.sort(key=lambda c: (c["ts"], c["sym"]))
     return out
+
+
+def delisted_later_share(trades, full_panel: Panel, grace_days: int = 1) -> dict:
+    """Trades in pairs whose bars stop before the end of the FULL history (allowing grace_days of a missing tail):
+    pairs delisted later. Reference only (S1 spec §5)."""
+    last = full_panel.last_bar_rows()
+    gone = {s for s, j in full_panel.col.items() if last[j] < full_panel.n - 1 - grace_days}
+    hit = [t for t in trades if t["sym"] in gone]
+    return {"pairs": sorted({t["sym"] for t in hit}), "n_trades": len(hit),
+            "share_trades": (len(hit) / len(trades)) if trades else 0.0, "pnl": sum(t["pnl"] for t in hit)}

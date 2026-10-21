@@ -217,3 +217,10 @@ K = 10, как в черновике: покупка худших пар — э�
     `dsr_ok`, `pipeline(train_fn, test_fn, marker, family_markers)`, `verdict(mean_pct, random_means, paired_ewu, day_agg)`
     → `outcome`, `train_panel`, `main(argv)`.
   Тесты лежат в ветке до одобрения кода и в `main` не идут, пока красные.
+- 2026-10-21 — оператор одобрил спеку. Код:
+  - `xsmom.py`: `Config.side`, `Config.min_age_days` (входит в ключ кэша универсума), `first_bar_rows`, `bottom_k`,
+    `reversal_chooser`, `btc_chooser`, `default_chooser`, `delisted_later_share`. При значениях по умолчанию XSMOM не
+    меняется: его 42 теста зелёные;
+  - новый `experiment_s1.py` (`train`, `test --operator-approved`).
+
+  `test_s1_reversal.py` 16/16, весь набор трейдера 365/365.

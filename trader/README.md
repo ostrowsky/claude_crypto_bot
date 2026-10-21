@@ -57,6 +57,7 @@ Goal: trade a Binance **demo** account by itself (buy, exchange-side TP/SL, sell
 | `experiment_b3.py`, `run_b3_train.cmd` | B3: W93 / WALL / WNEW в деньгах; train 2023–2025, test 2026 один раз | B |
 | `xsmom.py` | XSMOM: дневные бары, панель, универсум (100 самых ликвидных), ротация по моментуму, контроли (случайный выбор с тем же оборотом, весь рынок), сверка учёта с E1 | XSMOM |
 | `experiment_xsmom.py` | XSMOM: `panel` / `train` (2023-03..2025-12) / `test` (2026, один раз, только с `--operator-approved`) | XSMOM |
+| `experiment_s1.py` | S1: разворот (K = 10 худших за L дней, 16 кандидатов, возраст пары ≥ 60 дней); `train` (2023-03..2025-12) / `test` (2026, один раз на семейство вместе с XSMOM, только с `--operator-approved`) | S1 |
 | `audit.py`, `audit_report.py` | audit journals: every Binance request and every decision (`runtime/audit/{exchange,decisions}/`), summary | audit |
 | `run_tests.py` | runs all `test_*.py` (embedded Python does not put cwd on sys.path) | — |
 
