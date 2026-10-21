@@ -114,6 +114,15 @@ class TestRunOnce(unittest.TestCase):
         self.assertEqual(m.count("*") % 2, 0)
         self.assertNotIn("_", m)
 
+    def test_message_quotes_the_live_readout_not_the_backtest(self):
+        # LEADER-ALERT readout 2026-10-18: 25/47 = 53% top-3, 31/47 = 66% global top-20;
+        # the backtest's 69% must not be promised any more (operator, 2026-10-21)
+        self.run_with(make_day(leaders={"AUSDT": [0.10] * 10}))
+        m = self.sent[0]
+        self.assertNotIn("69%", m)
+        for s in ("53%", "66%", "+4.7%", "−2.0%"):
+            self.assertIn(s, m)
+
 
 class TestWiring(unittest.TestCase):
     def test_info_only(self):

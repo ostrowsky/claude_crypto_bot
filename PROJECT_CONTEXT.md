@@ -1121,7 +1121,7 @@ REGIME_SOFT_GATE_ENABLED = True               # RM-22 Step C (deployed 2026-06-0
 BANDIT_REGIME_INTERACTION_ENABLED = False     # RM-22 Step B (neutral, OFF)
 POLL_HEARTBEAT_ENABLED = True                 # журнал опроса монет по барам, только логирование (2026-09-25)
 TREND_15M_QUALITY_ZERO_FORECAST_AS_NO_DATA = True  # прогноз 0.000 = нет данных, не блок (2026-09-25, p0-validation-0925)
-LEADER_ALERT_ENABLED = True                   # инфо-алерт: монета 2 ч в топ-3 дня (69% кончают день в топ-3), не покупка (2026-09-27)
+LEADER_ALERT_ENABLED = True                   # инфо-алерт: монета 2 ч в топ-3 дня (бэктест 69% кончают день в топ-3, вживую 53% -> readout ROLLBACK_SUGGESTED, оператор оставил 10-21, в тексте живые цифры), не покупка (2026-09-27)
 LEADER_EXIT_ENABLED = True                    # X-7b/X-9c: купленная монета в топ-5 дня при +3% -> широкий трейл 8%, выход при потере топ-10 (2026-09-28)
 COOLDOWN_PERSIST_ENABLED = True               # cooldown после выхода переживает перезапуск (.runtime/cooldowns.json) (2026-09-28)
 L3_GOAL_VALIDATOR_ENABLED = True              # L3 судит по цели, а не по пику 4 ч (goal_validator.py, 2026-09-29)

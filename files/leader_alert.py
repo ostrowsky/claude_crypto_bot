@@ -13,6 +13,13 @@ price the median further rise is +2.7% and the median close of the day -0.8%.
 So this is information for the operator, never a buy signal: it says WHICH coin
 leads, not WHEN to enter.
 
+LIVE (readout LEADER-ALERT, 2026-10-18): 25/47 = 53% ended the day in the
+watchlist top-3 (Wilson [0.39, 0.67], below the 69% kept as the criterion ->
+ROLLBACK_SUGGESTED), 31/47 = 66% in the global top-20; on the 50 live alerts of
+09-28..10-18 the median further high is +4.7% and the median close of the day
+-2.0%. The operator kept the alert (2026-10-21) and the message now quotes these
+live numbers instead of the backtest's.
+
 RULE (identical to _backtest_leader_mode_v2.py, variant "L-1 persist 2h")
   ret_k  = close of 15m bar k / open of the 00:00 UTC bar - 1, closed bars only
   rank_k = rank of ret_k among watchlist coins that have bar k (1 = best)
@@ -136,8 +143,9 @@ def format_message(x: dict, hold_bars: int) -> str:
     return ("ℹ️ *Лидер дня: {sym}*\n"
             "Держится в топ-{rmax} роста вотчлиста {hours:g} ч подряд: *{ret:+.1f}%* от открытия суток (00:00 UTC), "
             "сейчас место №{rank}, цена {price:g}.\n"
-            "Это информация, *не сигнал на покупку*. По истории (450 дней) 69% таких монет заканчивают "
-            "день в топ-3 вотчлиста; от цены алерта в медиане ещё +2.7% вверх, а к закрытию суток −0.8%.").format(
+            "Это информация, *не сигнал на покупку*. В живой работе (28.09–18.10, ~50 алертов) 53% таких "
+            "монет закончили день в топ-3 вотчлиста и 66% в мировом топ-20; "
+            "от цены алерта в медиане ещё +4.7% вверх, но к закрытию суток −2.0%.").format(
         sym=x["sym"], rmax=params()[0], hours=hold_bars / 4, ret=100 * x["ret"], rank=x["rank"], price=x["price"])
 
 
