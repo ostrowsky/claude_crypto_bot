@@ -287,7 +287,7 @@
    "kind": "computed",
    "fn": "readout_weak_exit_shadow",
    "flag": "RSI_DIV_HOLD_SHADOW_ENABLED",
-   "switched_on_utc": null,
+   "switched_on_utc": "2026-10-21T20:55:05Z",
    "window_before_switch_on": "the shadow changes no trade; the readout replays the hold arm from exit events and 15m history that exist without the switch, and 10-06.. was not seen by the offline replay (rule and criterion fixed 10-05); the event only cross-checks days after the switch",
    "window_from": "2026-10-06",
    "due": "2026-11-30",
