@@ -41,6 +41,9 @@ TEST_MARKER = OUT_DIR / "XSMOM_TEST_OPENED.json"
 TRAIN_OUT = OUT_DIR / "XSMOM_TRAIN.json"
 TEST_OUT = OUT_DIR / "XSMOM_TEST.json"
 PANEL_CACHE = OUT_DIR / "xsmom_panel.npz"
+# Every arm runs at this scale so that MIN_TRADE_USDT never binds: at 10 000 USDT the weekly equal-weight benchmark
+# (1/7 tranche over 100 pairs, ~14 USDT a buy) stopped buying after a drawdown -- defect found 2026-10-21 (spec journal).
+START_EQUITY = 1_000_000.0
 SPEC = "xsmom-daily-money-1021-spec.md"
 
 
@@ -162,10 +165,10 @@ def load_panel():
 def evaluate(panel, cfg, fm, day_from, day_to, n_random, ewu_cache: dict, alpha: float = 0.05) -> dict:
     import daily_revenue as DR
     import money_validator as MV
-    r = XS.rotate(panel, cfg, fm, day_from, day_to)
+    r = XS.rotate(panel, cfg, fm, day_from, day_to, start_equity=START_EQUITY)
     key = (cfg.L, cfg.H, cfg.market_filter, day_from, day_to)
     if key not in ewu_cache:
-        ewu_cache[key] = XS.rotate(panel, cfg, fm, day_from, day_to, chooser=XS.ewu_chooser)
+        ewu_cache[key] = XS.rotate(panel, cfg, fm, day_from, day_to, chooser=XS.ewu_chooser, start_equity=START_EQUITY)
     ewu = ewu_cache[key]
     paired = DR.paired(r["series"], ewu["series"], alpha=alpha)
     em = dict(ewu["series"])
@@ -175,7 +178,7 @@ def evaluate(panel, cfg, fm, day_from, day_to, n_random, ewu_cache: dict, alpha:
         by_year.setdefault(d[:4], []).append(v)
     for d, v in r["series"]:
         r_year.setdefault(d[:4], []).append(v)
-    rand = XS.random_control(panel, cfg, fm, day_from, day_to, r["moves"], n_random)
+    rand = XS.random_control(panel, cfg, fm, day_from, day_to, r["moves"], n_random, start_equity=START_EQUITY)
     rets = [t["ret_pct"] for t in r["trades"]]
     vals = [v for _, v in r["series"]]
     reasons = {}
@@ -239,6 +242,7 @@ def run_train(out_path=TRAIN_OUT, n_random=N_RANDOM) -> dict:
                  "halfwidth_paired_test": (1.96 * r["sd_paired"] / math.sqrt(test_days)) if r.get("sd_paired") else None}
              for n, r in res.items()}
     out = {"spec": SPEC, "stage": "train", "window": [TRAIN_FROM, TEST_FROM], "pairs_in_panel": len(full.syms),
+           "start_equity": START_EQUITY,
            "panel_last_day": XS.day_str(full.d0 + full.n - 1), "fill": "taker + 8 bps per side (fill_model level 1)",
            "candidates": res, "pbo_by_row": pbo_by_row, "winners": winners,
            "deflated_sharpe": {row: _deflated(list(series[n].values()), len(cands)) for row, n in winners.items()},
@@ -288,9 +292,10 @@ def run_test(train_path=TRAIN_OUT, out_path=TEST_OUT, marker=TEST_MARKER, n_rand
             v = verdict(e["mean_pct"], e["random_means"], e["paired_ewu"], e["agg"], e["trade_ci"])
             refs = {}
             for tag, fmx in (("slip0", FM.model("taker", 0)), ("slip2", FM.model("taker", 2)), ("bnb", FM.model("bnb", 1))):
-                refs[tag] = XS.rotate(panel, cfg, fmx, TEST_FROM, day_to)["agg"]
+                refs[tag] = XS.rotate(panel, cfg, fmx, TEST_FROM, day_to, start_equity=START_EQUITY)["agg"]
             for h in (0.0, 1.0):
-                refs[f"haircut{h:g}"] = XS.rotate(panel, replace(cfg, delist_haircut=h), fm, TEST_FROM, day_to)["agg"]
+                refs[f"haircut{h:g}"] = XS.rotate(panel, replace(cfg, delist_haircut=h), fm, TEST_FROM, day_to,
+                                                  start_equity=START_EQUITY)["agg"]
             if "series" in x4:
                 pr = DR.paired(e["_series"], x4["series"], alpha=alpha)
                 bm = dict(x4["series"])

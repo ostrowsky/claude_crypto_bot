@@ -395,10 +395,11 @@ def rotate(panel: Panel, cfg: Config, fm, day_from: str, day_to: str, chooser=No
             "exposure_share": (on_days / n_days) if n_days else 0.0}
 
 
-def random_control(panel: Panel, cfg: Config, fm, day_from: str, day_to: str, moves: dict, n: int = 50) -> list:
+def random_control(panel: Panel, cfg: Config, fm, day_from: str, day_to: str, moves: dict, n: int = 50,
+                   start_equity: float = START_EQUITY) -> list:
     """Mean daily R of n matched-turnover random rotations (seeds 0..n-1)."""
-    return [rotate(panel, cfg, fm, day_from, day_to, chooser=matched_random(moves, seed))["agg"].get("mean_pct")
-            for seed in range(n)]
+    return [rotate(panel, cfg, fm, day_from, day_to, chooser=matched_random(moves, seed),
+                   start_equity=start_equity)["agg"].get("mean_pct") for seed in range(n)]
 
 
 def to_e1_candidates(trades) -> list:

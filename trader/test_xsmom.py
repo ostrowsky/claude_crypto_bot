@@ -486,6 +486,50 @@ class TestProcedure(unittest.TestCase):
         p = XE.train_panel(panel({"AUSDT": arr15([100.0] * 10, base=datetime(2025, 12, 26, tzinfo=timezone.utc))}))
         self.assertLess(XS.day_str(p.days[-1]), XE.TEST_FROM)
 
+    def test_experiment_scale_keeps_the_min_trade_rule_non_binding(self):
+        """Defect 2026-10-21: at 10 000 USDT a weekly tranche is ~1 430 USDT, so an equal-weight buy of 100 pairs is
+        ~14 USDT; after a drawdown it fell under MIN_TRADE_USDT and the ewu benchmark stopped buying for good
+        (zero R on 366/366 days of 2024 and 365/365 of 2025). The experiment must run at a scale where an ewu buy
+        stays above the minimum even after a 90% drawdown."""
+        import experiment_xsmom as XE
+        XS = _xs()
+        self.assertGreaterEqual(XE.START_EQUITY / 7 / XS.N_LIQ * 0.1, XS.MIN_TRADE_USDT)
+
+    def test_evaluate_runs_every_arm_at_the_experiment_scale(self):
+        import experiment_xsmom as XE
+        XS = _xs()
+        seen = []
+        real_rotate, real_rc = XS.rotate, XS.random_control
+
+        def rot(*a, **kw):
+            seen.append(("rotate", kw.get("start_equity")))
+            return real_rotate(*a, **kw)
+
+        def rc(*a, **kw):
+            seen.append(("random_control", kw.get("start_equity")))
+            return real_rc(*a, **kw)
+        w = walk(5, ("AUSDT", "BUSDT", "CUSDT", "DUSDT"), 60)
+        p = panel({s: arr15(v, vol=1.0 + i) for i, (s, v) in enumerate(w.items())})
+        XS.rotate, XS.random_control = rot, rc
+        try:
+            XE.evaluate(p, XS.Config(L=7, H=1, K=2, liq_min_days=20), FM1, ds(40), ds(60), 2, {})
+        finally:
+            XS.rotate, XS.random_control = real_rotate, real_rc
+        self.assertEqual({k for k, _ in seen}, {"rotate", "random_control"})
+        self.assertTrue(all(v == XE.START_EQUITY for _, v in seen), seen)
+
+    def test_random_control_passes_start_equity(self):
+        XS = _xs()
+        w = walk(11, [f"{c}USDT" for c in "ABCDEF"], 60)
+        p = panel({s: arr15(v, vol=1.0 + i) for i, (s, v) in enumerate(w.items())})
+        cfg = XS.Config(L=7, H=1, K=2, liq_min_days=20)
+        base = XS.rotate(p, cfg, FM1, ds(40), ds(60), start_equity=15.0)
+        self.assertEqual(base["trades"], [])                                 # 7.5 USDT buys are skipped
+        m_small = XS.random_control(p, cfg, FM1, ds(40), ds(60), {(0, ds(40)): (0, 2)}, n=1, start_equity=15.0)
+        m_large = XS.random_control(p, cfg, FM1, ds(40), ds(60), {(0, ds(40)): (0, 2)}, n=1, start_equity=1e6)
+        self.assertEqual(m_small, [0.0])
+        self.assertNotEqual(m_large, [0.0])
+
     def test_verdicts(self):
         import experiment_xsmom as XE
         v = XE.verdict(mean_pct=0.2, random_means=[0.0] * 50, paired_ewu={"lo95": 0.01},
