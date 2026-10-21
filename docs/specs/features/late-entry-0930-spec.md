@@ -106,3 +106,20 @@ What remains, in order:
    deadline counts those as late for any entry that is not already in the coin at
    the open. A move-relative earliness measure (share of the move done at entry)
    is reported here beside it and should travel with future readouts.
+
+## 5. Fourth look — positioning at the crossing (2026-10-18 test, run 2026-10-20): too early
+
+Report: `docs/reports/2026-10-18-leader-positioning-readout.md` (question D). Rank <= 3
+crossings on full bot-up days 2026-08-21..10-18 with a positioning snapshot <= 3h old:
+328 (train 224 / test 104, split 2026-09-30). Without a filter: train +0.107%
+[-0.652, +0.983], test -0.516% [-1.332, +0.369], precision 0.220 / 0.273. The rule
+chosen on train among 734 (<= 2 conditions, n >= 40), `taker >= 1.003 & retail <= 1.546`,
+went from +1.972% (n=55) on train to **-0.370% [-1.637, +1.311] on test (n=27)**,
+precision 0.259 vs the bot's 0.208 (404 15m entries, mean -0.127%). Test n < 60 -> **too
+early** by the criterion; on what exists it fails the pnl bound (-1.637 < -0.227) and the
+reach (6 of 66 = 9.1% < 10%). The same train -> test collapse as the three price looks.
+
+The one rule left is fixed in advance and read out by code on unseen days:
+`oi_1h >= frozen median` (`leader-positioning-oi-1021-spec.md`, readout
+`LEADER-POSITIONING-OI`, due 2026-12-16). That will be the **fifth** look; no other
+crossing-entry rule should be searched on this data.

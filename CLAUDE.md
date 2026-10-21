@@ -533,6 +533,27 @@ user cmd window stays the normal manual path.
 
 ## 7. Known issues & fixes
 
+### Positioning at the leader alert and at the crossing — no signal yet; one rule pre-registered (2026-10-20)
+
+Scheduled test `crypto-bot-leader-positioning-test`. Positioning store: 60 days,
+671 snapshots, 87 coins. Report: `docs/reports/2026-10-18-leader-positioning-readout.md`.
+
+- **A. Leader continuation — too early.** 151 replayed alerts; replay = live 50/50.
+  Base 0.261 on train, 0.205 on test, but only 9 test positives. Only `oi_1h` / `oi_4h`
+  point the same way in both halves (AUC 0.62–0.70). Trading all test alerts on the
+  k=3 / 8% trail: −3.44% [−5.21, −1.57].
+- **B. Rockets earlier — REFUTED (R-11).** Positioning adds +0.022 AUC to R-9
+  [−0.027, +0.064]; positioning alone scores 0.483. Do not re-test on less than ~6 months.
+- **D. Crossing entry + positioning — too early.** Fourth look. The train rule gave
+  test n = 27 < 60; it also fails the pnl bound and the reach.
+- **C. Leader alert — readout ROLLBACK_SUGGESTED.** 53% vs 69%. The operator kept the
+  alert (10-21); the message now quotes the live numbers (commit 8b50aca).
+
+Next look: readout `LEADER-POSITIONING-OI`, due 2026-12-16, computed by
+`_readout_leader_positioning_oi.py` (pipeline step before readouts). It tests ONE frozen
+rule (`oi_1h >=` the 08-21..10-19 median) on days from 10-20 only. Spec:
+`docs/specs/features/leader-positioning-oi-1021-spec.md`.
+
 ### metrics_daily went stale for 9 days; the report called it verified (2026-10-20, FIXED)
 
 From 10-12 to 10-20 the orchestrator's `L0 metrics` step hit its 600 s timeout

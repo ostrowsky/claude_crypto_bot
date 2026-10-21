@@ -259,6 +259,27 @@
     "otherwise": "inconclusive"
    },
    "rollback": "CORR_MAX_PER_CLUSTER = 2 + restart"
+  },
+  {
+   "id": "LEADER-POSITIONING-OI",
+   "title": "rising open interest (oi_1h) at the leader alert and at the rank<=3 crossing -- recheck of one frozen rule",
+   "kind": "computed",
+   "fn": "readout_leader_positioning_oi",
+   "window_from": "2026-10-20",
+   "due": "2026-12-16",
+   "min_days": 30,
+   "min_trades": 0,
+   "spec": "docs/specs/features/leader-positioning-oi-1021-spec.md",
+   "expected": {
+    "first_look": "2026-08-21..10-19: oi_1h AUC 0.617 (train) / 0.698 (test) for leader continuation, 9 test positives (docs/reports/2026-10-18-leader-positioning-readout.md)"
+   },
+   "criteria": {
+    "rule": "oi_1h of the latest snapshot (<= 3h old) >= the frozen median of the 2026-08-21..10-19 window (A and D each their own median, constants in _readout_leader_positioning_oi.py); judged on days from 2026-10-20 only",
+    "A": "leader alerts: TOO_EARLY < 30 continuations; SUPPORTED if Wilson 95% lower bound of rule precision > base rate; REFUTED if precision <= base rate; else INCONCLUSIVE",
+    "D": "rank<=3 crossings: TOO_EARLY < 60 rule entries; SUPPORTED if precision >= bot 15m entries AND pnl lower 95% >= bot mean - 0.10 pp AND reach >= 10% of late/none winner-days; else REFUTED",
+    "overall": "TOO_EARLY while either part is; SUPPORTED if either part is; INCONCLUSIVE if either is; else REFUTED"
+   },
+   "rollback": "nothing ships: SUPPORTED means propose a flagged shadow, never apply"
   }
  ]
 }

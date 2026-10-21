@@ -852,7 +852,27 @@ def readout_corr_cap3(r: dict, ctx: dict) -> dict:
     return out
 
 
+def readout_leader_positioning_oi(r: dict, ctx: dict) -> dict:
+    """LEADER-POSITIONING-OI: the heavy replay runs as its own pipeline step
+    (_readout_leader_positioning_oi.py --if-due) and writes a result file; this
+    only reads it, so the 15m grid never runs inside the readouts timeout.
+    Final only when BOTH parts (A, D) are decided."""
+    import _readout_leader_positioning_oi as LP
+    out = {"days": len(ctx.get("days") or [])}
+    if not LP.RESULT.exists():
+        out.update({"note": "no result yet: the pipeline step computes from the due date", "_verdict": "TOO_EARLY",
+                    "_n_trades": 0})
+        return out
+    res = json.loads(LP.RESULT.read_text(encoding="utf-8"))
+    a, d = res.get("A") or {}, res.get("D") or {}
+    out.update({"computed": res.get("computed"), "window": res.get("window"), "A": a, "D": d})
+    out["_n_trades"] = int(a.get("n_rule") or 0) + int(d.get("n_rule") or 0)
+    out["_verdict"] = LP.overall(a.get("verdict", "TOO_EARLY"), d.get("verdict", "TOO_EARLY"))
+    return out
+
+
 FNS = {"readout_corr_cap3": readout_corr_cap3,
+       "readout_leader_positioning_oi": readout_leader_positioning_oi,
        "readout_ml_goal_shadow": readout_ml_goal_shadow,
        "readout_e4": readout_e4, "readout_mrq_off": readout_mrq_off, "readout_leader_exit": readout_leader_exit,
        "readout_leader_alert": readout_leader_alert, "readout_ml_floor_shadow": readout_ml_floor_shadow,
@@ -860,6 +880,10 @@ FNS = {"readout_corr_cap3": readout_corr_cap3,
 
 
 # ---------------------------------------------------------------- runner
+
+# research readouts (LEADER-POSITIONING-OI) end in SUPPORTED / REFUTED, not KEEP / ROLLBACK
+FINAL_STATUSES = ("KEEP", "ROLLBACK_SUGGESTED", "INCONCLUSIVE", "DELEGATED", "SUPPORTED", "REFUTED")
+
 
 def status_of(r: dict, res: dict, today: str) -> str:
     """COLLECTING before due; TOO_EARLY while data is short; the verdict otherwise.
@@ -929,7 +953,7 @@ def run(today: str | None = None, registry: Path = REGISTRY, out_dir: Path = OUT
             res, status = {"error": repr(e)[:300]}, "ERROR"
         rec = {"id": r["id"], "title": r["title"], "date": today, "due": r["due"], "status": status,
                "min_days": r.get("min_days"), "result": {k: v for k, v in res.items() if not k.startswith("_")},
-               "final": status in ("KEEP", "ROLLBACK_SUGGESTED", "INCONCLUSIVE", "DELEGATED")}
+               "final": status in FINAL_STATUSES}
         if rec["final"] and use_llm and r.get("kind") != "delegated":
             rec["summary_ru"] = llm_summary(r, res, status)
         p.write_text(json.dumps(rec, ensure_ascii=False, indent=1, default=str), encoding="utf-8")
@@ -942,7 +966,8 @@ def run(today: str | None = None, registry: Path = REGISTRY, out_dir: Path = OUT
 
 STATUS_RU = {"COLLECTING": "идёт сбор", "TOO_EARLY": "рано судить", "KEEP": "оставить",
              "ROLLBACK_SUGGESTED": "предлагается откат", "INCONCLUSIVE": "не доказано",
-             "ANOMALY": "АНОМАЛИЯ", "DELEGATED": "передано задаче Claude", "ERROR": "ошибка расчёта"}
+             "ANOMALY": "АНОМАЛИЯ", "DELEGATED": "передано задаче Claude", "ERROR": "ошибка расчёта",
+             "SUPPORTED": "гипотеза подтверждена", "REFUTED": "гипотеза опровергнута"}
 
 
 def render_block(results: list, today: str | None = None) -> str | None:
