@@ -832,6 +832,13 @@ than ≥ 88% of matched-turnover random portfolios — a train-only observation 
 first run was invalid (at 10k USDT the market benchmark stopped buying under the 10 USDT minimum); all arms now run
 at 1M. Do not re-test this momentum grid; the 2026 window is still unopened for momentum AND reversal.
 
+S1 reversal (2026-10-21, `docs/specs/features/s1-reversal-universe-1021-spec.md`, one spec replacing the S1 draft):
+buying the K = 10 WORST pairs over 1/7/14/28 days (16 candidates, pair age >= 60 days) is **REJECTED on train, test
+never opened**: 0 of 16; all lose 0.09–0.54 %/day to the equal-weight market and rank 0–1 of 50 matched-turnover random
+portfolios. With XSMOM: BOTH extremes of past return lose to random picks (train-only observation, possibly a volatility
+effect). Reference on 2023–2025: BTC buy-and-hold +0.158 %/day (+278%) while the equal-weight alt market lost 51% —
+hindsight, not a strategy. The 2026 window for ranking by past return is still unopened.
+
 ### ML promotion at matched admission — SHADOW (2026-10-09)
 
 The promotion gate kept the 10-01 ML model **7 nights running** (10-02..10-08), "clearly worse on
