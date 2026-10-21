@@ -852,6 +852,12 @@ portfolios. With XSMOM: BOTH extremes of past return lose to random picks (train
 effect). Reference on 2023–2025: BTC buy-and-hold +0.158 %/day (+278%) while the equal-weight alt market lost 51% —
 hindsight, not a strategy. The 2026 window for ranking by past return is still unopened.
 
+FC funding carry (2026-10-22, `docs/specs/features/carry-funding-money-1021-spec.md`, spot long + perp short, L = 1):
+on train (2023-03..2025-12) **passive BTC+ETH carry is the first trader hypothesis with a positive CI**: +0.0111 %/day
+[+0.0095, +0.0131], ~4 %/yr, max DD −0.17 %, 0 liquidations, but declining (2025: +0.0067). Selecting pairs by trailing
+funding is REJECTED (0 of 8: all worse than passive, liquidations in 7 of 8). The 2026 test of FC_PASSIVE is NOT opened
+— operator's decision; demo funding differs from live, so demo money cannot replace that test.
+
 ### ML promotion at matched admission — SHADOW (2026-10-09)
 
 The promotion gate kept the 10-01 ML model **7 nights running** (10-02..10-08), "clearly worse on
