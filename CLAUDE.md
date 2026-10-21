@@ -824,6 +824,14 @@ IgnoreNew) keeps it running. **C2 ON since 2026-10-20** (`TRADING_ENABLED = True
 `trader/runtime/executor/control/` (PAUSE, FLATTEN, RESET_NOTED). C0 smoke and C2 demo need the operator
 (`docs/specs/features/demo-execution-c-1013-spec.md`).
 
+XSMOM (2026-10-21, `docs/specs/features/xsmom-daily-money-1021-spec.md`): daily/weekly cross-sectional momentum on the
+top-100 liquid spot pairs (2023-03..2025-12, 668 pairs incl. delisted, 24 candidates, money as E1) is **REJECTED on
+train, test half never opened**: 0 of 24 admitted; best MF_L14_H7_K5 −0.014 %/day, vs the equal-weight market
++0.016 [−0.114, +0.151] with years −/+/−; pure momentum loses 0.10–0.29 %/day to the market and in 9 of 12 is worse
+than ≥ 88% of matched-turnover random portfolios — a train-only observation that looks like 1–4 week reversal. The
+first run was invalid (at 10k USDT the market benchmark stopped buying under the 10 USDT minimum); all arms now run
+at 1M. Do not re-test this momentum grid; the 2026 window is still unopened for momentum AND reversal.
+
 ### ML promotion at matched admission — SHADOW (2026-10-09)
 
 The promotion gate kept the 10-01 ML model **7 nights running** (10-02..10-08), "clearly worse on
