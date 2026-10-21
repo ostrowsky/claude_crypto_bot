@@ -55,6 +55,8 @@ Goal: trade a Binance **demo** account by itself (buy, exchange-side TP/SL, sell
 | `gen_calibration.py` | B2: сверка генератора с реальными входами бота (порог полноты 0.80) | B |
 | `lazy_grid.py` | B3: экономная сетка баров (memmap по парам), паритет с плотной | B |
 | `experiment_b3.py`, `run_b3_train.cmd` | B3: W93 / WALL / WNEW в деньгах; train 2023–2025, test 2026 один раз | B |
+| `xsmom.py` | XSMOM: дневные бары, панель, универсум (100 самых ликвидных), ротация по моментуму, контроли (случайный выбор с тем же оборотом, весь рынок), сверка учёта с E1 | XSMOM |
+| `experiment_xsmom.py` | XSMOM: `panel` / `train` (2023-03..2025-12) / `test` (2026, один раз, только с `--operator-approved`) | XSMOM |
 | `audit.py`, `audit_report.py` | audit journals: every Binance request and every decision (`runtime/audit/{exchange,decisions}/`), summary | audit |
 | `run_tests.py` | runs all `test_*.py` (embedded Python does not put cwd on sys.path) | — |
 
