@@ -58,6 +58,9 @@ Goal: trade a Binance **demo** account by itself (buy, exchange-side TP/SL, sell
 | `xsmom.py` | XSMOM: дневные бары, панель, универсум (100 самых ликвидных), ротация по моментуму, контроли (случайный выбор с тем же оборотом, весь рынок), сверка учёта с E1 | XSMOM |
 | `experiment_xsmom.py` | XSMOM: `panel` / `train` (2023-03..2025-12) / `test` (2026, один раз, только с `--operator-approved`) | XSMOM |
 | `experiment_s1.py` | S1: разворот (K = 10 худших за L дней, 16 кандидатов, возраст пары ≥ 60 дней); `train` (2023-03..2025-12) / `test` (2026, один раз на семейство вместе с XSMOM, только с `--operator-approved`) | S1 |
+| `funding_store.py` | FC-0: фандинг (с `startTime`) и свечи 15m бессрочных фьючерсов живого рынка → `runtime/funding/`, `runtime/perp_history/`; сопоставление perp ↔ spot | FC |
+| `carry.py`, `experiment_fc.py` | FC: кэрри «спот в лонг + perp в шорт» (плечо 1, изолированная маржа, маржинальный стоп, ликвидация, фандинг); `panel` / `train` / `test` (2026, один раз, только с `--operator-approved`) | FC |
+| `demo_futures.py` | F0: оценка готовности демо-счёта к фьючерсам (GO / NO_GO, предупреждения) | FC |
 | `audit.py`, `audit_report.py` | audit journals: every Binance request and every decision (`runtime/audit/{exchange,decisions}/`), summary | audit |
 | `run_tests.py` | runs all `test_*.py` (embedded Python does not put cwd on sys.path) | — |
 

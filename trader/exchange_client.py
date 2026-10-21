@@ -35,10 +35,15 @@ HERE = Path(__file__).resolve().parent
 import trader_config as TC  # noqa: E402
 import audit as A  # noqa: E402
 
-ALLOWED_HOSTS = frozenset({"demo-api.binance.com", "demo-ws-api.binance.com", "demo-stream.binance.com"})
-PUBLIC_HOSTS = frozenset({"api.binance.com"}) | ALLOWED_HOSTS     # unsigned market data only
+# demo-fapi: USD-M futures of the demo account (carry-funding-money-1021-spec.md §10); still demo only
+ALLOWED_HOSTS = frozenset({"demo-api.binance.com", "demo-ws-api.binance.com", "demo-stream.binance.com",
+                           "demo-fapi.binance.com"})
+# unsigned market data only; fapi / data.binance.vision = live futures history for the FC money test (spec §3)
+PUBLIC_HOSTS = frozenset({"api.binance.com", "fapi.binance.com", "data.binance.vision"}) | ALLOWED_HOSTS
 DEMO_REST = "https://demo-api.binance.com"
 LIVE_REST = "https://api.binance.com"
+LIVE_FAPI = "https://fapi.binance.com"
+DEMO_FAPI = "https://demo-fapi.binance.com"
 KEY_VAR, SECRET_VAR = "BINANCE_DEMO_API_KEY", "BINANCE_DEMO_API_SECRET"
 RECV_WINDOW = 15000          # ms; slow links (2-3 s per request seen 2026-10-10) broke 5000
 TS_LAG_MS = 500              # stamp slightly behind the server: Binance rejects > serverTime + 1000
@@ -260,6 +265,23 @@ class ExchangeClient:
         """Klines from startTime (history: entry-price-gap-1013-spec.md)."""
         return self._request("GET", "/api/v3/klines", {"symbol": symbol, "interval": interval, "startTime": int(start_ms),
                                                        "limit": limit}, base=base)
+
+    # ------------------------------------------------------------ USD-M futures, public (FC spec §3)
+    def futures_exchange_info(self, base: str = LIVE_FAPI) -> dict:
+        return self._request("GET", "/fapi/v1/exchangeInfo", base=base)
+
+    def funding_rates(self, symbol: str, start_ms: int, limit: int = 1000, base: str = LIVE_FAPI) -> list:
+        """Funding events from startTime (without startTime the API returns only the latest ones)."""
+        return self._request("GET", "/fapi/v1/fundingRate", {"symbol": symbol, "startTime": int(start_ms), "limit": limit},
+                             base=base)
+
+    def futures_klines_from(self, symbol: str, interval: str, start_ms: int, limit: int = 1000,
+                            base: str = LIVE_FAPI) -> list:
+        return self._request("GET", "/fapi/v1/klines", {"symbol": symbol, "interval": interval,
+                                                        "startTime": int(start_ms), "limit": limit}, base=base)
+
+    def premium_index(self, symbol: str, base: str = LIVE_FAPI) -> dict:
+        return self._request("GET", "/fapi/v1/premiumIndex", {"symbol": symbol}, base=base)
 
     def depth(self, symbol: str, limit: int = 20, base: str | None = None) -> dict:
         return self._request("GET", "/api/v3/depth", {"symbol": symbol, "limit": limit}, base=base)
