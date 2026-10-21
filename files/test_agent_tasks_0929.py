@@ -277,27 +277,91 @@ class TestIncidentAnalyst(unittest.TestCase):
 
 # ------------------------------------------------------------------ readouts
 
+def _is_research_readout(r: dict) -> bool:
+    """A computed readout of a frozen rule that changes no behaviour: its criteria end in
+    SUPPORTED / REFUTED under `overall`, not KEEP / ROLLBACK (leader-positioning-oi-1021-spec.md)."""
+    return r.get("kind") == "computed" and "keep" not in r.get("criteria", {}) and "overall" in r.get("criteria", {})
+
+
+def _registry_entry_problems(r: dict) -> list:
+    p = []
+    if r.get("kind") not in ("computed", "delegated"):
+        p.append("kind")
+    if not (r.get("due") and r.get("window_from") and r.get("min_days", 0) > 0):
+        p.append("due/window_from/min_days")
+    if not (r.get("spec") and (ROOT / r["spec"]).exists()):
+        p.append("spec missing")
+    crit = r.get("criteria") or {}
+    if r.get("kind") == "computed" and r.get("fn") not in RO.FNS:
+        p.append("fn not registered")
+    if _is_research_readout(r):
+        # nothing is live, so there is nothing to keep or roll back: the rule is frozen in the
+        # entry, the verdicts are named, and `rollback` states that nothing ships
+        if not crit.get("rule"):
+            p.append("research readout: rule not frozen in criteria")
+        if not ("SUPPORTED" in crit["overall"] and "REFUTED" in crit["overall"]):
+            p.append("research readout: overall must name SUPPORTED and REFUTED")
+        if not ({"SUPPORTED", "REFUTED"} <= set(RO.FINAL_STATUSES)):
+            p.append("research verdicts not final in readouts.py")
+        if r.get("flag") or r.get("switched_on_utc"):
+            p.append("research readout carries a switch: a live change needs keep/rollback")
+        if not r.get("rollback"):
+            p.append("research readout: rollback must state that nothing ships")
+        return p
+    if "keep" not in crit:
+        p.append("criteria.keep")
+    if r.get("kind") == "computed":
+        if "rollback" not in crit:
+            p.append("criteria.rollback")
+        if not r.get("rollback"):
+            p.append("rollback")
+        # the window may not open before the change was live -- unless the entry states
+        # why the earlier days are valid (a shadow whose readout is replayed from data
+        # that exists without the switch; weak-exit-shadow-1020-spec.md)
+        if r.get("window_before_switch_on"):
+            if len(r["window_before_switch_on"]) <= 40:
+                p.append("window_before_switch_on too short")
+        elif not (r.get("switched_on_utc") and r["window_from"] >= r["switched_on_utc"][:10]):
+            p.append("window opens before switched_on_utc")
+    return p
+
+
 class TestReadouts(unittest.TestCase):
     def test_registry_is_pre_registered(self):
         reg = RO.load_registry()
         ids = [r["id"] for r in reg]
         self.assertEqual(len(ids), len(set(ids)))
         for r in reg:
-            self.assertIn(r["kind"], ("computed", "delegated"))
-            self.assertTrue(r["due"] and r["window_from"] and r["min_days"] > 0, r["id"])
-            self.assertIn("keep", r["criteria"], r["id"])
-            self.assertTrue((ROOT / r["spec"]).exists(), r["spec"])
-            if r["kind"] == "computed":
-                self.assertIn(r["fn"], RO.FNS)
-                self.assertIn("rollback", r["criteria"])
-                self.assertTrue(r.get("rollback"))
-                # the window may not open before the change was live -- unless the entry states
-                # why the earlier days are valid (a shadow whose readout is replayed from data
-                # that exists without the switch; weak-exit-shadow-1020-spec.md)
-                if r.get("window_before_switch_on"):
-                    self.assertGreater(len(r["window_before_switch_on"]), 40, r["id"])
-                    continue
-                self.assertGreaterEqual(r["window_from"], r["switched_on_utc"][:10])
+            self.assertEqual(_registry_entry_problems(r), [], r["id"])
+
+    def test_registry_entry_shapes(self):
+        """Two shapes are pre-registered: a readout of a LIVE change (KEEP / ROLLBACK) and a
+        research readout of a frozen rule that changes nothing (SUPPORTED / REFUTED,
+        leader-positioning-oi-1021-spec.md). A research readout may not carry a switch."""
+        live = {"id": "L", "kind": "computed", "fn": "readout_weak_exit_shadow", "due": "2026-11-30",
+                "window_from": "2026-10-22", "min_days": 14, "switched_on_utc": "2026-10-21T20:55:05Z",
+                "spec": "docs/specs/features/weak-exit-shadow-1020-spec.md",
+                "criteria": {"keep": "k", "rollback": "r"}, "rollback": "flag False"}
+        research = {"id": "R", "kind": "computed", "fn": "readout_leader_positioning_oi", "due": "2026-12-16",
+                    "window_from": "2026-10-20", "min_days": 30,
+                    "spec": "docs/specs/features/leader-positioning-oi-1021-spec.md",
+                    "criteria": {"rule": "frozen", "overall": "TOO_EARLY ...; SUPPORTED if ...; else REFUTED"},
+                    "rollback": "nothing ships: SUPPORTED means propose a flagged shadow, never apply"}
+        self.assertEqual(_registry_entry_problems(live), [])
+        self.assertEqual(_registry_entry_problems(research), [])
+        bad = [
+            dict(live, criteria={"rollback": "r"}),                               # live change without keep
+            dict(live, criteria={"keep": "k"}),                                   # live change without rollback
+            dict(live, window_from="2026-10-20"),                                 # window before the switch
+            dict(research, switched_on_utc="2026-10-21T00:00:00Z"),               # a switch needs keep/rollback
+            dict(research, flag="SOME_FLAG"),
+            dict(research, criteria={"rule": "frozen", "overall": "KEEP if ..."}),  # verdicts not named
+            dict(research, criteria={"overall": "SUPPORTED if ...; else REFUTED"}),  # rule not frozen in entry
+            dict(research, rollback=""),                                          # must say nothing ships
+            dict(research, kind="delegated"),                                     # delegated keeps the keep shape
+        ]
+        for b in bad:
+            self.assertNotEqual(_registry_entry_problems(b), [], b)
 
     def test_status_logic(self):
         r = {"kind": "computed", "due": "2026-10-09", "min_days": 14, "min_trades": 5}
