@@ -761,6 +761,19 @@ change applied since then came from manual analysis. Minimum fix: validate
 `config_key` against `config.py` at generation time and drop hypotheses whose key
 is unknown. Status report: `docs/reports/2026-08-05-roadmap-status.md`.
 
+### RSI-divergence hold — SHADOW, readout WEAK-HOLD-SHADOW (2026-10-21)
+
+Operator-approved after X-9c = KEEP. The rule accepted on the Jul–Oct half (below): a 15m
+exit on "WEAK: RSI дивергенция" with profit >= +0.5% at the signal (FIXED for all modes, not
+the H5 per-mode thresholds) would be held on the trail. `RSI_DIV_HOLD_SHADOW_ENABLED = True`:
+the bot still exits; `monitor._rsi_div_hold_decision` + event `weak_exit_shadow` record the
+would-hold decision. No live hold flag exists yet. Readout `readouts.readout_weak_exit_shadow`:
+window from 2026-10-06 (unseen by the replay), due 2026-11-30, >= 42 days and >= 40 changed
+rocket-day trades; the hold arm is the offline P-1 trail plus the live leader-mode switch,
+unresolved holds are pending, criterion = `exit_validator.decide` unchanged. Leader-mode
+positions never reach the RSI exit (an event with `leader_mode=True` is an ANOMALY).
+Rollback: False + restart. Spec: `docs/specs/features/weak-exit-shadow-1020-spec.md`.
+
 ### Weakness exits vs holding on the trail — REJECTED by the margin (2026-10-05)
 
 Replay of 4 313 trades since 03-01: replacing WEAK RSI divergence / RSI overbought / quality
@@ -1298,6 +1311,7 @@ ML_MODEL_HOT_RELOAD_ENABLED = True            # retrained ML model picked up wit
 MODE_RANGE_QUALITY_GUARD_ENABLED = False      # OFF by operator 2026-10-01; shadow-logged (mrq-off-1001-spec.md)
 MODEL_HEALTH_ENABLED = True                   # morning-report model health: own-target AUC, input PSI, run manifests (2026-10-05, model-health-1005-spec.md)
 ML_PROMOTION_MATCHED_ADMISSION_ENABLED = False  # SHADOW: ML promotion + live floor at the incumbent's admitted share (2026-10-09, ml-admission-match-1009-spec.md)
+RSI_DIV_HOLD_SHADOW_ENABLED = True            # SHADOW: logs weak_exit_shadow when a 15m RSI-divergence exit has >= +0.5% (readout WEAK-HOLD-SHADOW 11-30, weak-exit-shadow-1020-spec.md)
 ```
 
 ---

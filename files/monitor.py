@@ -2366,6 +2366,22 @@ def _h5_should_suppress(reason: Optional[str], pnl_pct: float,
     return any(m in r for m in soft_markers)
 
 
+def _rsi_div_hold_decision(reason: Optional[str], pnl_pct: float, tf: Optional[str]) -> Optional[bool]:
+    """Weak-exit rule (weak-exits-1005-spec.md), SHADOW: None = not in scope,
+    True = the accepted rule would hold this RSI-divergence exit on the trail.
+
+    The threshold is FIXED for all modes on purpose -- not _h5_break_even_pct:
+    the rule was tested with 0.5% everywhere. Match = _backtest_weak_exits.category
+    "rsi_divergence". Spec: docs/specs/features/weak-exit-shadow-1020-spec.md
+    """
+    if tf != "15m" or not reason:
+        return None
+    r = reason.lower()
+    if not ("rsi" in r and ("дивергенц" in r or "diverg" in r)):
+        return None
+    return float(pnl_pct) >= float(getattr(config, "RSI_DIV_HOLD_MIN_PNL_PCT", 0.5))
+
+
 def _peak_risk_score(pos, feat, i: int, pnl_pct: float) -> tuple[float, dict]:
     """P1.2 (2026-05-07): peak-risk shadow score 0-100 for open position.
 
@@ -6651,6 +6667,19 @@ async def _poll_coin(
     if reason:
         price = float(c[i])
         pnl   = pos.pnl_pct(price)
+        # RSI-divergence hold, SHADOW (weak-exit-shadow-1020-spec.md): the bot still
+        # exits below; the event records whether the accepted rule would have held.
+        if bool(getattr(config, "RSI_DIV_HOLD_SHADOW_ENABLED", False)):
+            _rdh = _rsi_div_hold_decision(reason, pnl, tf)
+            if _rdh is not None:
+                try:
+                    botlog.log_weak_exit_shadow(
+                        sym, tf, getattr(pos, "signal_mode", None), current_bar_ts, price, pnl, _rdh,
+                        float(getattr(config, "RSI_DIV_HOLD_MIN_PNL_PCT", 0.5)),
+                        float(getattr(pos, "trail_stop", 0.0) or 0.0), float(getattr(pos, "trail_k", 2.0)),
+                        bool(getattr(pos, "leader_mode", False)), reason)
+                except Exception as _rdh_err:
+                    log.warning("weak exit shadow log failed for %s: %s", sym, _rdh_err)
         pnl_icon = "🟢" if pnl >= 0 else "🔴"
 
         await send(

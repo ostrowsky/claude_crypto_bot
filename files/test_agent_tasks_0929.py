@@ -291,7 +291,12 @@ class TestReadouts(unittest.TestCase):
                 self.assertIn(r["fn"], RO.FNS)
                 self.assertIn("rollback", r["criteria"])
                 self.assertTrue(r.get("rollback"))
-                # the window may not open before the change was live
+                # the window may not open before the change was live -- unless the entry states
+                # why the earlier days are valid (a shadow whose readout is replayed from data
+                # that exists without the switch; weak-exit-shadow-1020-spec.md)
+                if r.get("window_before_switch_on"):
+                    self.assertGreater(len(r["window_before_switch_on"]), 40, r["id"])
+                    continue
                 self.assertGreaterEqual(r["window_from"], r["switched_on_utc"][:10])
 
     def test_status_logic(self):

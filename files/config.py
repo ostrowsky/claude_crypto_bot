@@ -1237,6 +1237,15 @@ H5_BREAK_EVEN_PCT_ALIGNMENT: float = 0.5
 H5_BREAK_EVEN_PCT_TREND: float = 0.5
 H5_BREAK_EVEN_PCT_STRONG_TREND: float = 0.7    # slow: more patient
 
+# ── RSI-divergence hold, SHADOW (2026-10-21, weak-exit-shadow-1020-spec.md) ───
+# Rule accepted offline on a time split (weak-exits-1005-spec.md): a 15m exit on
+# "WEAK: RSI дивергенция" with profit >= +0.5% would be held on the trail. In
+# shadow the bot still exits; it only logs `weak_exit_shadow`. Readout
+# WEAK-HOLD-SHADOW (due 2026-11-30). The threshold is FIXED for all modes --
+# NOT the per-mode H5 thresholds above. Rollback: False + restart.
+RSI_DIV_HOLD_SHADOW_ENABLED: bool = True
+RSI_DIV_HOLD_MIN_PNL_PCT: float = 0.5
+
 # ── P1.2: PEAK RISK shadow detector (2026-05-07) ──────────────────────────────
 # Spec: docs/specs/features/peak-risk-shadow-spec.md
 # Computes 0-100 risk score for open profitable positions; logs structured

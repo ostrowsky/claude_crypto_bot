@@ -280,6 +280,31 @@
     "overall": "TOO_EARLY while either part is; SUPPORTED if either part is; INCONCLUSIVE if either is; else REFUTED"
    },
    "rollback": "nothing ships: SUPPORTED means propose a flagged shadow, never apply"
+  },
+  {
+   "id": "WEAK-HOLD-SHADOW",
+   "title": "RSI-divergence exit with profit >= +0.5% held on the trail (shadow, 15m)",
+   "kind": "computed",
+   "fn": "readout_weak_exit_shadow",
+   "flag": "RSI_DIV_HOLD_SHADOW_ENABLED",
+   "switched_on_utc": null,
+   "window_before_switch_on": "the shadow changes no trade; the readout replays the hold arm from exit events and 15m history that exist without the switch, and 10-06.. was not seen by the offline replay (rule and criterion fixed 10-05); the event only cross-checks days after the switch",
+   "window_from": "2026-10-06",
+   "due": "2026-11-30",
+   "min_days": 42,
+   "min_trades": 40,
+   "spec": "docs/specs/features/weak-exit-shadow-1020-spec.md",
+   "expected": {
+    "offline_test_rocket_day_pp": "+0.89 [+0.27, +1.65] (Jul-Oct half, n=163, plain P-1, pre-leader mode)",
+    "offline_test_all_trades_pp": "+0.011 [-0.075, +0.105] (n=1633, 245 changed)",
+    "note": "leader mode (X-9c, live since 09-28) now takes ~36% of 15m trades; the live effect may be smaller"
+   },
+   "criteria": {
+    "keep": "primary arm (P-1 + leader switch): rocket-day lower 95% > 0 AND all-trade lower 95% >= -0.10 pp AND >= 60% of months (>= 5 rocket-day trades) >= 0 -> propose deploying the rule to the operator",
+    "rollback": "all-trade lower 95% < -0.10 pp OR rocket-day upper 95% < 0 -> do not deploy, shadow off",
+    "otherwise": "inconclusive -> do not deploy; a longer window is a new entry, the criterion is not relaxed"
+   },
+   "rollback": "nothing to undo while in shadow; RSI_DIV_HOLD_SHADOW_ENABLED = False + restart stops the logging"
   }
  ]
 }

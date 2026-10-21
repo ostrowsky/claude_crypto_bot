@@ -871,7 +871,189 @@ def readout_leader_positioning_oi(r: dict, ctx: dict) -> dict:
     return out
 
 
+# ---------------------------------------------------------------- WEAK-HOLD-SHADOW
+# RSI-divergence exit with profit >= +0.5% held on the trail, SHADOW
+# (weak-exit-shadow-1020-spec.md). The bot still exits; the hold arm is replayed
+# here on the 15m grid with the offline engine (_backtest_weak_exits), extended by
+# the leader-mode switch that is live since 2026-09-28.
+
+WEAK_HOLD_AFTER_BARS = 96        # = _backtest_weak_exits.AFTER_BARS
+WEAK_HOLD_MATCH_SEC = 120        # the exit event follows the shadow event within the same poll
+WEAK_HOLD_DISAGREE_MIN = 20      # matched events before the disagreement rate is judged
+WEAK_HOLD_DISAGREE_MAX = 0.05
+
+
+def _wide_resolved(grid, t: dict, s: int, P: dict) -> bool:
+    """True when exit_validator.wide_from from bar s ends inside the data (not cut by its end)."""
+    j, k = t["j"], t["k"]
+    C, A = grid.C, grid.ATR
+    cs = C[s, j]
+    stop = cs - max(k * A[s, j] if math.isfinite(A[s, j]) else 0.0, P["floor"] * cs)
+    end = s + P["max_hold_bars"]
+    for q in range(s + 1, min(grid.N - 1, end) + 1):
+        cq = C[q, j]
+        if not math.isfinite(cq):
+            continue
+        if math.isfinite(A[q, j]):
+            stop = max(stop, cq - max(k * A[q, j], P["floor"] * cq))
+        if cq < stop or (q - s >= P["lost_min_bars"] and grid.RANK[q, j] > P["lost_rank"]):
+            return True
+    return end <= grid.N - 1
+
+
+def weak_hold_arm(grid, t: dict, floor: float, P, after_bars: int = WEAK_HOLD_AFTER_BARS):
+    """(pnl or None, status) of holding past the weakness bar ix on the P-1 trail.
+
+    The trail is ratcheted from the entry bar as in _backtest_weak_exits.hold_on_trail.
+    With leader params P, a bar after ix where the coin is in the leader set switches
+    to exit_validator.wide_from (live leader mode). status: trail / max_bars / leader /
+    pending (the hold is still open at the end of data -- never scored, TH-05) / no_data.
+    """
+    import exit_validator as EV
+    j, ie, ix, k, ep = t["j"], t["ie"], t["ix"], t["k"], t["ep"]
+    C, A = grid.C, grid.ATR
+    c0 = C[ie, j]
+    if not math.isfinite(c0):
+        return None, "no_data"
+    stop = c0 - max(k * A[ie, j] if math.isfinite(A[ie, j]) else 0.0, floor * c0)
+    end = ix + after_bars
+    last = min(grid.N - 1, end)
+    lead = grid.lead(P["rank_max"], P["min_ret"]) if P else None
+    for q in range(ie + 1, last + 1):
+        cq = C[q, j]
+        if not math.isfinite(cq):
+            continue
+        if math.isfinite(A[q, j]):
+            stop = max(stop, cq - max(k * A[q, j], floor * cq))
+        if lead is not None and q > ix and lead[q, j]:
+            if not _wide_resolved(grid, t, q, P):
+                return None, "pending"
+            return EV.wide_from(grid, t, q, P), "leader"
+        if q >= ix and cq < stop:
+            return (cq / ep - 1) * 100, "trail"
+    if end > grid.N - 1:
+        return None, "pending"
+    q = last
+    while q > ix and not math.isfinite(C[q, j]):
+        q -= 1
+    return ((C[q, j] / ep - 1) * 100, "max_bars") if math.isfinite(C[q, j]) else (None, "no_data")
+
+
+def weak_hold_trade_key(grid, t: dict):
+    """(symbol, UTC start of the 15m bar the exit happened in)."""
+    import exit_validator as EV
+    return t["sym"], (grid.t0 + (t["ix"] + 1) * EV.STEP).strftime("%Y-%m-%dT%H:%M")
+
+
+def weak_hold_key(e: dict):
+    d = e["_dt"].astimezone(timezone.utc)
+    return e.get("sym"), d.replace(minute=d.minute // 15 * 15).strftime("%Y-%m-%dT%H:%M")
+
+
+def weak_hold_compare(grid, trades: list, days: set, threshold: float, P: dict, cfg=None, floor_fn=None):
+    """Paired rows (trade, current, hold) per arm; unchanged trades contribute (0, 0)
+    as in the offline replay. Would-hold trades whose hold is still open are left out."""
+    import _backtest_weak_exits as BW
+    import exit_validator as EV
+    floor_fn = floor_fn or (lambda m: EV.floor_of(m, cfg))
+    rows = {"primary": [], "plain": []}
+    info = {"changed": 0, "pending": 0, "no_data": 0, "leader_switch": 0, "changed_ids": set(), "keys": {}}
+    for t in trades:
+        if t["day"] not in days:
+            continue
+        x = BW.at_bar(grid, t)
+        in_scope = BW.category(t["reason"]) == "rsi_divergence" and x is not None
+        if in_scope and hasattr(grid, "t0"):
+            info["keys"][weak_hold_trade_key(grid, t)] = x >= threshold
+        if not in_scope or x < threshold:
+            rows["primary"].append((t, 0.0, 0.0))
+            rows["plain"].append((t, 0.0, 0.0))
+            continue
+        fl = floor_fn(t["mode"])
+        y1, s1 = weak_hold_arm(grid, t, fl, P)
+        y0, s0 = weak_hold_arm(grid, t, fl, None)
+        if y1 is None or y0 is None:
+            info["pending" if "pending" in (s1, s0) else "no_data"] += 1
+            continue
+        info["changed"] += 1
+        info["leader_switch"] += s1 == "leader"
+        info["changed_ids"].add(id(t))
+        rows["primary"].append((t, x, y1))
+        rows["plain"].append((t, x, y0))
+    return rows, info
+
+
+def weak_hold_anomalies(events: list, exits: list, keys: dict) -> list:
+    out = []
+    ex_by = collections.defaultdict(list)
+    for x in exits:
+        ex_by[(x.get("sym"), x.get("tf"))].append(x["_dt"])
+    agree = dis = 0
+    for e in events:
+        tag = f"{e.get('sym')} {str(e.get('ts', ''))[:16]}"
+        if e.get("tf") != "15m":
+            out.append(f"weak_exit_shadow on {e.get('tf')} {tag}")
+        if e.get("leader_mode"):
+            out.append(f"weak_exit_shadow in leader mode {tag}")
+        if not any(-5 <= (x - e["_dt"]).total_seconds() <= WEAK_HOLD_MATCH_SEC
+                   for x in ex_by[(e.get("sym"), e.get("tf"))]):
+            out.append(f"weak_exit_shadow without an exit {tag}")
+        k = weak_hold_key(e)
+        if k in keys:
+            if bool(e.get("would_hold")) == bool(keys[k]):
+                agree += 1
+            else:
+                dis += 1
+    n = agree + dis
+    if n >= WEAK_HOLD_DISAGREE_MIN and dis / n > WEAK_HOLD_DISAGREE_MAX:
+        out.append(f"would_hold disagrees with the replay on {dis} of {n} exits")
+    return out
+
+
+def weak_hold_verdict(decision: str) -> str:
+    """exit_validator.decide -> readout status (the criterion is the offline one, unchanged)."""
+    return {"accept": "KEEP", "reject": "ROLLBACK_SUGGESTED"}.get(decision, "INCONCLUSIVE")
+
+
+def weak_hold_trades(grid, since: str) -> list:
+    import _backtest_weak_exits as BW
+    return BW.load_trades_with_reason(grid, since)
+
+
+def readout_weak_exit_shadow(r: dict, ctx: dict) -> dict:
+    """RSI-divergence hold, SHADOW (weak-exit-shadow-1020-spec.md)."""
+    import config as cfg
+    import exit_validator as EV
+    import _backtest_weak_exits as BW
+    days = set(ctx["days"])
+    grid = EV.load_grid(int(getattr(cfg, "ATR_PERIOD", 14)))
+    thr = float(getattr(cfg, "RSI_DIV_HOLD_MIN_PNL_PCT", 0.5))
+    rows, info = weak_hold_compare(grid, weak_hold_trades(grid, r["window_from"]), days, thr,
+                                   EV.leader_params(cfg), cfg=cfg)
+    rockets, winners = EV.day_labels()
+    evs = scan_events(r["window_from"], {"weak_exit_shadow", "exit"})
+    shadow = [e for e in evs if e["event"] == "weak_exit_shadow"]
+    anomalies = weak_hold_anomalies(shadow, [e for e in evs if e["event"] == "exit"], info["keys"])
+    prim = BW.stats(rows["primary"], rockets, winners)
+    plain = BW.stats(rows["plain"], rockets, winners)
+    n_rk = sum(1 for t, _x, _y in rows["primary"]
+               if id(t) in info["changed_ids"] and (t["day"], t["sym"]) in rockets)
+    out = {"days": len(days), "trades": len(rows["primary"]), "changed": info["changed"],
+           "pending": info["pending"], "no_data": info["no_data"],
+           "changed_rocket_day_trades": n_rk,
+           "leader_switch_share": round(info["leader_switch"] / info["changed"], 3) if info["changed"] else None,
+           "primary": prim, "plain_p1": plain,
+           "shadow_events": len(shadow), "shadow_would_hold": sum(1 for e in shadow if e.get("would_hold")),
+           "anomalies": anomalies,
+           "note": "hold arm replayed on the 15m grid; other soft exits after the signal are not modelled"}
+    out["_n_trades"] = n_rk
+    out["_anomaly"] = bool(anomalies)
+    out["_verdict"] = weak_hold_verdict(prim["verdict"])
+    return out
+
+
 FNS = {"readout_corr_cap3": readout_corr_cap3,
+       "readout_weak_exit_shadow": readout_weak_exit_shadow,
        "readout_leader_positioning_oi": readout_leader_positioning_oi,
        "readout_ml_goal_shadow": readout_ml_goal_shadow,
        "readout_e4": readout_e4, "readout_mrq_off": readout_mrq_off, "readout_leader_exit": readout_leader_exit,

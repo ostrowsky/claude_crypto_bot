@@ -684,6 +684,19 @@ stop_rl_headless.bat     — остановка RL worker (по PID из .runtim
 
 Спека: `docs/specs/features/metrics-daily-stale-1020-spec.md`.
 
+### Удержание при RSI-дивергенции — SHADOW, readout WEAK-HOLD-SHADOW (2026-10-21)
+
+Одобрено оператором после вердикта X-9c = KEEP. Правило, принятое на июле–октябре (ниже):
+выход 15m по «WEAK: RSI дивергенция» при прибыли в момент сигнала ≥ +0.5% (единый порог для
+всех режимов, не пороги H5) заменяется удержанием на трейле. `RSI_DIV_HOLD_SHADOW_ENABLED = True`:
+бот по-прежнему выходит, `monitor._rsi_div_hold_decision` пишет событие `weak_exit_shadow` с
+решением «держал бы». Живого флага удержания пока нет. Readout `readout_weak_exit_shadow`: окно с
+2026-10-06 (replay этих дней не видел), срок 2026-11-30, ≥ 42 дня и ≥ 40 изменённых сделок дней-ракет;
+вариант «держать» — офлайн-трейл P-1 плюс живое переключение в режим лидера, незакрытые удержания
+не считаются (pending), критерий — `exit_validator.decide` без изменений. Позиции в режиме лидера
+до RSI-выхода не доходят (событие с `leader_mode=True` — ANOMALY). Откат: False + перезапуск.
+Спека: `docs/specs/features/weak-exit-shadow-1020-spec.md`.
+
 ### Выходы по слабости против удержания на трейле — ОТКЛОНЕНО по допуску (2026-10-05)
 
 Replay 4 313 сделок с 03-01: если вместо выходов по WEAK-дивергенции RSI, перекупленности RSI,
@@ -1174,6 +1187,7 @@ ML_MODEL_HOT_RELOAD_ENABLED = True            # переобученная ML-м
 MODE_RANGE_QUALITY_GUARD_ENABLED = False      # выключен оператором 2026-10-01; тень пишется (mrq-off-1001-spec.md)
 MODEL_HEALTH_ENABLED = True                   # здоровье моделей в утреннем отчёте: AUC против своей цели, PSI входов, манифесты (2026-10-05, model-health-1005-spec.md)
 ML_PROMOTION_MATCHED_ADMISSION_ENABLED = False  # SHADOW: промоушен ML-модели и живой порог на доле пропуска действующей модели (2026-10-09, ml-admission-match-1009-spec.md)
+RSI_DIV_HOLD_SHADOW_ENABLED = True            # SHADOW: событие weak_exit_shadow при RSI-дивергенции 15m с прибылью ≥ +0.5% (readout WEAK-HOLD-SHADOW 11-30, weak-exit-shadow-1020-spec.md)
 ```
 
 ---

@@ -219,6 +219,28 @@ def log_leader_exit_switch(sym: str, tf: str, price: float, reason: str, stop: f
     })
 
 
+def log_weak_exit_shadow(sym: str, tf: str, mode, bar_ts: int, price: float, pnl_pct: float,
+                         would_hold: bool, threshold: float, trail_stop: float, trail_k: float,
+                         leader_mode: bool, reason: str) -> None:
+    """The bot exits on an RSI divergence; would the accepted hold rule have held it?
+    SHADOW only (weak-exit-shadow-1020-spec.md); no decision reads this event."""
+    _write({
+        "event":       "weak_exit_shadow",
+        "sym":         sym,
+        "tf":          tf,
+        "mode":        mode,
+        "bar_ts":      int(bar_ts),
+        "price":       price,
+        "pnl_pct":     round(float(pnl_pct), 4),
+        "would_hold":  bool(would_hold),
+        "threshold":   float(threshold),
+        "trail_stop":  float(trail_stop),
+        "trail_k":     float(trail_k),
+        "leader_mode": bool(leader_mode),
+        "reason":      reason,
+    })
+
+
 def log_mode_range_shadow(sym: str, tf: str, mode: str, price: float, reason: str) -> None:
     """mode_range_quality is OFF; this candidate is one it would have blocked."""
     _write({
