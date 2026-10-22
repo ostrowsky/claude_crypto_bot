@@ -778,8 +778,8 @@ FC, кэрри фандинга (2026-10-22, `docs/specs/features/carry-funding-
 ≈ 4% годовых). Фандинг демо отличается от живого, демо проверяет только механику. **Следующий шаг (одобрен оператором
 2026-10-22, `fc-passive-next-1022-spec.md`):** `trader/fc_shadow.py` ведёт бумажную книгу FC_PASSIVE на живых публичных
 данных как шаг `run_shadow.cmd` после E7 (`FC_SHADOW_ENABLED`, свой лог `runtime/fc_shadow/fc_shadow.log`) и на каждом
-шаге заново считает `carry.simulate` на [S, сегодня); разбор FC-SHADOW (`READOUT_FC.json`) не даёт вердикта раньше
-S + 90 дней. F0 (`_smoke_demo_futures.py --go`, только `order/test`, без позиций) запускает оператор.
+шаге заново считает `carry.simulate` на [S, сегодня); запущена 2026-10-22, S = 2026-10-23; разбор FC-SHADOW
+(`READOUT_FC.json`) не даёт вердикта раньше 2027-01-21. F0 (`_smoke_demo_futures.py --go`, только `order/test`, без позиций) запускает оператор.
 `experiment_fc.judge` считает интервал на уровне 1 − α.
 
 ### Промоушен ML-модели на равной доле пропуска — SHADOW (2026-10-09)
