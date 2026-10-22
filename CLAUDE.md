@@ -855,8 +855,10 @@ hindsight, not a strategy. The 2026 window for ranking by past return is still u
 FC funding carry (2026-10-22, `docs/specs/features/carry-funding-money-1021-spec.md`, spot long + perp short, L = 1):
 on train (2023-03..2025-12) **passive BTC+ETH carry is the first trader hypothesis with a positive CI**: +0.0111 %/day
 [+0.0095, +0.0131], ~4 %/yr, max DD −0.17 %, 0 liquidations, but declining (2025: +0.0067). Selecting pairs by trailing
-funding is REJECTED (0 of 8: all worse than passive, liquidations in 7 of 8). The 2026 test of FC_PASSIVE is NOT opened
-— operator's decision; demo funding differs from live, so demo money cannot replace that test.
+funding is REJECTED (0 of 8: all worse than passive, liquidations in 7 of 8). **2026 test (opened once 2026-10-22, k = 1):
+FC_PASSIVE ACCEPTED — +0.0024 %/day [+0.0015, +0.0038], ~0.9 %/yr, max DD −0.19 %, 0 liquidations; Feb–Apr negative.**
+The first trader hypothesis profitable on its test, but small (train ~4 %/yr). Shadow E7 book and demo F0 are the
+operator's decision; demo funding differs from live, so demo money is a mechanics check only.
 
 ### ML promotion at matched admission — SHADOW (2026-10-09)
 
