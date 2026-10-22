@@ -861,8 +861,9 @@ The first trader hypothesis profitable on its test, but small (train ~4 %/yr). D
 money is a mechanics check only. **Next step (operator-approved 2026-10-22, `fc-passive-next-1022-spec.md`):**
 `trader/fc_shadow.py` runs a paper FC_PASSIVE book on live public data as a step of `run_shadow.cmd` after E7
 (`FC_SHADOW_ENABLED`, own log `runtime/fc_shadow/fc_shadow.log`), recomputing `carry.simulate` on [S, today) every
-step; started 2026-10-22, S = 2026-10-23; readout FC-SHADOW (`READOUT_FC.json`) gives no verdict before 2027-01-21. F0 (`_smoke_demo_futures.py --go`,
-order/test only, never a position) is run by the operator. `experiment_fc.judge` computes the interval at 1 − α.
+step; started 2026-10-22, S = 2026-10-23; readout FC-SHADOW (`READOUT_FC.json`) gives no verdict before 2027-01-21. **F0 = GO on 2026-10-22** (`_smoke_demo_futures.py --go`,
+order/test only, never a position; run by Claude at the operator's request): futures wallet 5 000 USDT, BTCUSDT/ETHUSDT
+ISOLATED + leverage 1, one-way; demo taker 0.04% (model 0.05%, kept); demo funding is the flat 0.0001, not live. `experiment_fc.judge` computes the interval at 1 − α.
 
 ### ML promotion at matched admission — SHADOW (2026-10-09)
 
