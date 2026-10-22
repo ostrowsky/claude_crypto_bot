@@ -145,6 +145,16 @@ def verdict(kind: str, day_agg: dict, random_means=None, liquidations: int = 0) 
     return v
 
 
+def judge(kind: str, e: dict, alpha: float = 0.05) -> dict:
+    """verdict() on the interval of the mean daily R at 1 - alpha (fc-passive-next-1022-spec.md §C).
+    simulate()'s own aggregate is always at 0.05; with k hypotheses opened on the test alpha = 0.05 / k."""
+    import daily_revenue as DR
+    agg = DR.aggregate(e["_series"], alpha=alpha)
+    v = verdict(kind, agg, e.get("random_means"), e.get("liquidations", 0))
+    v.update(alpha=alpha, lo=agg.get("lo95"), hi=agg.get("hi95"))
+    return v
+
+
 def train_panel(panel):
     return panel.cut(TEST_FROM)
 
@@ -305,12 +315,12 @@ def run_test(train_path=TRAIN_OUT, out_path=TEST_OUT, marker=TEST_MARKER, n_rand
         out = {}
         for name in names:
             if name == "FC_PASSIVE":
-                e, v = pas, verdict("passive", pas["agg"], liquidations=pas["liquidations"])
+                e, v = pas, judge("passive", pas, alpha)
                 cfg = passive_config()
             else:
                 cfg = cands[name]
                 e = evaluate(market, cfg, fm, TEST_FROM, today, n_random, passive_series=pas["_series"], alpha=alpha)
-                v = verdict("fc", e["agg"], e["random_means"], e["liquidations"])
+                v = judge("fc", e, alpha)
             refs = {tag: C.simulate(market, cfg, C.fees(lvl), TEST_FROM, today, start_equity=START_EQUITY)["agg"]
                     for tag, lvl in (("fees_level0", 0), ("fees_level2", 2))}
             refs["lev2"] = _slim(evaluate(market, cfg, fm, TEST_FROM, today, 0, lev_override=2.0))

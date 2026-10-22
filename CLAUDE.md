@@ -857,8 +857,12 @@ on train (2023-03..2025-12) **passive BTC+ETH carry is the first trader hypothes
 [+0.0095, +0.0131], ~4 %/yr, max DD −0.17 %, 0 liquidations, but declining (2025: +0.0067). Selecting pairs by trailing
 funding is REJECTED (0 of 8: all worse than passive, liquidations in 7 of 8). **2026 test (opened once 2026-10-22, k = 1):
 FC_PASSIVE ACCEPTED — +0.0024 %/day [+0.0015, +0.0038], ~0.9 %/yr, max DD −0.19 %, 0 liquidations; Feb–Apr negative.**
-The first trader hypothesis profitable on its test, but small (train ~4 %/yr). Shadow E7 book and demo F0 are the
-operator's decision; demo funding differs from live, so demo money is a mechanics check only.
+The first trader hypothesis profitable on its test, but small (train ~4 %/yr). Demo funding differs from live, so demo
+money is a mechanics check only. **Next step (operator-approved 2026-10-22, `fc-passive-next-1022-spec.md`):**
+`trader/fc_shadow.py` runs a paper FC_PASSIVE book on live public data as a step of `run_shadow.cmd` after E7
+(`FC_SHADOW_ENABLED`, own log `runtime/fc_shadow/fc_shadow.log`), recomputing `carry.simulate` on [S, today) every
+step; readout FC-SHADOW (`READOUT_FC.json`) gives no verdict before S + 90 days. F0 (`_smoke_demo_futures.py --go`,
+order/test only, never a position) is run by the operator. `experiment_fc.judge` computes the interval at 1 − α.
 
 ### ML promotion at matched admission — SHADOW (2026-10-09)
 

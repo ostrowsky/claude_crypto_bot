@@ -41,7 +41,9 @@ Goal: trade a Binance **demo** account by itself (buy, exchange-side TP/SL, sell
 | `_backtest_daily_revenue_baseline.py` | the baseline (−0.83%/day) | roadmap §0 |
 | `run_recorder.cmd` | scheduled every 5 min (`CryptoBot_MicrostructureRecorder`) | A |
 | `shadow_portfolio.py`, `shadow_readout.py` | E7 paper portfolios P0 vs P4 on live data, readout | E7 |
-| `run_shadow.cmd` | scheduled every 5 min (`CryptoBot_TraderShadow`) | E7 |
+| `run_shadow.cmd` | scheduled every 5 min (`CryptoBot_TraderShadow`); runs E7, then the FC shadow step | E7 |
+| `fc_shadow.py` | FC_PASSIVE paper book on live funding: `step` (same `carry.simulate` on [S, today), own public-data store), `readout` → `runtime/fc_shadow/READOUT_FC.json`; flag `FC_SHADOW_ENABLED` | FC |
+| `demo_futures.py`, `_smoke_demo_futures.py` | F0 readiness of the demo futures account; without `--go` prints the plan and sends nothing, with `--go` only settings + `order/test` | FC |
 | `trade_ledger.py` | D: demo-account fills from myTrades → `runtime/trading/ledger.jsonl` (idempotent, BNB fees in USDT, decision_id) | D |
 | `daily_revenue.py compute` | D: day R from equity marks, P−L reconciliation, stablecoin drift apart, benchmarks → `runtime/metrics/daily_revenue.jsonl` | D |
 | `trader_report.py` | D: operator report → `runtime/reports/YYYY-MM-DD.txt` | D |

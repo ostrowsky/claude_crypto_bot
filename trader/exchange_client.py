@@ -228,7 +228,9 @@ class ExchangeClient:
 
     def _sync_time(self, force: bool = False):
         t0 = time.time()
-        srv = self._request("GET", "/api/v3/time")["serverTime"]
+        # a futures host has no /api/v3/time (fc-passive-next-1022-spec.md §B.2)
+        path = "/fapi/v1/time" if "fapi" in _host(self.base) else "/api/v3/time"
+        srv = self._request("GET", path)["serverTime"]
         t1 = time.time()
         self._offset_ms = int(srv - (t0 + t1) / 2 * 1000)
         self._synced_at = t1
@@ -285,6 +287,56 @@ class ExchangeClient:
 
     def depth(self, symbol: str, limit: int = 20, base: str | None = None) -> dict:
         return self._request("GET", "/api/v3/depth", {"symbol": symbol, "limit": limit}, base=base)
+
+    # ------------------------------------------------------------ USD-M futures of the demo account, F0
+    # fc-passive-next-1022-spec.md §B: settings and checks only. There is deliberately no method for a
+    # real futures order; the only order call is POST /fapi/v1/order/test (validated, never executed).
+    def _fut(self):
+        if "fapi" not in _host(self.base):
+            raise HostNotAllowed(f"futures call on a non-futures client ({_host(self.base)!r})")
+
+    def fut_time(self) -> dict:
+        self._fut()
+        return self._request("GET", "/fapi/v1/time")
+
+    def fut_account(self) -> dict:
+        self._fut()
+        return self._request("GET", "/fapi/v2/account", signed=True)
+
+    def fut_balance(self) -> list:
+        self._fut()
+        return self._request("GET", "/fapi/v2/balance", signed=True)
+
+    def fut_position_side(self) -> dict:
+        self._fut()
+        return self._request("GET", "/fapi/v1/positionSide/dual", signed=True)
+
+    def fut_set_position_side(self, dual: bool) -> dict:
+        self._fut()
+        return self._request("POST", "/fapi/v1/positionSide/dual", {"dualSidePosition": "true" if dual else "false"},
+                             signed=True)
+
+    def fut_margin_type(self, symbol: str, margin_type: str) -> dict:
+        self._fut()
+        return self._request("POST", "/fapi/v1/marginType", {"symbol": symbol, "marginType": margin_type}, signed=True)
+
+    def fut_leverage(self, symbol: str, leverage: int) -> dict:
+        self._fut()
+        return self._request("POST", "/fapi/v1/leverage", {"symbol": symbol, "leverage": int(leverage)}, signed=True)
+
+    def fut_commission(self, symbol: str) -> dict:
+        self._fut()
+        return self._request("GET", "/fapi/v1/commissionRate", {"symbol": symbol}, signed=True)
+
+    def fut_test_order(self, symbol: str, side: str, type_: str, **kw) -> dict:
+        """POST /fapi/v1/order/test -- validated by the exchange, never executed."""
+        self._fut()
+        return self._request("POST", "/fapi/v1/order/test", {"symbol": symbol, "side": side, "type": type_, **kw},
+                             signed=True)
+
+    def fut_income(self, income_type: str, limit: int = 10) -> list:
+        self._fut()
+        return self._request("GET", "/fapi/v1/income", {"incomeType": income_type, "limit": limit}, signed=True)
 
     # ------------------------------------------------------------ signed, read
     def account(self) -> dict:
