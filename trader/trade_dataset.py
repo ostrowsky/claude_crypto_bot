@@ -145,11 +145,14 @@ def live_vs_replay(live, replay_ret) -> dict:
     rows, miss = [], 0
     for t in live:
         rv = replay_ret(t)
+        src = None
+        if isinstance(rv, tuple):                       # (value, source)
+            rv, src = rv
         if rv is None:
             miss += 1
             continue
         rows.append({"key": t.get("key"), "mode": t.get("mode"), "live_pct": t["ret_pct"], "replay_pct": float(rv),
-                     "diff_pct": float(t["ret_pct"]) - float(rv)})
+                     "diff_pct": float(t["ret_pct"]) - float(rv), "replay_source": src})
     n = len(rows)
     return {"n": n, "no_replay": miss, "rows": rows,
             "mean_diff_pct": (sum(r["diff_pct"] for r in rows) / n) if n else None}
@@ -244,15 +247,29 @@ def nightly(decisions, snaps: dict) -> dict:
         r["micro"] = snapshot_at(snaps, r.get("sym"), r["ts"], MICRO_MAX_AGE_SEC) if r.get("ts") else None
         r["bot"] = (sh.get(_skey(r.get("key"))) or {}).get("features")
 
+    # the executor's OWN paper result of the same trade (exit row, or the 'already_closed' skip after an exchange
+    # stop) is the per-trade replay; the E7 shadow book is only the fallback -- its slots can differ (bug 10-21)
+    own = {}
+    for r in decisions:
+        if (r.get("book") == BOOK and r.get("kind") == "real_exit" and isinstance(r.get("paper_ret_pct"), (int, float))
+                and (r.get("action") == "exit" or r.get("reason") == "already_closed")):
+            own[r.get("key")] = float(r["paper_ret_pct"])
+
     def replay(row):
         v = (sh.get(_skey(row.get("key"))) or {}).get("ret_pct")
         return float(v) if isinstance(v, (int, float)) else None
 
+    def replay_live(row):
+        if row.get("key") in own:
+            return own[row["key"]], "own_paper"
+        v = replay(row)
+        return (v, "shadow") if v is not None else None
+
     cf = counterfactual_rows([r for r in rows if r["action"] == "skip"], replay)
     live = [{"key": r["key"], "ret_pct": r["outcome"]["ret_pct"], "mode": r.get("mode")} for r in rows
             if r["action"] == "enter" and r.get("outcome") and isinstance(r["outcome"].get("ret_pct"), (int, float))]
-    lv = live_vs_replay(live, replay)
-    lv["by_mode"] = {m: {k: v for k, v in live_vs_replay([t for t in live if t["mode"] == m], replay).items() if k != "rows"}
+    lv = live_vs_replay(live, replay_live)
+    lv["by_mode"] = {m: {k: v for k, v in live_vs_replay([t for t in live if t["mode"] == m], replay_live).items() if k != "rows"}
                      for m in sorted({t["mode"] for t in live if t["mode"]})}
     return {"rows": rows + cf, "live_vs_replay": lv}
 

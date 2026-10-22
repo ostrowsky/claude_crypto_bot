@@ -133,7 +133,8 @@ class PaperBook:
                              "ts": r["ts"], "price": r["price"], "notional": r["notional"]})
             elif r["type"] == "exit":
                 acts.append({"type": "exit", "key": f"{r['sym']}|{r['tf']}|{_iso(r['entry_ts'])}", "sym": r["sym"],
-                             "tf": r["tf"], "ts": _iso(r["exit_time"]), "reason": r["reason"]})
+                             "tf": r["tf"], "ts": _iso(r["exit_time"]), "reason": r["reason"],
+                             "paper_ret_pct": r.get("ret_pct")})   # the per-trade replay of F1 (10-21)
         return acts
 
     def trim(self):
@@ -547,8 +548,10 @@ class Executor:
         p = self.positions.get(key)
         if p is None or p["state"] == "CLOSED":
             why = "already_closed" if key in self._closed_keys() else "no_real_position"
-            self._log("real_exit", now, key=key, sym=a["sym"], action="skip", reason=why, paper_reason=a.get("reason"))
+            self._log("real_exit", now, key=key, sym=a["sym"], action="skip", reason=why, paper_reason=a.get("reason"),
+                      paper_ret_pct=a.get("paper_ret_pct"))
             return
+        p["paper_ret_pct"] = a.get("paper_ret_pct")
         self._close_by_policy(p, now, a.get("reason") or "paper_exit")
 
     def _close_by_policy(self, p, now, reason):
@@ -606,7 +609,8 @@ class Executor:
         self.closed = self.closed[-CLOSED_KEEP:]
         self._log("real_exit", now, key=p["key"], sym=p["sym"], action="exit", reason=reason, pnl=pnl,
                   ret_pct=(pnl / p["cost"] * 100) if (pnl is not None and p["cost"]) else None,
-                  net_proceeds=net, dust_qty=dust, client_order_ids=list(p["client_order_ids"]))
+                  net_proceeds=net, dust_qty=dust, paper_ret_pct=p.get("paper_ret_pct"),
+                  client_order_ids=list(p["client_order_ids"]))
 
     # ----- poll
     def _poll(self, now):
