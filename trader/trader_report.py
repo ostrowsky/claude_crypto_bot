@@ -101,8 +101,10 @@ def build(day: str, day_rows, shadow_rows=None, demo_fills=None, exchange_rows=N
         L.append("  расчёт дня отсутствует (daily_revenue.py compute не отработал)")
     else:
         L.append(f"  статус: {cur.get('status')} -- {STATUS_RU.get(cur.get('status'), '')}")
+        bnb = cur.get("fee_reserve_contrib_pct")
         L.append(f"  R счёта {_f(cur.get('R_pct'), 4)}%, вклад стейблкоинов {_f(cur.get('stable_contrib_pct'), 4)}%, "
-                 f"выручка политики {_f(cur.get('R_policy_pct'), 4)}%")
+                 + (f"вклад запаса BNB {_f(bnb, 4)}%, " if bnb else "")
+                 + f"выручка политики {_f(cur.get('R_policy_pct'), 4)}%")
         if cur.get("reason"):
             L.append(f"  примечание: {cur['reason']}")
         L.append(f"  сверка счёт - учёт: {_f(cur.get('P_minus_L_pct'), 4)}% капитала")

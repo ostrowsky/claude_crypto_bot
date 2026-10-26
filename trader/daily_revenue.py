@@ -100,6 +100,7 @@ LIVE_SHARE_MIN = 0.95
 RESET_PCT = 0.5
 RECONCILE_PCT = 0.01
 QUOTE = "USDT"
+FEE_RESERVE = frozenset({"BNB"})   # held only to pay fees at the discount
 STABLES = frozenset({"USDC", "FDUSD", "TUSD", "USDP", "DAI", "BUSD", "USDE", "XUSD", "BFUSD", "PYUSD", "RLUSD", "USD1"})
 
 
@@ -144,7 +145,7 @@ def compute_day(day: str, snaps, fills) -> dict:
     day_fills = [f for f in fills if d0 <= _ts(f["time"]) < d1]
     rec = {"day": day, "schema": "daily_revenue.demo.v1", "snapshot_share": round(share, 4),
            "fills": len(day_fills), "provenance": None, "R_pct": None, "R_policy_pct": None,
-           "stable_contrib_pct": None, "P_minus_L_pct": None}
+           "stable_contrib_pct": None, "fee_reserve_contrib_pct": None, "P_minus_L_pct": None}
     m0, m1 = midnight_mark(snaps, d0), midnight_mark(snaps, d1)
     if m0 is None or m1 is None:
         rec.update(status="UNKNOWN", reason="no_midnight_mark" + ("_start" if m0 is None else "_end"))
@@ -160,7 +161,10 @@ def compute_day(day: str, snaps, fills) -> dict:
     if h0 is not None and h1 is not None:
         stable = sum(h["qty"] * (h1[a]["px"] - h["px"]) for a, h in h0.items() if a in STABLES and a in h1)
         rec["stable_contrib_pct"] = stable / e0 * 100
-        rec["R_policy_pct"] = rec["R_pct"] - rec["stable_contrib_pct"]
+        # the BNB fee reserve (2026-10-22) is not a position: its price move is not policy revenue either
+        reserve = sum(h["qty"] * (h1[a]["px"] - h["px"]) for a, h in h0.items() if a in FEE_RESERVE and a in h1)
+        rec["fee_reserve_contrib_pct"] = reserve / e0 * 100
+        rec["R_policy_pct"] = rec["R_pct"] - rec["stable_contrib_pct"] - rec["fee_reserve_contrib_pct"]
         q_end = _apply_fills({a: h["qty"] for a, h in h0.items()}, day_fills)
         px_end = {a: h["px"] for a, h in h1.items()}
         missing = [a for a, q in q_end.items() if abs(q) > 1e-12 and a not in px_end]

@@ -49,6 +49,7 @@ LOCK = EXEC_DIR / "executor.lock"
 HEARTBEAT = EXEC_DIR / "heartbeat.json"
 BOOK = "exec_x4"
 QUOTE = "USDT"
+BNB_FEE_RATE = 0.00075        # 0.10% x the demo BNB discount 0.75 (read from the account 2026-10-22)
 CLOSED_KEEP = 300
 
 
@@ -331,11 +332,28 @@ class Executor:
     def _closed_keys(self):
         return {p["key"] for p in self.closed}
 
-    def _fee_usdt(self, o, quote):
+    def _fee_info(self, o, quote, only_bnb=False):
+        """(fee in USDT, estimated?) of an order. A USDT commission counts as it is; a BNB commission (the demo
+        discount is on, 2026-10-22) is priced at BNBUSDT, or estimated at the discounted rate when that price is
+        unknown; a base-asset commission is already in the qty. No fills: the taker estimate as before."""
         fills = o.get("fills") or []
-        if fills:
-            return sum(float(f.get("commission") or 0) for f in fills if f.get("commissionAsset") == QUOTE)
-        return quote * 0.001                                 # no fills in the response: taker fee estimate
+        if not fills:
+            return (0.0, False) if only_bnb else (quote * 0.001, True)
+        fee, est = 0.0, False
+        for f in fills:
+            asset, c = f.get("commissionAsset"), float(f.get("commission") or 0)
+            if asset == QUOTE and not only_bnb:
+                fee += c
+            elif asset == "BNB":
+                try:
+                    fee += c * float(self.ex.price("BNB" + QUOTE))
+                except Exception:
+                    fee += float(f.get("price") or 0) * float(f.get("qty") or 0) * BNB_FEE_RATE
+                    est = True
+        return fee, est
+
+    def _fee_usdt(self, o, quote):
+        return self._fee_info(o, quote)[0]
 
     # ----- cycle
     def cycle(self, events, now, control_dir=None):
@@ -441,6 +459,8 @@ class Executor:
             return skip("not_filled", status=o.get("status"), client_order_ids=[cid])
         cost = float(o.get("cummulativeQuoteQty") or 0)
         fill = cost / executed
+        bnb_fee, fee_est = self._fee_info(o, cost, only_bnb=True)   # a BNB-paid buy fee is part of the cost
+        cost += bnb_fee
         p = {"key": key, "sym": sym, "tf": a["tf"], "entry_ts": a["ts"], "state": "FILLED", "buy_order_id": o.get("orderId"),
              "cost": cost, "executed_qty": executed, "fill_price": fill, "paper_price": float(a["price"]),
              "paper_notional": float(a["notional"]), "filled_at": now.isoformat(), "protected_at": None,
@@ -457,6 +477,7 @@ class Executor:
                   qty=executed, fill_price=fill, paper_price=float(a["price"]),
                   slippage_bps=(fill / float(a["price"]) - 1) * 1e4 if a.get("price") else None,
                   latency_sec=latency, policy_stop=ps, stop_price=p["stop_price"], protected=ok,
+                  fee_usdt=bnb_fee, fee_estimated=fee_est,
                   status=o.get("status"), client_order_ids=list(p["client_order_ids"]))
 
     def _place(self, call, sym, cid):
