@@ -831,6 +831,16 @@ Phase D (2026-10-13): task `CryptoBot_TraderDaily` (02:20 local) runs `trader/ru
 report `trader/runtime/reports/YYYY-MM-DD.txt`; Claude task `crypto-trader-daily-report` posts it to the chat at 09:00.
 No Telegram. Direction words need ≥ 10 counted days (`daily_revenue.MIN_DAYS_DIRECTION`)
 (`docs/specs/features/demo-ledger-d-1013-spec.md`).
+W1 (2026-10-28) — the trader must see ALL Binance spot coins (operator decision #2). Until W1, the executor and E7 read only
+the bot's 93 coins. Task `CryptoBot_TraderWideScan` runs `trader/run_wide_scan.cmd` every 5 min, limit 10 min, IgnoreNew.
+It calls `wide_scan.py step` (flag `WIDE_SCAN_ENABLED`; public GET only, no order). On every closed 15m bar it:
+- evaluates every pair of the universe — 508 on 10-28;
+- keeps their candles in `runtime/scan/bars/`;
+- writes `wide_gen` (the bot's entry rules) and `leader` / `surge` flags, the flags for measurement only;
+- runs the paper book `x4_wide` on the `wide_gen` entries;
+- appends learning rows to `runtime/learning/wide_candidates.jsonl`.
+The executor still trades the bot's 93 coins (operator, 10-28). Readout W-SHADOW no earlier than 2026-12-01: `x4_wide`
+vs E7 `x4_floor8` (`docs/specs/features/wide-scan-shadow-w1-1028-spec.md`).
 Phase C (2026-10-13): `trader/executor.py` executes the E7 book X4 at `TRADING_SCALE` 0.02 with a
 catastrophe stop 3% below the policy stop on the exchange; task `CryptoBot_TraderExecutor` (every 5 min,
 IgnoreNew) keeps it running. **C2 ON since 2026-10-20** (`TRADING_ENABLED = True`, `TRADING_MODE = "demo"`, operator): real orders on the DEMO account only; gate C after 7 days (>= 10-27). Rollback: `TRADING_ENABLED = False`. Control by files in

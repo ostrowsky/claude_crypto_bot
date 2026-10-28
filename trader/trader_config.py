@@ -59,6 +59,10 @@ SHADOW_PORTFOLIO_ENABLED: bool = True
 # no key, no order; runs inside run_shadow.cmd after the E7 step. Rollback: False (the step does nothing).
 FC_SHADOW_ENABLED: bool = True
 
+# ── W1 shadow scanner of the whole spot market (wide-scan-shadow-w1-1028-spec.md) ── public GET only, no key,
+# no order; candles, candidates and the x4_wide paper book in runtime/scan/. Rollback: False (the step does nothing).
+WIDE_SCAN_ENABLED: bool = True
+
 # ── Audit journals (trader-audit-log-1012-spec.md): every Binance request and every decision,
 # append-only, trader/runtime/audit/{exchange,decisions}/YYYY-MM-DD.jsonl. 0 = keep everything.
 AUDIT_EXCHANGE_ENABLED: bool = True
