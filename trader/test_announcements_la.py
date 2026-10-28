@@ -303,3 +303,80 @@ class TestIsolation(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestAuditRound1Fixes(unittest.TestCase):
+    """Manual audit 2026-10-28 (seed 1028): 13 of 50 wrong (26% > 10%), so the rules are fixed before any return is
+    computed (spec §3). Every title below is a real one from that sample."""
+
+    def check(self, source, catalog, cases, etype):
+        import announcements as AN
+        for title, tick in cases:
+            r = rec(source, title, catalog)
+            self.assertEqual(AN.classify(r), etype, title)
+            if tick is not None:
+                self.assertEqual(AN.extract_tickers(title, etype), tick, title)
+
+    def test_bybit_old_spot_format(self):
+        self.check("bybit", None, [("New listing: ELDA/USDT — 3,000,000 ELDA Up for Grabs!", ["ELDA"]),
+                                   ("New Listing: ZKF/USDT — Split a 180,000 USDT Prize Pool", ["ZKF"]),
+                                   ("New Listing: PTC/USDT — Grab a Share of the 850,000 PTC Prize Pool", ["PTC"]),
+                                   ("New listing: PUMP/USDT - Stake PUMP, BTC or USDT to earn a share of 2,500,000 PUMP",
+                                    ["PUMP"])], "BYBIT_SPOT_NEW")
+
+    def test_bybit_old_perp_formats(self):
+        self.check("bybit", None, [("Coming Soon: MEMEUSDT and CAKEUSDT Perpetual Contracts", ["MEME", "CAKE"]),
+                                   ("🔥New USTCUSDT and RAREUSDT Perpetual Contracts", ["USTC", "RARE"])], "BYBIT_PERP_NEW")
+        self.check("bybit", None, [("BDXNUSDT Perpetual Contract Moved from Main Board to Innovation Zone", None)],
+                   "BYBIT_OTHER")
+
+    def test_binance_will_list_inside_the_title_and_futures_availability(self):
+        self.check("binance", 48, [("Binance Announced the Second Batch of Vote to List Results and Will List Ondo (ONDO), "
+                                    "Big Time (BIGTIME), and Virtuals Protocol (VIRTUAL) With Seed Tag Applied",
+                                    ["ONDO", "BIGTIME", "VIRTUAL"]),
+                                   ("Binance Will List Giggle Fund (GIGGLE) and SynFutures (F) with Seed Tag Applied",
+                                    ["GIGGLE", "F"])], "BN_SPOT_NEW")
+        self.check("binance", 48, [("Yei Finance (CLO) Will Be Available on Binance Alpha and Binance Futures (2025-10-14)",
+                                    ["CLO"])], "BN_PERP_NEW")
+        self.check("binance", 48, [("Binance Adds AEVO (AEVO) on Earn, Convert, Margin & Futures", None),
+                                   ("Binance Futures Will List USDⓈ-M & COIN-M Quarterly 0326 Delivery Contracts", None),
+                                   ("Binance Options Will List LINK Contract", None)], "BN_OTHER")
+
+    def test_migration_window_spans_an_hour(self):
+        import announcements as AN
+        bulk = [rec("okx", f"OKX old post {k}", t="2023-03-03 07:%02d" % (9 + k * 2)) for k in range(23)]   # 07:09..07:53
+        normal = [rec("okx", "OKX to list Dash (DASH) for spot trading", t="2023-03-03 12:30"),
+                  rec("okx", "OKX to list WET (HumidiFi) for spot trading", t="2025-12-09 07:30")]
+        out = AN.drop_migrated(bulk + normal, min_cluster=20)
+        self.assertEqual(sorted(r["title"] for r in out), sorted(r["title"] for r in normal))
+
+
+class TestAuditRound2Fixes(unittest.TestCase):
+    """Audit round 2 (seed 1029, round-1 events excluded): 5 of 50 wrong (10%). Four are general format misses,
+    fixed here; the CATBNB title stays ambiguous and is counted as an error, without a rule made for it."""
+
+    def test_formats(self):
+        import announcements as AN
+        cases = [("bybit", "Coming Soon: AXL/USDT — 77,500 AXL Up for Grabs!", "BYBIT_SPOT_NEW", ["AXL"]),
+                 ("bybit", "🔥New EDUUSDT Contract", "BYBIT_PERP_NEW", ["EDU"]),
+                 ("okx", "OKX to list perpetual for DUCK crypto, along with its margin trading and Simple Earn",
+                  "OKX_PERP_NEW", ["DUCK"]),
+                 ("bybit", "Bybit to List GAIB (GAIB) on  Spot", "BYBIT_SPOT_NEW", ["GAIB"])]
+        for src, title, et, tick in cases:
+            self.assertEqual(AN.classify(rec(src, title)), et, title)
+            self.assertEqual(AN.extract_tickers(title, et), tick, title)
+
+
+class TestAuditRound3Fixes(unittest.TestCase):
+    """Control audit round 3 (seed 1030, rounds 1-2 excluded): 4 of 50 wrong (8%), within the spec's 10%. Three are
+    general misses fixed after the estimate was taken, so 8% is an upper bound for the final rules."""
+
+    def test_formats(self):
+        import announcements as AN
+        cases = [("bybit", "Listing of PRIME/USDT on Mar 1, 2023", "BYBIT_SPOT_NEW", ["PRIME"]),
+                 ("binance", "Binance Margin Adds ACE, BONK, XNO & More Pairs", "BN_MARGIN", ["ACE", "BONK", "XNO"]),
+                 ("okx", "OKX to list perpetual for S crypto, along with its margin trading and Simple Earn",
+                  "OKX_PERP_NEW", ["S"])]
+        for src, title, et, tick in cases:
+            self.assertEqual(AN.classify(rec(src, title, 48 if src == "binance" else None)), et, title)
+            self.assertEqual(AN.extract_tickers(title, et), tick, title)

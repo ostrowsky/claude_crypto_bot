@@ -109,13 +109,27 @@ class AnnouncementStore:
         return added
 
 
-def drop_migrated(records, min_cluster: int = MIGRATION_CLUSTER) -> list:
-    """Bulk re-posts carry one shared time (OKX 2023-03-03 07:53): their publication time is false (journal 10-28)."""
-    cnt = {}
-    for r in records:
-        k = (r["source"], r["t_pub"] // 60_000)
-        cnt[k] = cnt.get(k, 0) + 1
-    return [r for r in records if cnt[(r["source"], r["t_pub"] // 60_000)] < min_cluster]
+MIGRATION_WINDOW_MS = 60 * 60_000
+
+
+def drop_migrated(records, min_cluster: int = MIGRATION_CLUSTER, window_ms: int = MIGRATION_WINDOW_MS) -> list:
+    """Bulk re-posts carry false publication times (OKX 2023-03-03 07:09..07:54). Any record inside a window of
+    `window_ms` holding >= min_cluster records of one source is dropped (audit 10-28: one minute was too narrow)."""
+    bad = set()
+    by_src = {}
+    for k, r in enumerate(records):
+        by_src.setdefault(r["source"], []).append((r["t_pub"], k))
+    for items in by_src.values():
+        items.sort()
+        j = 0
+        for i in range(len(items)):
+            if j < i:
+                j = i
+            while j + 1 < len(items) and items[j + 1][0] - items[i][0] < window_ms:
+                j += 1
+            if j - i + 1 >= min_cluster:
+                bad.update(k for _, k in items[i:j + 1])
+    return [r for k, r in enumerate(records) if k not in bad]
 
 
 def backfill(fetch_page, parse, since_ms: int, max_pages: int = 500) -> list:
@@ -141,17 +155,20 @@ def classify(r: dict) -> str:
     if src == "binance":
         if r.get("catalog") == 161:
             return "BN_DELIST" if re.match(r"Binance Will Delist ", t) else "BN_OTHER"
-        if re.search(r"Binance Futures (Will Launch|Will Relaunch|to Relaunch)\b.*Perpetual", t):
+        if (re.search(r"Binance Futures (Will Launch|Will Relaunch|to Relaunch)\b.*Perpetual", t)
+                or re.search(r"Will Be Available on Binance .*Futures", t)):
             if _EXCLUDE_ASSET.search(t) or not extract_tickers(t, "BN_PERP_NEW"):
                 return "BN_OTHER"
             return "BN_PERP_NEW"
-        if re.search(r"Binance Will Add .* on (Earn|Buy Crypto|Convert)", t) or "Collateral" in t:
+        if re.search(r"Binance (Will Add|Adds) .* on (Earn|Buy Crypto|Convert)", t) or "Collateral" in t:
             return "BN_OTHER"
-        if (re.match(r"Binance (Will List|Lists|Will Continue to List)\b", t)
+        if re.search(r"(Futures|Options) Will List", t):
+            return "BN_OTHER"
+        if (re.match(r"Binance (Lists|Will Continue to List)\b", t) or re.search(r"\bWill List\b", t)
                 or re.match(r"Binance Exchange Adds .*Trading Pairs? on Binance Spot", t)
                 or re.match(r"Introducing .* on Binance (HODLer Airdrops|Launchpool)", t)):
             return "BN_SPOT_NEW"
-        if re.search(r"Margin", t) and re.match(r"Binance (Adds|Margin Will Add)\b", t):
+        if re.search(r"Margin", t) and re.match(r"Binance (Adds|Margin Will Add|Margin Adds)\b", t):
             return "BN_MARGIN"
         return "BN_OTHER"
     if src == "okx":
@@ -159,15 +176,19 @@ def classify(r: dict) -> str:
             return "OKX_OTHER"
         if re.search(r"for spot trading", t) and re.match(r"OKX (to list|will launch)\b", t):
             return "OKX_SPOT_NEW"
-        if re.match(r"OKX to list\b", t) and (re.search(r"perpetual futures for .* crypto", t) or re.search(r"\bX-Perp\b", t)):
+        if re.match(r"OKX to list\b", t) and (re.search(r"perpetual( futures)? for .* crypto", t) or re.search(r"\bX-Perp\b", t)):
             return "OKX_PERP_NEW"
         return "OKX_OTHER"
     if src == "bybit":
         if _EXCLUDE_ASSET.search(t) or re.search(r"^Converting|Postponement|Token Splash|Convert &|Savings", t):
             return "BYBIT_OTHER"
-        if re.match(r"Bybit to List .* on Spot\s*$", t.strip()):
+        if (re.match(r"Bybit to List .* on\s+Spot\s*$", t.strip())
+                or re.match(r"(New listing|Coming Soon)\s*:\s*[A-Z0-9]{1,15}/USDT\b", t, re.I)
+                or re.match(r"Listing of [A-Z0-9]{1,15}/USDT\b", t)):
             return "BYBIT_SPOT_NEW"
-        if re.search(r"New listing\s*:", t, re.I) and re.search(r"Perpetual", t) or re.match(r"Listing of \w+USDT on Bybit Perpetual", t):
+        if (re.search(r"New listing\s*:", t, re.I) and re.search(r"Perpetual", t)
+                or re.match(r"Listing of \w+USDT on Bybit Perpetual", t)
+                or re.match(r"^(🔥\s*)?(New|Coming Soon:)\s*[A-Z0-9]+USDT\b.*Contract", t)):
             return "BYBIT_PERP_NEW"
         return "BYBIT_OTHER"
     return "OTHER"
@@ -177,7 +198,8 @@ _TICK = r"[A-Z0-9]{2,15}"
 
 
 def _paren(t: str) -> list:
-    return [x for x in re.findall(r"\(([^()]+)\)", t) if re.fullmatch(_TICK, x) and not re.fullmatch(r"\d+", x)]
+    """Tickers in parentheses; one letter allowed there ("SynFutures (F)", audit 10-28), digits-only never."""
+    return [x for x in re.findall(r"\(([^()]+)\)", t) if re.fullmatch(r"[A-Z0-9]{1,15}", x) and not re.fullmatch(r"\d+", x)]
 
 
 def _uniq(xs) -> list:
@@ -195,15 +217,19 @@ def extract_tickers(title: str, etype: str) -> list:
         if a:
             return _uniq(a)
         m = re.search(r"USDⓈ-M ([A-Z0-9]{2,15}) Perpetual", t) or re.search(r"\b([A-Z0-9]{2,15}) USDT-Margined Perpetual", t)
-        return [m.group(1)] if m else []
+        if m:
+            return [m.group(1)]
+        return _uniq(_paren(t))                       # "Yei Finance (CLO) Will Be Available on ... Binance Futures"
     if etype in ("BN_SPOT_NEW", "OKX_SPOT_NEW", "BYBIT_SPOT_NEW"):
         p = _paren(t)
         if p:
             return _uniq(p)
-        m = re.search(r"launch ([A-Z0-9]{2,15})/USD", t) or re.search(r"\bto list ([A-Z0-9]{2,15})\b", t)
+        m = (re.search(r"launch ([A-Z0-9]{2,15})/USD", t) or re.search(r"\bto list ([A-Z0-9]{2,15})\b", t)
+             or re.search(r"(?:New listing|Coming Soon)\s*:\s*([A-Z0-9]{1,15})/USDT\b", t, re.I)
+             or re.match(r"Listing of ([A-Z0-9]{1,15})/USDT\b", t))
         return [m.group(1)] if m else []
     if etype == "BN_MARGIN":
-        m = re.match(r"Binance Adds (.+?)\s+(?:&|on\b)", t)
+        m = re.match(r"Binance (?:Margin )?Adds (.+?)\s+(?:&|on\b)", t)
         if not m:
             return []
         parts = re.split(r",\s*|\s+and\s+", m.group(1))
@@ -214,10 +240,11 @@ def extract_tickers(title: str, etype: str) -> list:
             return []
         return _uniq(x.strip() for x in re.split(r",\s*|\s+and\s+", m.group(1)) if re.fullmatch(_TICK, x.strip()))
     if etype == "OKX_PERP_NEW":
-        m = re.search(r"perpetual futures for (.+?) crypto", t)
+        m = re.search(r"perpetual(?: futures)? for (.+?) crypto", t)
         if m:
             body = re.sub(r"\([^)]*\)", "", m.group(1))
-            return _uniq(x.strip() for x in re.split(r",\s*|\s+and\s+", body) if re.fullmatch(_TICK, x.strip()))
+            # one letter allowed here: "perpetual for S crypto" (Sonic, audit 10-28)
+            return _uniq(x.strip() for x in re.split(r",\s*|\s+and\s+", body) if re.fullmatch(r"[A-Z0-9]{1,15}", x.strip()))
         m = re.search(r"\b([A-Z0-9]{2,15})USD X-Perp", t)
         return [m.group(1)] if m else []
     if etype == "BYBIT_PERP_NEW":
