@@ -354,6 +354,24 @@ def book_events(events) -> list:
     return [e for e in events if e.get("event") == "entry" and e.get("source") == "wide_gen"]
 
 
+_TF_ORDER = {"15m": 0, "1h": 1}
+
+
+def book_filter(events, held) -> tuple:
+    """One position per coin, as the executor (reason asset_held; defect 2026-10-28: a 15m and a 1h entry of one coin on
+    the same bar opened two positions). Earliest event per coin wins, 15m before 1h on a tie; time order is kept.
+    -> (kept, [(event, reason)])"""
+    held = set(held)
+    kept, skipped = [], []
+    for e in sorted(events, key=lambda e: (str(e.get("ts")), _TF_ORDER.get(e.get("tf"), 9), str(e.get("sym")))):
+        if e.get("sym") in held:
+            skipped.append((e, "asset_held"))
+            continue
+        held.add(e.get("sym"))
+        kept.append(e)
+    return kept, skipped
+
+
 # ------------------------------------------------------------------ step (spec §2.3)
 def default_gen():
     import candidate_gen as CG
@@ -597,6 +615,26 @@ def bot_symbols(max_bytes: int = 30_000_000) -> set:
     return out
 
 
+def reset_book(root: Path = ROOT, stamp: str | None = None) -> dict:
+    """Archive the x4_wide state and ledger (never deleted) and start a new book that reads events only after now."""
+    import shadow_portfolio as SP
+    stamp = stamp or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M")
+    sd = Path(root) / "shadow"
+    sd.mkdir(parents=True, exist_ok=True)
+    n = 0
+    for name, ext in (("state", ".json"), ("ledger", ".jsonl")):
+        p = sd / f"{name}{ext}"
+        if p.exists():
+            p.replace(sd / f"{name}.pre_reset_{stamp}{ext}")
+            n += 1
+    evp = Path(root) / "events.jsonl"
+    size = evp.stat().st_size if evp.exists() else 0
+    now = datetime.now(timezone.utc).isoformat()
+    SP.save_state(sd / "state.json", {"tail": {"offset": size, "seen": []}, "books": None, "started_utc": now,
+                                      "reset_utc": now})
+    return {"archived": n, "offset": size, "stamp": stamp}
+
+
 def book_step(root: Path, now: datetime) -> dict:
     import exchange_client as X
     import fill_model as FM
@@ -621,16 +659,20 @@ def book_step(root: Path, now: datetime) -> dict:
         if b.cur_day is None:
             b.cur_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
             b.day_start_eq.setdefault(b.cur_day.strftime("%Y-%m-%d"), b.cash)
-    evs = book_events(tail.read_new())
+    held = {p["sym"] for b in eng.books.values() for p in b.positions}
+    evs, skipped = book_filter(book_events(tail.read_new()), held)
     eng.process(evs, now)
     st["books"] = eng.to_state()
     st["last_step_utc"] = now.isoformat()
-    if eng.ledger:
+    rows = [{"type": "skip", "book": "x4_wide", "sym": e.get("sym"), "tf": e.get("tf"), "ts": e.get("ts"), "reason": r}
+            for e, r in skipped] + list(eng.ledger)
+    if rows:
         with io.open(ledger_p, "a", encoding="utf-8") as fh:
-            for r in eng.ledger:
+            for r in rows:
                 fh.write(json.dumps(r, ensure_ascii=False, default=str) + "\n")
     SP.save_state(state_p, st)
-    return {"events": len(evs), "open": {n: len(b.positions) for n, b in eng.books.items()}}
+    return {"events": len(evs), "skipped_held": len(skipped),
+            "open": {n: len(b.positions) for n, b in eng.books.items()}}
 
 
 class LockedWriter:

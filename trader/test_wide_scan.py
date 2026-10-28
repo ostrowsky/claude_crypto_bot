@@ -303,6 +303,52 @@ class TestBook(unittest.TestCase):
         self.assertEqual(list(W.POLICIES), ["x4_wide"])
 
 
+class TestOnePositionPerCoin(unittest.TestCase):
+    """Defect 2026-10-28: x4_wide opened AXTIB, BB and BIGTIME twice (a 15m and a 1h entry on the same bar). The executor
+    skips a second entry into a held coin (reason asset_held), so the book must not double either."""
+
+    def test_filter_held_and_same_batch_duplicates(self):
+        import wide_scan as W
+        e = lambda s, tf, ts: {"event": "entry", "source": "wide_gen", "sym": s, "tf": tf, "ts": ts}  # noqa: E731
+        evs = [e("A", "1h", "2026-10-28T14:00:00+00:00"), e("A", "15m", "2026-10-28T14:00:00+00:00"),
+               e("B", "15m", "2026-10-28T14:00:00+00:00"), e("C", "15m", "2026-10-28T14:15:00+00:00"),
+               e("C", "15m", "2026-10-28T14:00:00+00:00"), e("D", "15m", "2026-10-28T14:00:00+00:00")]
+        kept, skipped = W.book_filter(evs, held={"B"})
+        self.assertEqual([(x["sym"], x["tf"], x["ts"][11:16]) for x in kept],
+                         [("A", "15m", "14:00"), ("C", "15m", "14:00"), ("D", "15m", "14:00")])
+        self.assertEqual(sorted((x["sym"], r) for x, r in skipped),
+                         [("A", "asset_held"), ("B", "asset_held"), ("C", "asset_held")])
+        self.assertEqual([x["ts"] for x in kept], sorted(x["ts"] for x in kept))     # time order kept
+
+    def test_reset_archives_and_starts_from_now(self):
+        """Reset 2026-10-28: the old book is archived, not deleted; the new one reads events only after the reset."""
+        import shadow_portfolio as SP
+        import wide_scan as W
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            (root / "shadow").mkdir()
+            (root / "shadow" / "state.json").write_text(json.dumps({"tail": {"offset": 10, "seen": []}, "books": {"x": 1}}),
+                                                       encoding="utf-8")
+            (root / "shadow" / "ledger.jsonl").write_text('{"type": "entry"}\n', encoding="utf-8")
+            (root / "events.jsonl").write_text('{"event": "entry", "source": "wide_gen", "sym": "OLD"}\n', encoding="utf-8")
+            info = W.reset_book(root, stamp="20261028T1700")
+            self.assertTrue((root / "shadow" / "state.pre_reset_20261028T1700.json").exists())
+            self.assertTrue((root / "shadow" / "ledger.pre_reset_20261028T1700.jsonl").exists())
+            self.assertFalse((root / "shadow" / "ledger.jsonl").exists())
+            st = SP.load_state(root / "shadow" / "state.json")
+            self.assertIsNone(st["books"])
+            self.assertEqual(st["tail"]["offset"], (root / "events.jsonl").stat().st_size)
+            self.assertEqual(info["archived"], 2)
+            with open(root / "events.jsonl", "a", encoding="utf-8") as fh:
+                fh.write('{"event": "entry", "source": "wide_gen", "sym": "NEW", "tf": "15m", "ts": "t"}\n')
+            new = SP.EventTail(root / "events.jsonl", st["tail"]).read_new()
+            self.assertEqual([e["sym"] for e in new], ["NEW"])
+
+    def test_book_step_applies_the_filter(self):
+        src = (HERE / "wide_scan.py").read_text(encoding="utf-8")
+        self.assertIn("book_filter(book_events(tail.read_new())", src)
+
+
 # --------------------------------------------------------------------------- 7. learning rows
 class TestLearning(unittest.TestCase):
     def test_row_has_no_future_features(self):
