@@ -865,6 +865,20 @@ step; started 2026-10-22, S = 2026-10-23; readout FC-SHADOW (`READOUT_FC.json`) 
 order/test only, never a position; run by Claude at the operator's request): futures wallet 5 000 USDT, BTCUSDT/ETHUSDT
 ISOLATED + leverage 1, one-way; demo taker 0.04% (model 0.05%, kept); demo funding is the flat 0.0001, not live. `experiment_fc.judge` computes the interval at 1 − α.
 
+Hypotheses of 2026-10-28 (`docs/specs/features/trader-hypotheses-1028-spec.md` §5), all checked on train 2023-03..2025-12
+only; the 2026 window was not opened for any of them:
+- **TM: BTC/ETH spot timing (trend, vol-managed, funding overheat) is REJECTED, 0 of 20.** None beats a circular-shift
+  random timing of the same schedule, none beats buy-and-hold. Best vs constant exposure: T_sma_56 +0.027 [−0.039, +0.093]
+  (`btc-eth-timing-tm-1028-spec.md`).
+- **FS: FC carry switched on by funding is REJECTED, 0 of 9.** Every candidate is worse than always-on FC_PASSIVE; keep the
+  carry on (`fc-switch-n4-1028-spec.md`).
+- **N7: seasonality is REJECTED.** No hour or weekday survives a 74-window correction, and a 2026 test would have 3–7% power
+  (`seasonality-n7-1028-spec.md`).
+- Open, each waiting for an operator decision:
+  - N3 quarterly basis: needs the history download. The demo lists BTC/ETH quarterlies;
+  - N6 shorting new listings;
+  - N8 low-volatility alts, a single 2026 look.
+
 ### ML promotion at matched admission — SHADOW (2026-10-09)
 
 The promotion gate kept the 10-01 ML model **7 nights running** (10-02..10-08), "clearly worse on
