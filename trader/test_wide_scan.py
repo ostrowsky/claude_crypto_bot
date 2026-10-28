@@ -468,3 +468,40 @@ class TestIsolation(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestDailyReportBlock(unittest.TestCase):
+    """wide-scan-shadow-w1-1028-spec.md §3 (operator 2026-10-28: the W1 metrics go into the trader's daily report)."""
+
+    def wide(self, **kw):
+        r = {"day": "2026-10-29",
+             "coverage": {"bars_share": 1.0, "pair_share": 0.998, "latency_p50": 150.0, "latency_p95": 260.0},
+             "leaders": [f"L{k}USDT" for k in range(20)],
+             "early_seen": {"n_leaders": 20, "n_flagged_leaders": 9, "flagged_before_cross": 2, "share_before_cross": 0.1,
+                            "n_flagged_pairs": 60, "flagged_hit_share": 0.15, "n_pairs_day": 500, "base_rate": 0.04,
+                            "move_done_at_flag_median": 0.55},
+             "early_seen_outside_bot": {"n_leaders": 15, "n_flagged_leaders": 7, "flagged_before_cross": 1,
+                                        "share_before_cross": 1 / 15, "n_flagged_pairs": 60, "flagged_hit_share": 0.12,
+                                        "n_pairs_day": 500, "base_rate": 0.03, "move_done_at_flag_median": 0.6},
+             "x4_wide_day": -0.12, "x4_floor8_day": -0.30, "disk_mb": 60.0}
+        r.update(kw)
+        return r
+
+    def test_block_with_base_rate(self):
+        import trader_report as TR
+        txt = TR.build("2026-10-29", [], wide=self.wide())
+        self.assertIn("Весь рынок", txt)
+        for s in ("2 из 20", "база", "4.0%", "вне 93", "1 из 15", "x4_wide", "-0.120", "x4_floor8", "-0.300", "55%"):
+            self.assertIn(s, txt, s)
+
+    def test_no_scanner_data(self):
+        import trader_report as TR
+        txt = TR.build("2026-10-29", [], wide={"day": "2026-10-29", "coverage": None, "leaders": None})
+        self.assertIn("Весь рынок", txt)
+        self.assertIn("нет данных", txt)
+        self.assertNotIn("из 20", txt)
+
+    def test_report_main_passes_the_scanner(self):
+        src = (HERE / "trader_report.py").read_text(encoding="utf-8")
+        self.assertIn("wide_scan", src)
+        self.assertIn("wide=", src)

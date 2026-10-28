@@ -93,8 +93,38 @@ def _executor_block(day: str, rows) -> list:
     return L
 
 
+def _pct(v, nd=1):
+    return "н/д" if v is None else f"{v * 100:.{nd}f}%"
+
+
+def _seen_line(label: str, es) -> str:
+    if not es or not es.get("n_leaders"):
+        return f"  {label}: лидеров нет"
+    return (f"  {label}: помечены до +2.5% -- {es['flagged_before_cross']} из {es['n_leaders']}, "
+            f"помечены вообще -- {es['n_flagged_leaders']}; к моменту метки прошло (медиана) "
+            f"{_pct(es.get('move_done_at_flag_median'), 0)} движения дня; "
+            f"база: помечено пар {es['n_flagged_pairs']} из {es.get('n_pairs_day') or 'н/д'}, из них лидеров "
+            f"{_pct(es.get('flagged_hit_share'))}, доля лидеров среди всех пар {_pct(es.get('base_rate'))}")
+
+
+def _wide_block(w) -> list:
+    """W1 scanner of the whole spot market (wide-scan-shadow-w1-1028-spec.md §3)."""
+    L = ["5. Весь рынок (сканер W1, все пары спота)"]
+    if not w or not w.get("coverage") or not w.get("leaders"):
+        L.append("  нет данных сканера за эти сутки (сутки не полные или сканер не работал)")
+        return L
+    c = w["coverage"]
+    L.append(f"  покрытие: баров {_pct(c.get('bars_share'))}, пар на баре {_pct(c.get('pair_share'))}, "
+             f"задержка от закрытия бара p50 {c.get('latency_p50', 0):.0f} c / p95 {c.get('latency_p95', 0):.0f} c")
+    L.append(_seen_line(f"топ-{len(w['leaders'])} рынка", w.get("early_seen")))
+    L.append(_seen_line("из них вне 93 монет бота", w.get("early_seen_outside_bot")))
+    L.append(f"  теневая книга x4_wide (все пары): R за сутки {_f(w.get('x4_wide_day'))}%; "
+             f"x4_floor8 (93 монеты бота): {_f(w.get('x4_floor8_day'))}%")
+    return L
+
+
 def build(day: str, day_rows, shadow_rows=None, demo_fills=None, exchange_rows=None, snapshot_share=None,
-          shadow_R=None, executor_rows=None) -> str:
+          shadow_R=None, executor_rows=None, wide=None) -> str:
     rows = list(day_rows.values()) if isinstance(day_rows, dict) else list(day_rows or [])
     cur = next((r for r in sorted(rows, key=lambda r: r.get("revision", 0), reverse=True) if r["day"] == day), None)
     L = [f"Трейдер, демо-счёт: отчёт за {day} (сутки UTC)", ""]
@@ -164,6 +194,9 @@ def build(day: str, day_rows, shadow_rows=None, demo_fills=None, exchange_rows=N
         codes[k] = codes.get(k, 0) + 1
     for k, v in sorted(codes.items(), key=lambda kv: -kv[1])[:5]:
         L.append(f"    {k}: {v}")
+    if wide is not None:
+        L.append("")
+        L.extend(_wide_block(wide))
     return "\n".join(L) + "\n"
 
 
@@ -171,6 +204,15 @@ def _jsonl(p: Path) -> list:
     if not p.exists():
         return []
     return [json.loads(x) for x in p.read_text(encoding="utf-8").splitlines() if x.strip()]
+
+
+def _wide_report(day: str):
+    """The W1 scanner's day (wide_scan.report); a failure there never breaks the daily report."""
+    try:
+        import wide_scan
+        return wide_scan.report(day)
+    except Exception as ex:
+        return {"day": day, "coverage": None, "leaders": None, "error": repr(ex)[:200]}
 
 
 def main(argv=None) -> int:
@@ -191,7 +233,7 @@ def main(argv=None) -> int:
                 demo_fills=_jsonl(TC.RUNTIME / "trading" / "ledger.jsonl"),
                 exchange_rows=AR.load("exchange", 3), snapshot_share=cur.get("snapshot_share"), shadow_R=shadow_R,
                 executor_rows=[r for r in AR.load("decisions", 3) if r.get("process") == "executor"
-                               or r.get("book") == "exec_x4"])
+                               or r.get("book") == "exec_x4"], wide=_wide_report(day))
     out = TC.RUNTIME / "reports" / f"{day}.txt"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(txt, encoding="utf-8")
