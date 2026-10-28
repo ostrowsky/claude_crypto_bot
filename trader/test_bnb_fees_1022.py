@@ -104,3 +104,23 @@ class TestDailyRevenueBnbReserve(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestRoundTripInsideTheDay(unittest.TestCase):
+    """Bug 2026-10-25 / 10-28: daily_revenue.compute crashed with KeyError 'FLOKI' / 'COMP' -- a coin bought AND
+    sold within the day ends at qty 0, it is in neither midnight snapshot, and the reconciliation sum still
+    looked its price up (the 'missing price' check skips zero quantities, the sum did not). Days 10-24 and 10-27
+    had no revenue row."""
+
+    def test_coin_bought_and_sold_within_the_day(self):
+        import daily_revenue as DR
+        h = {"USDT": {"qty": 5000.0, "px": 1.0}, "USDC": {"qty": 5000.0, "px": 1.0}}
+        t = D0 + timedelta(hours=3)
+        fills = [{"symbol": "FLOKIUSDT", "side": "BUY", "qty": 1000.0, "quote_qty": 20.0, "commission": 0.02,
+                  "commission_asset": "USDT", "time": t.isoformat()},
+                 {"symbol": "FLOKIUSDT", "side": "SELL", "qty": 1000.0, "quote_qty": 20.0, "commission": 0.02,
+                  "commission_asset": "USDT", "time": (t + timedelta(hours=2)).isoformat()}]
+        hold = lambda tt: dict(h, USDT={"qty": 5000.0 - (0.04 if tt > t + timedelta(hours=2) else 0.0), "px": 1.0})  # noqa: E731
+        rec = DR.compute_day(D0.strftime("%Y-%m-%d"), day_snaps(D0, hold), fills=fills)
+        self.assertEqual(rec["status"], "FULL")
+        self.assertAlmostEqual(rec["P_minus_L_pct"], 0.0, places=6)

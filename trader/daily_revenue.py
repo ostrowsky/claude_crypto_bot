@@ -171,7 +171,8 @@ def compute_day(day: str, snaps, fills) -> dict:
         if missing:
             rec["L_missing_price"] = sorted(missing)
         else:
-            L = sum(q * px_end[a] for a, q in q_end.items())
+            # a coin bought and sold within the day ends at 0 and is in neither snapshot (bug 10-25/10-28)
+            L = sum(q * px_end[a] for a, q in q_end.items() if abs(q) > 1e-12)
             rec["L_equity"] = L
             rec["P_minus_L_pct"] = (e1 - L) / e0 * 100
             gap = abs(rec["P_minus_L_pct"])
