@@ -874,10 +874,16 @@ only; the 2026 window was not opened for any of them:
   carry on (`fc-switch-n4-1028-spec.md`).
 - **N7: seasonality is REJECTED.** No hour or weekday survives a 74-window correction, and a 2026 test would have 3–7% power
   (`seasonality-n7-1028-spec.md`).
-- Open, each waiting for an operator decision:
-  - N3 quarterly basis: needs the history download. The demo lists BTC/ETH quarterlies;
-  - N6 shorting new listings;
-  - N8 low-volatility alts, a single 2026 look.
+- **N8, low-volatility alts: REJECTED on its single 2026 look** (operator-approved, k = 1). R −0.065 [−0.261, +0.088];
+  vs equal weight −0.037 (`lowvol-alts-n8-1028-spec.md`).
+- **MD, multi-day spot holds (2–10 days): REJECTED on train in both rows** (`multiday-spot-md-1028-spec.md`).
+  - Bot entries on the X4 book: 0 of 9, all R < 0. Best is the 8% trail held 10 days, −0.071 %/day against X4 −0.328.
+  - Breakout / dip / volume events on the top-100 spot universe: 0 of 9, all worse than equal weight, PBO 0.97.
+- **RV, BTC↔ETH rotation: 1 of 6 admitted on train, on the edge.** RV_mom_56: vs 50/50 +0.022 [−0.034, +0.086];
+  it holds BTC 68% of days and stays below BH BTC. The 2026 test awaits the operator (`btc-eth-rotation-rv-1028-spec.md`).
+- Deferred by the operator (10-28: check all spot hypotheses before shorts and futures):
+  - N3 quarterly basis — it needs a futures short;
+  - N6 shorting listings.
 
 ### ML promotion at matched admission — SHADOW (2026-10-09)
 
