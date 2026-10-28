@@ -846,8 +846,11 @@ LA (2026-10-28) — exchange announcements as information that comes before the 
   `announcements.py step` (flag `ANNOUNCEMENTS_ENABLED`; public read-only GET, no order).
 - Sources: Binance CMS catalogs 48 and 161, OKX new listings, Bybit new_crypto. Store: `runtime/announcements/`.
 - History since 2023-01 is downloaded: Binance 1 606, OKX 988, Bybit 1 724.
-- Next steps: a manual audit of 50 labelled events, then the money test on train 2023-03..2025-12
-  (`docs/specs/features/listing-announcements-la-1028-spec.md`).
+- Labelling passed a control audit: 8% errors on 50 events.
+- **The money test is REJECTED on train, 0 of 40; the 2026 test is not opened.**
+  - Announcements FOLLOW the move: Binance new-perp coins are +14.7% in the 24 h before the announcement, 51% >= +2.5%.
+  - After the announcement they fall.
+  - Do not re-test longs on these announcement types (`docs/specs/features/listing-announcements-la-1028-spec.md` §8).
 Phase C (2026-10-13): `trader/executor.py` executes the E7 book X4 at `TRADING_SCALE` 0.02 with a
 catastrophe stop 3% below the policy stop on the exchange; task `CryptoBot_TraderExecutor` (every 5 min,
 IgnoreNew) keeps it running. **C2 ON since 2026-10-20** (`TRADING_ENABLED = True`, `TRADING_MODE = "demo"`, operator): real orders on the DEMO account only; gate C after 7 days (>= 10-27). Rollback: `TRADING_ENABLED = False`. Control by files in
