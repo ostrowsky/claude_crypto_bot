@@ -55,7 +55,10 @@ def _window(rows: list, day: str, n: int | None) -> str:
     if not a.get("n_days"):
         return f"  {label}: нет засчитанных дней (исключено {excluded})"
     fb = f", из них {fallback} по R счёта (стейблкоины не отделены)" if fallback else ""
-    return (f"  {label}: {_f(a['mean_pct'])} %/день [{_f(a['lo95'])}, {_f(a['hi95'])}], дней {a['n_days']}{fb}, "
+    # below two bootstrap blocks the interval is degenerate (n = 7, block 5 -> 3 block starts), so no bounds
+    ci = (f"[{_f(a['lo95'])}, {_f(a['hi95'])}]" if a["n_days"] >= DR.MIN_DAYS_DIRECTION
+          else f"ДИ не определён (< {DR.MIN_DAYS_DIRECTION} дней)")
+    return (f"  {label}: {_f(a['mean_pct'])} %/день {ci}, дней {a['n_days']}{fb}, "
             f"исключено {excluded}, итог {_f(a['compound_pct'], 2)}% -> {DR.verdict_text(a)}")
 
 
@@ -114,7 +117,8 @@ def build(day: str, day_rows, shadow_rows=None, demo_fills=None, exchange_rows=N
     L.append("2. Окна (выручка политики, только FULL + BOT_DOWN, 95% ДИ)")
     for n in (7, 30, None):
         L.append(_window(rows, day, n))
-    L.append("  Направление называется, только если ДИ не включает 0; иначе -- рано судить.")
+    L.append(f"  Направление называется, только если дней >= {DR.MIN_DAYS_DIRECTION} и ДИ не включает 0; "
+             "иначе -- рано судить.")
     L.append("")
 
     L.append("3. Сделки предыдущего дня")

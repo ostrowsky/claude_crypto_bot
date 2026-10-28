@@ -265,3 +265,29 @@ class TestBoundary(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestReportIntervalBelowTenDays(unittest.TestCase):
+    """Gate C readout 2026-10-28: the 7-day window printed [-0.061, -0.033] around a mean of -0.035 with sd 0.040 --
+    with a 5-day block and n = 7 the bootstrap has 3 block starts and the interval is degenerate. Below
+    MIN_DAYS_DIRECTION the report must not print bootstrap bounds at all."""
+
+    def rows(self, n):
+        vals = [-0.016, -0.106, -0.069, -0.036, -0.025, 0.015, -0.012, 0.02, -0.03, 0.01, -0.04, 0.005]
+        return [{"day": f"2026-10-{d + 1:02d}", "status": "FULL", "R_pct": 0.0, "R_policy_pct": vals[d],
+                 "stable_contrib_pct": 0.0} for d in range(n)]
+
+    def test_seven_days_no_bounds(self):
+        import trader_report as TR
+        line = TR._window(self.rows(7), "2026-10-07", 7)
+        self.assertNotIn("[", line)
+        self.assertNotIn("-0.033", line)
+        self.assertIn("ДИ не определён", line)
+        self.assertIn("-0.036", line)                       # the mean is still shown
+        self.assertIn("рано судить", line)
+
+    def test_ten_days_bounds_shown(self):
+        import trader_report as TR
+        line = TR._window(self.rows(10), "2026-10-10", None)
+        self.assertIn("[", line)
+        self.assertNotIn("ДИ не определён", line)
