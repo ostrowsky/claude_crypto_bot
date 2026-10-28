@@ -759,6 +759,13 @@ W1 (2026-10-28) — трейдер должен видеть ВСЕ монеты
 - дописывает строки обучения в `runtime/learning/wide_candidates.jsonl`.
 Исполнитель по-прежнему торгует 93 монеты бота (оператор, 10-28). Разбор W-SHADOW не раньше 2026-12-01: `x4_wide`
 против E7 `x4_floor8` (`docs/specs/features/wide-scan-shadow-w1-1028-spec.md`).
+LA (2026-10-28) — объявления бирж как информация, которая приходит раньше движения цены.
+- Задача `CryptoBot_TraderAnnouncements` каждые 5 мин (лимит 5 мин) запускает `trader/run_announcements.cmd`, а тот
+  вызывает `announcements.py step` (флаг `ANNOUNCEMENTS_ENABLED`; только публичные GET на чтение, без ордеров).
+- Источники: Binance CMS, разделы 48 и 161; новые листинги OKX; new_crypto Bybit. Хранилище: `runtime/announcements/`.
+- История с 2023-01 выгружена: Binance 1 606, OKX 988, Bybit 1 724.
+- Дальше: ручная сверка 50 размеченных событий, затем проверка в деньгах на трейне 2023-03..2025-12
+  (`docs/specs/features/listing-announcements-la-1028-spec.md`).
 Этап C (2026-10-13): `trader/executor.py` исполняет книгу X4 из E7 в масштабе `TRADING_SCALE` 0.02, аварийный стоп
 на бирже на 3% ниже стопа стратегии; задача `CryptoBot_TraderExecutor` (каждые 5 мин, второй экземпляр не
 запускается) держит его запущенным. **C2 включён 2026-10-20** (оператор): `TRADING_ENABLED = True`, `TRADING_MODE = "demo"` — реальные ордера только на демо-счёте; гейт C после 7 дней (не раньше 10-27). Откат: `TRADING_ENABLED = False`. Управление —

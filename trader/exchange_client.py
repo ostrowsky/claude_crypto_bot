@@ -39,7 +39,9 @@ import audit as A  # noqa: E402
 ALLOWED_HOSTS = frozenset({"demo-api.binance.com", "demo-ws-api.binance.com", "demo-stream.binance.com",
                            "demo-fapi.binance.com"})
 # unsigned market data only; fapi / data.binance.vision = live futures history for the FC money test (spec §3)
-PUBLIC_HOSTS = frozenset({"api.binance.com", "fapi.binance.com", "data.binance.vision"}) | ALLOWED_HOSTS
+PUBLIC_HOSTS = frozenset({"api.binance.com", "fapi.binance.com", "data.binance.vision",
+                          # exchange announcements, read-only (listing-announcements-la-1028-spec.md §2)
+                          "www.binance.com", "www.okx.com", "api.bybit.com"}) | ALLOWED_HOSTS
 DEMO_REST = "https://demo-api.binance.com"
 LIVE_REST = "https://api.binance.com"
 LIVE_FAPI = "https://fapi.binance.com"

@@ -63,6 +63,10 @@ FC_SHADOW_ENABLED: bool = True
 # no order; candles, candidates and the x4_wide paper book in runtime/scan/. Rollback: False (the step does nothing).
 WIDE_SCAN_ENABLED: bool = True
 
+# ── LA exchange announcements (listing-announcements-la-1028-spec.md) ── public read-only GET of Binance CMS / OKX / Bybit
+# announcements into runtime/announcements/; no key, no order. Rollback: False (the step does nothing).
+ANNOUNCEMENTS_ENABLED: bool = True
+
 # ── Audit journals (trader-audit-log-1012-spec.md): every Binance request and every decision,
 # append-only, trader/runtime/audit/{exchange,decisions}/YYYY-MM-DD.jsonl. 0 = keep everything.
 AUDIT_EXCHANGE_ENABLED: bool = True

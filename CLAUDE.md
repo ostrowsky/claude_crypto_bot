@@ -841,6 +841,13 @@ It calls `wide_scan.py step` (flag `WIDE_SCAN_ENABLED`; public GET only, no orde
 - appends learning rows to `runtime/learning/wide_candidates.jsonl`.
 The executor still trades the bot's 93 coins (operator, 10-28). Readout W-SHADOW no earlier than 2026-12-01: `x4_wide`
 vs E7 `x4_floor8` (`docs/specs/features/wide-scan-shadow-w1-1028-spec.md`).
+LA (2026-10-28) — exchange announcements as information that comes before the price move.
+- Task `CryptoBot_TraderAnnouncements` runs `trader/run_announcements.cmd` every 5 min (limit 5 min) and calls
+  `announcements.py step` (flag `ANNOUNCEMENTS_ENABLED`; public read-only GET, no order).
+- Sources: Binance CMS catalogs 48 and 161, OKX new listings, Bybit new_crypto. Store: `runtime/announcements/`.
+- History since 2023-01 is downloaded: Binance 1 606, OKX 988, Bybit 1 724.
+- Next steps: a manual audit of 50 labelled events, then the money test on train 2023-03..2025-12
+  (`docs/specs/features/listing-announcements-la-1028-spec.md`).
 Phase C (2026-10-13): `trader/executor.py` executes the E7 book X4 at `TRADING_SCALE` 0.02 with a
 catastrophe stop 3% below the policy stop on the exchange; task `CryptoBot_TraderExecutor` (every 5 min,
 IgnoreNew) keeps it running. **C2 ON since 2026-10-20** (`TRADING_ENABLED = True`, `TRADING_MODE = "demo"`, operator): real orders on the DEMO account only; gate C after 7 days (>= 10-27). Rollback: `TRADING_ENABLED = False`. Control by files in
