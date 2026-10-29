@@ -899,8 +899,9 @@ only; the 2026 window was not opened for any of them:
 - **MD, multi-day spot holds (2–10 days): REJECTED on train in both rows** (`multiday-spot-md-1028-spec.md`).
   - Bot entries on the X4 book: 0 of 9, all R < 0. Best is the 8% trail held 10 days, −0.071 %/day against X4 −0.328.
   - Breakout / dip / volume events on the top-100 spot universe: 0 of 9, all worse than equal weight, PBO 0.97.
-- **RV, BTC↔ETH rotation: 1 of 6 admitted on train, on the edge.** RV_mom_56: vs 50/50 +0.022 [−0.034, +0.086];
-  it holds BTC 68% of days and stays below BH BTC. The 2026 test awaits the operator (`btc-eth-rotation-rv-1028-spec.md`).
+- **RV, BTC↔ETH rotation: REJECTED on its single 2026 look** (operator-approved 10-29, k = 1). It was admitted on train on the
+  edge (1 of 6). On 2026 RV_mom_56 gives R +0.0066 [−0.318, +0.294] and +0.009 [−0.062, +0.083] vs 50/50; it is below the p95
+  of random rotations (+0.063) (`btc-eth-rotation-rv-1028-spec.md` §7).
 - Shorts and futures, allowed by the operator on 10-29 once spot was checked:
   - **QB, BTC/ETH quarterly basis: REJECTED.** On train it makes ~2.2 %/yr with CI > 0, but stops on PBO.
     The single 2026 look at QB_T0 gives +0.0004 %/day [−0.0039, +0.0046], below FC_PASSIVE (`quarterly-basis-qb-1029-spec.md`).

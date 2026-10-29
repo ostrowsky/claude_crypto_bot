@@ -90,5 +90,28 @@ class TestAdmission(unittest.TestCase):
         self.assertEqual(EX.main(["test"]), 2)
 
 
+class TestOneLook(unittest.TestCase):
+    """Spec §4 test rule (k = 1): R lo > 0, paired 50/50 lo > 0, mean R > p95 of random rotations; marker once."""
+
+    def test_decide(self):
+        import experiment_rv as EX
+        good = ({"mean_pct": 0.2, "lo95": 0.01}, {"mean_pct": 0.05, "lo95": 0.001}, [0.1] * 50)
+        self.assertTrue(EX.decide(*good)["accepted"])
+        self.assertFalse(EX.decide({"mean_pct": 0.2, "lo95": -0.01}, good[1], good[2])["accepted"])
+        self.assertFalse(EX.decide(good[0], {"mean_pct": 0.05, "lo95": -0.001}, good[2])["accepted"])
+        self.assertFalse(EX.decide(good[0], good[1], [0.3] * 50)["accepted"])
+
+    def test_marker_once_and_operator(self):
+        import tempfile
+        from pathlib import Path
+        import experiment_rv as EX
+        with tempfile.TemporaryDirectory() as d:
+            m = Path(d) / "RV_TEST_OPENED.json"
+            EX.open_test(m, {})
+            with self.assertRaises(RuntimeError):
+                EX.open_test(m, {})
+        self.assertEqual(EX.main(["test"]), 2)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
