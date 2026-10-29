@@ -24,6 +24,12 @@ echo ==== %DATE% %TIME% ==== >> "%LOG_FC%"
 "%PY%" fc_shadow.py step >> "%LOG_FC%" 2>&1
 if errorlevel 1 echo FC SHADOW STEP FAILED with errorlevel %errorlevel% >> "%LOG_FC%"
 "%PY%" fc_shadow.py readout >> "%LOG_FC%" 2>&1
+
+REM FC_PASSIVE on the demo account (fc-demo-execution-1030-spec.md): flag FC_DEMO_ENABLED, mode FC_DEMO_MODE
+REM (paper | demo); own log and own errorlevel check, so a failure here never touches the steps above.
+if not exist "%ROOT%\trader\runtime\fc_demo" mkdir "%ROOT%\trader\runtime\fc_demo"
+"%PY%" fc_demo.py step >> "%ROOT%\trader\runtime\fc_demo\fc_demo.log" 2>&1
+if errorlevel 1 echo FC DEMO STEP FAILED with errorlevel %errorlevel% >> "%ROOT%\trader\runtime\fc_demo\fc_demo.log"
 echo ---- %DATE% %TIME% done ---- >> "%LOG%"
 
 endlocal

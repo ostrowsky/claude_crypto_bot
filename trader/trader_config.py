@@ -59,6 +59,16 @@ SHADOW_PORTFOLIO_ENABLED: bool = True
 # no key, no order; runs inside run_shadow.cmd after the E7 step. Rollback: False (the step does nothing).
 FC_SHADOW_ENABLED: bool = True
 
+# ── FC_PASSIVE executed on the demo account (fc-demo-execution-1030-spec.md, operator 2026-10-29) ── spot BTC+ETH long
+# + USD-M perp short, L = 1 isolated; step inside run_shadow.cmd. "paper" = live prices, no order; "demo" = real orders
+# on demo-api / demo-fapi only (also needs TRADING_ENABLED and TRADING_MODE = "demo"). Demo funding is not live funding:
+# demo money checks mechanics only. Rollback: FC_DEMO_ENABLED = False + file FLATTEN in runtime/fc_demo/control/.
+FC_DEMO_ENABLED: bool = True
+FC_DEMO_MODE: str = "paper"
+FC_DEMO_NOTIONAL_USDT: float = 2500.0
+FC_DEMO_KILL_USDT: float = 300.0
+FC_DEMO_PAIRS: tuple = ("BTCUSDT", "ETHUSDT")
+
 # ── W1 shadow scanner of the whole spot market (wide-scan-shadow-w1-1028-spec.md) ── public GET only, no key,
 # no order; candles, candidates and the x4_wide paper book in runtime/scan/. Rollback: False (the step does nothing).
 WIDE_SCAN_ENABLED: bool = True

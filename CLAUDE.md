@@ -889,6 +889,18 @@ money is a mechanics check only. **Next step (operator-approved 2026-10-22, `fc-
 step; started 2026-10-22, S = 2026-10-23; readout FC-SHADOW (`READOUT_FC.json`) gives no verdict before 2027-01-21. **F0 = GO on 2026-10-22** (`_smoke_demo_futures.py --go`,
 order/test only, never a position; run by Claude at the operator's request): futures wallet 5 000 USDT, BTCUSDT/ETHUSDT
 ISOLATED + leverage 1, one-way; demo taker 0.04% (model 0.05%, kept); demo funding is the flat 0.0001, not live. `experiment_fc.judge` computes the interval at 1 − α.
+**FC-DEMO (2026-10-30, operator 10-29 «все»; `fc-demo-execution-1030-spec.md`).** `trader/fc_demo.py` runs
+FC_PASSIVE on the demo account: spot BTC+ETH long + USD-M perp short, L = 1 isolated, N = 2 500 per pair.
+- Margin stop every cycle; a failed second leg unwinds the first; PAUSE / FLATTEN / kill switch.
+- It runs as a step of `run_shadow.cmd`, log `runtime/fc_demo/fc_demo.log`.
+- It skips the pre-registered KEEP of FC-SHADOW; the deviation is disclosed. Demo funding is not live funding, so
+  demo money checks mechanics only.
+- **Now in `FC_DEMO_MODE = "paper"`** (live prices, no order). Demo mode is blocked until these are fixed, each with
+  a test:
+  - the X4 kill switch sees the spot leg without its futures hedge;
+  - daily revenue would book the spot leg alone;
+  - spot USDT is 4 915 < 2 × 2 500.
+- `exchange_client.fut_order` (POST /fapi/v1/order behind `_trading_allowed`) exists since then.
 
 Hypotheses of 2026-10-28 (`docs/specs/features/trader-hypotheses-1028-spec.md` §5), all checked on train 2023-03..2025-12
 only; the 2026 window was not opened for any of them:

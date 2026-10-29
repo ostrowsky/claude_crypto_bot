@@ -306,8 +306,8 @@ class ExchangeClient:
         return self._request("GET", "/api/v3/depth", {"symbol": symbol, "limit": limit}, base=base)
 
     # ------------------------------------------------------------ USD-M futures of the demo account, F0
-    # fc-passive-next-1022-spec.md §B: settings and checks only. There is deliberately no method for a
-    # real futures order; the only order call is POST /fapi/v1/order/test (validated, never executed).
+    # fc-passive-next-1022-spec.md §B: settings and checks. A real futures order exists since
+    # fc-demo-execution-1030-spec.md (FC_PASSIVE on the demo): fut_order, behind _trading_allowed, demo-fapi only.
     def _fut(self):
         if "fapi" not in _host(self.base):
             raise HostNotAllowed(f"futures call on a non-futures client ({_host(self.base)!r})")
@@ -350,6 +350,17 @@ class ExchangeClient:
         self._fut()
         return self._request("POST", "/fapi/v1/order/test", {"symbol": symbol, "side": side, "type": type_, **kw},
                              signed=True)
+
+    def fut_order(self, symbol: str, side: str, type_: str, **kw) -> dict:
+        """POST /fapi/v1/order -- a REAL futures order on the demo account (fc-demo-execution-1030-spec.md §2)."""
+        self._fut()
+        self._trading_allowed()
+        return self._request("POST", "/fapi/v1/order", {"symbol": symbol, "side": side, "type": type_,
+                                                        "newOrderRespType": "RESULT", **kw}, signed=True)
+
+    def fut_positions(self, symbol: str | None = None) -> list:
+        self._fut()
+        return self._request("GET", "/fapi/v2/positionRisk", {"symbol": symbol} if symbol else {}, signed=True)
 
     def fut_income(self, income_type: str, limit: int = 10) -> list:
         self._fut()

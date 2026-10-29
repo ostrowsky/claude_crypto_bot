@@ -447,7 +447,8 @@ class TestClientFutures(unittest.TestCase):
         self.assertTrue(url.endswith("demo-fapi.binance.com/fapi/v1/order/test"), url)
         self.assertEqual(method, "POST")
         self.assertIn(b"signature=", data)
-        self.assertFalse(hasattr(c, "fut_order"))                                 # no real futures order method
+        # F0 had no real futures order method; fc-demo-execution-1030-spec.md adds fut_order behind _trading_allowed
+        self.assertTrue(hasattr(c, "fut_order"))
         spot = X.ExchangeClient(key="k", secret="s", opener=opener, audit=None)
         spot._sync_time(force=True)
         self.assertIn("demo-api.binance.com/api/v3/time", seen[-1][0])           # spot path unchanged
