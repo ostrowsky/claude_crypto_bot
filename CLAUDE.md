@@ -920,6 +920,14 @@ only; the 2026 window was not opened for any of them:
   - OOS AUC is 0.517 (4h) and 0.529 (1d), CI above 0.5, but accuracy barely beats "always down".
   - The selected longs rise only 49% / 48% of the time against the 61% / 55% needed. Net −0.195 % per 4h period, −0.257 %/day.
   - Not better than the universe; 2024–2025 negative (`direction-forecast-dir-1029-spec.md`).
+- **DPOS, DIR plus derivatives positioning: REJECTED on train** (10-29).
+  - Data: the public data.binance.vision USD-M metrics archive — 5-min OI, long/short, taker ratio — plus funding.
+    361 perps, 2023–2025, stored in `trader/runtime/metrics_um/`.
+  - The archive equals the live REST exactly (PIT-2b, 57 600 rows): archive time T is REST time T + 5 min, and REST
+    ratios have 4 decimals.
+  - Adding 10 positioning features lowers the 4h AUC: −0.0056 [−0.0094, −0.0015]. On 1d the change is
+    −0.0035 [−0.015, +0.008].
+  - The top decile still loses after costs. Do not re-test (`dir-positioning-dpos-1029-spec.md`).
 
 ### ML promotion at matched admission — SHADOW (2026-10-09)
 

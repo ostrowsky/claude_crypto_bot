@@ -182,6 +182,72 @@ class TestStatsAndDecisions(unittest.TestCase):
         drift = [{"bot_oi_1h": v, "arc_oi_1h": v, "bot_top": 1.5, "arc_top": 1.6} for v in x]
         self.assertFalse(E.pit_check(drift)["ok"])
 
+    def test_pit2_compare(self):
+        import experiment_dpos as E
+        t0 = ms("2026-10-21 00:00:00")
+        arc = arrays(200, t0, oi=np.linspace(100, 120, 200))
+        sh = MIN5                                                       # REST timestamp = archive create_time + 5 min
+        rest = {"oi": {int(t) + sh: float(v) for t, v in zip(arc["t"], arc["oi"])},
+                "top": {int(t) + sh: 1.2 for t in arc["t"]}, "glob": {int(t) + sh: 2.0 for t in arc["t"]}}
+        r = E.pit2_compare(arc, rest)
+        self.assertTrue(r["ok"])
+        self.assertAlmostEqual(r["coverage"], 1.0)
+        bad = {k: dict(v) for k, v in rest.items()}
+        for t in list(bad["oi"])[:5]:                                   # 2.5% of OI rows differ
+            bad["oi"][t] *= 1.001
+        self.assertFalse(E.pit2_compare(arc, bad)["ok"])
+        thin = {k: dict(list(v.items())[:150]) for k, v in rest.items()}  # 75% coverage
+        r = E.pit2_compare(arc, thin)
+        self.assertFalse(r["ok"])
+        self.assertAlmostEqual(r["coverage"], 0.75)
+
+    def test_pit2_fetch_pages_backwards_and_shift(self):
+        """Bug 10-29: the REST returns the LATEST `limit` rows of [start, end]; paging forward kept 500 of 2304.
+        Archive create_time T == REST timestamp T + 5 min (500/500 exact on BTCUSDT 10-27..28)."""
+        import experiment_dpos as E
+        t0 = ms("2026-10-21 00:00:00")
+        allrows = [{"timestamp": t0 + i * MIN5, "sumOpenInterest": str(100 + i)} for i in range(1200)]
+
+        class Fake:
+            def futures_data(self, path, symbol, period, start, end, limit):
+                sel = [r for r in allrows if start <= r["timestamp"] <= end]
+                return sel[-limit:]
+        got = E.rest_series(Fake(), "/futures/data/openInterestHist", "sumOpenInterest", "XUSDT", t0, t0 + 1199 * MIN5)
+        self.assertEqual(len(got), 1200)
+        arc = arrays(1199, t0, oi=np.arange(1199) + 101.0)              # archive row T = REST value at T + 5 min
+        r = E.pit2_compare(arc, {"oi": got, "top": {t + 0: 1.2 for t in got}, "glob": {t: 2.0 for t in got}})
+        self.assertAlmostEqual(r["coverage"], 1.0)
+        self.assertAlmostEqual(r["exact_share"]["oi"], 1.0)
+
+    def test_pit2b_rounding_aware(self):
+        """REST ratios have 4 decimals; the global ratio is computed from 4-decimal account shares."""
+        import experiment_dpos as E
+        t0 = ms("2026-10-21 00:00:00")
+        n = 100
+        arc = arrays(n, t0)
+        la = 0.70573
+        ratio = la / (1 - la)                                           # 2.39829...
+        arc["top_pos"] = np.full(n, 1.919031)
+        arc["ls_all"] = np.full(n, ratio)
+        T = [int(t) + MIN5 for t in arc["t"]]
+        la4, sa4 = round(la, 4), round(1 - la, 4)
+        rest = {"oi": {t: 100.0 for t in T}, "top": {t: 1.9190 for t in T}, "glob": {t: round(la4 / sa4, 4) for t in T},
+                "glob_long": {t: la4 for t in T}, "glob_short": {t: sa4 for t in T}}
+        r = E.pit2b_compare(arc, rest)
+        self.assertTrue(r["ok"], r)
+        bad = dict(rest, top={t: 1.9195 for t in T})
+        self.assertFalse(E.pit2b_compare(arc, bad)["ok"])
+        bad = dict(rest, glob={t: 2.41 for t in T})
+        self.assertFalse(E.pit2b_compare(arc, bad)["ok"])
+
+    def test_pit2_perps_and_train_gate(self):
+        import experiment_dpos as E
+        counts = {"AUSDT": 10, "BUSDT": 30, "CUSDT": 30, "DUSDT": 5}
+        self.assertEqual(E.pit2_perps(counts, 3), ["BUSDT", "CUSDT", "AUSDT"])
+        self.assertTrue(E.train_allowed({"ok": False}, {"ok": True}))
+        self.assertFalse(E.train_allowed({"ok": False}, {"ok": False}))
+        self.assertFalse(E.train_allowed({"ok": False}, None))
+
     def test_outcome_marker_operator(self):
         import experiment_dpos as E
         money = {"sel": {"lo95": 0.01}, "paired": {"lo95": 0.001}, "sel_by_year": {"2023": 0.1, "2024": 0.1, "2025": -1}}

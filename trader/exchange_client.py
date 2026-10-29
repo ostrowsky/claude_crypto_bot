@@ -284,6 +284,14 @@ class ExchangeClient:
         return self._request("GET", "/fapi/v1/klines", {"symbol": symbol, "interval": interval,
                                                         "startTime": int(start_ms), "limit": limit}, base=base)
 
+    def futures_data(self, path: str, symbol: str, period: str, start_ms: int, end_ms: int, limit: int = 500,
+                     base: str = LIVE_FAPI) -> list:
+        """Public /futures/data/* statistics (openInterestHist, topLongShortPositionRatio, ...), unsigned (DPOS PIT-2)."""
+        if not path.startswith("/futures/data/"):
+            raise ValueError("futures_data: only /futures/data/* paths")
+        return self._request("GET", path, {"symbol": symbol, "period": period, "startTime": int(start_ms),
+                                           "endTime": int(end_ms), "limit": limit}, base=base)
+
     def premium_index(self, symbol: str, base: str = LIVE_FAPI) -> dict:
         return self._request("GET", "/fapi/v1/premiumIndex", {"symbol": symbol}, base=base)
 

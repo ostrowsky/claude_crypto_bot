@@ -180,6 +180,145 @@ def pit_check(pairs) -> dict:
             "ok": sp >= PIT_SPEARMAN_MIN and rel <= PIT_TOP_REL_MAX}
 
 
+PIT2_FROM, PIT2_TO = "2026-10-21", "2026-10-28"
+PIT2_N_PERPS = 25
+PIT2_COVERAGE_MIN = 0.90
+PIT2_EXACT_MIN = 0.99
+PIT2_TOL = 1e-6
+PIT2_OUT = OUT / "DPOS_PIT2.json"
+REST_SHIFT = MIN5          # archive create_time T == REST 5m timestamp T + 5 min (BTCUSDT 10-27..28: 500/500 exact, 1/500 at 0)
+PIT2_PATHS = {"oi": ("/futures/data/openInterestHist", "sumOpenInterest"),
+              "top": ("/futures/data/topLongShortPositionRatio", "longShortRatio"),
+              "glob": ("/futures/data/globalLongShortAccountRatio", "longShortRatio")}
+
+
+def pit2_compare(arc, rest: dict) -> dict:
+    """Archive rows vs REST 5m values at the same timestamps (spec journal, PIT-2)."""
+    t = [int(x) + REST_SHIFT for x in arc["t"]]                      # archive T <-> REST T + 5 min
+    hit = [i for i, x in enumerate(t) if x in rest.get("oi", {})]
+    cov = len(hit) / len(t) if t else 0.0
+
+    def share(key, col, rel):
+        ok = n = 0
+        for i in hit:
+            r = rest.get(key, {}).get(t[i])
+            a = float(arc[col][i])
+            if r is None or not np.isfinite(a):
+                continue
+            n += 1
+            ok += (abs(a / r - 1) if rel else abs(a - r)) <= PIT2_TOL if (r or not rel) else 0
+        return ok / n if n else 0.0
+    s = {"oi": share("oi", "oi", True), "top": share("top", "top_pos", False), "glob": share("glob", "ls_all", False)}
+    return {"n_archive": len(t), "n_matched": len(hit), "coverage": cov, "exact_share": s,
+            "ok": cov >= PIT2_COVERAGE_MIN and all(v >= PIT2_EXACT_MIN for v in s.values())}
+
+
+def rest_fields(client, path, fields, perp, t0, t1, limit=500) -> dict:
+    """{field: {timestamp: value}} over [t0, t1]. The endpoint returns the LATEST `limit` rows of the range: page back."""
+    vals, end = {f: {} for f in fields}, t1
+    while end >= t0:
+        rows = client.futures_data(path, perp, "5m", t0, end, limit) or []
+        ts = []
+        for r in rows:
+            try:
+                t = int(r["timestamp"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            ts.append(t)
+            for f in fields:
+                try:
+                    vals[f][t] = float(r[f])
+                except (KeyError, TypeError, ValueError):
+                    pass
+        if len(rows) < limit or not ts:
+            break
+        end = min(ts) - 1
+        time.sleep(0.3)
+    return vals
+
+
+def rest_series(client, path, field, perp, t0, t1, limit=500) -> dict:
+    return rest_fields(client, path, (field,), perp, t0, t1, limit)[field]
+
+
+def pit2b_compare(arc, rest: dict) -> dict:
+    """PIT-2b (spec journal): OI exact; top ratio == archive rounded to 4 decimals; global ratio within the error of a
+    ratio computed from 4-decimal account shares."""
+    t = [int(x) + REST_SHIFT for x in arc["t"]]
+    hit = [i for i, x in enumerate(t) if x in rest.get("oi", {})]
+    cov = len(hit) / len(t) if t else 0.0
+    cnt = {"oi": [0, 0], "top": [0, 0], "glob": [0, 0]}
+    for i in hit:
+        T = t[i]
+        o = rest["oi"].get(T)
+        if o and np.isfinite(arc["oi"][i]):
+            cnt["oi"][1] += 1
+            cnt["oi"][0] += abs(float(arc["oi"][i]) / o - 1) <= PIT2_TOL
+        tp = rest.get("top", {}).get(T)
+        if tp is not None and np.isfinite(arc["top_pos"][i]):
+            cnt["top"][1] += 1
+            cnt["top"][0] += abs(round(float(arc["top_pos"][i]), 4) - tp) <= 1e-9
+        g, la, sa = (rest.get(k, {}).get(T) for k in ("glob", "glob_long", "glob_short"))
+        if g is not None and la and sa and np.isfinite(arc["ls_all"][i]):
+            cnt["glob"][1] += 1
+            cnt["glob"][0] += abs(float(arc["ls_all"][i]) - g) <= g * (5e-5 / la + 5e-5 / sa) + 5e-5
+    s = {k: (a / n if n else 0.0) for k, (a, n) in cnt.items()}
+    return {"n_archive": len(t), "n_matched": len(hit), "coverage": cov, "share": s,
+            "ok": cov >= PIT2_COVERAGE_MIN and all(v >= PIT2_EXACT_MIN for v in s.values())}
+
+
+def pit2_perps(counts: dict, n: int = PIT2_N_PERPS) -> list:
+    return [p for p, _ in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))[:n]]
+
+
+def train_allowed(pit1, pit2) -> bool:
+    """PIT-1 failed (definition mismatch, disclosed); the operator replaced it by PIT-2, which alone gates the train."""
+    return bool(pit2 and pit2.get("ok"))
+
+
+def run_pit2(client=None) -> dict:
+    import exchange_client as X
+    import metrics_store as MS
+    client = client or X.ExchangeClient(key="", secret="")
+    t0 = int(datetime.strptime(PIT2_FROM, "%Y-%m-%d").replace(tzinfo=timezone.utc).timestamp() * 1000)
+    t1 = int(datetime.strptime(PIT2_TO, "%Y-%m-%d").replace(tzinfo=timezone.utc).timestamp() * 1000) + DAY - MIN5
+    counts, arcs = {}, {}
+    for perp in MS.jobs_pit():
+        m = MS.load(perp)
+        if m is None:
+            continue
+        sel = (m["t"] >= t0) & (m["t"] <= t1)
+        if sel.sum():
+            counts[perp] = int(sel.sum())
+            arcs[perp] = {k: v[sel] for k, v in m.items()}
+    perps = pit2_perps(counts)
+    per, tot_ok = {}, True
+    for perp in perps:
+        rest = {}
+        for key, (path, field) in PIT2_PATHS.items():
+            extra = ("longAccount", "shortAccount") if key == "glob" else ()
+            got = rest_fields(client, path, (field,) + extra, perp, t0 + REST_SHIFT, t1 + REST_SHIFT)
+            rest[key] = got[field]
+            if extra:
+                rest["glob_long"], rest["glob_short"] = got["longAccount"], got["shortAccount"]
+        per[perp] = {"pit2": pit2_compare(arcs[perp], rest), "pit2b": pit2b_compare(arcs[perp], rest)}
+        per[perp]["ok"] = per[perp]["pit2b"]["ok"]
+        tot_ok &= per[perp]["ok"]
+        print(f"  {perp}: {json.dumps(per[perp])}", flush=True)
+    agg = {"n_archive": sum(v["pit2b"]["n_archive"] for v in per.values()),
+           "n_matched": sum(v["pit2b"]["n_matched"] for v in per.values())}
+    agg["coverage"] = agg["n_matched"] / agg["n_archive"] if agg["n_archive"] else 0.0
+    agg["pit2_exact_share_min"] = {k: min(v["pit2"]["exact_share"][k] for v in per.values()) for k in PIT2_PATHS} if per else {}
+    agg["pit2b_share_min"] = {k: min(v["pit2b"]["share"][k] for v in per.values()) for k in PIT2_PATHS} if per else {}
+    agg["pit2_original_ok"] = bool(per) and all(v["pit2"]["ok"] for v in per.values())
+    res = {"window": [PIT2_FROM, PIT2_TO], "perps": perps, "per_perp": per, "aggregate": agg, "criterion": "PIT-2b",
+           "ok": bool(per) and len(perps) == PIT2_N_PERPS and all(v["ok"] for v in per.values()),
+           "utc": datetime.now(timezone.utc).isoformat()}
+    PIT2_OUT.write_text(json.dumps(res, indent=1), encoding="utf-8")
+    print(json.dumps({"ok": res["ok"], "aggregate": agg}))
+    return res
+
+
 def outcome(res: dict) -> str:
     B = res.get("B") or {}
     years = B.get("sel_by_year") or {}
@@ -295,8 +434,10 @@ def run_train() -> dict:
     import experiment_xsmom as EX
     import xsmom as XS
     pit = json.loads(PIT_OUT.read_text(encoding="utf-8")) if PIT_OUT.exists() else {}
-    if not pit.get("ok"):
-        raise SystemExit("DPOS: the PIT check has not passed (spec §2.4); train is not run")
+    pit2 = json.loads(PIT2_OUT.read_text(encoding="utf-8")) if PIT2_OUT.exists() else None
+    if not train_allowed(pit, pit2):
+        raise SystemExit("DPOS: the PIT-2 check has not passed (spec journal); train is not run")
+    pit = {"pit1": pit, "pit2": {k: pit2[k] for k in ("window", "aggregate", "ok")}}
     t_start = time.time()
     P = EX.load_panel().cut(ED.TEST_FROM)
     cfg = XS.Config(L=1, H=1, K=10, min_age_days=60)
@@ -341,6 +482,8 @@ def main(argv=None) -> int:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     argv = sys.argv[1:] if argv is None else argv
     cmd = argv[0] if argv else ""
+    if cmd == "pit2":
+        return 0 if run_pit2().get("ok") else 1
     if cmd == "pit":
         return 0 if run_pit().get("ok") else 1
     if cmd == "train":
