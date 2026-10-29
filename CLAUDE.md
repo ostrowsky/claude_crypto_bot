@@ -831,6 +831,11 @@ Phase D (2026-10-13): task `CryptoBot_TraderDaily` (02:20 local) runs `trader/ru
 report `trader/runtime/reports/YYYY-MM-DD.txt`; Claude task `crypto-trader-daily-report` posts it to the chat at 09:00.
 No Telegram. Direction words need ≥ 10 counted days (`daily_revenue.MIN_DAYS_DIRECTION`)
 (`docs/specs/features/demo-ledger-d-1013-spec.md`).
+Since 2026-10-29 the report also carries block «6. Демо против бумаги» (`trader/parity.py`, measurement only).
+- Per executor trade, d = demo ret − paper ret of the same key, split into entry vs the model's 8 bp, fees
+  (BNB 0.075% vs 0.10%) and exit-and-rest.
+- It also shows coverage (skips, paper exits without a position, exchange stops) and 7/30/all windows.
+- First reading: +0.05 pp per trade over 8 days, too early (`docs/specs/features/demo-paper-parity-1029-spec.md`).
 W1 (2026-10-28) — the trader must see ALL Binance spot coins (operator decision #2). Until W1, the executor and E7 read only
 the bot's 93 coins. Task `CryptoBot_TraderWideScan` runs `trader/run_wide_scan.cmd` every 5 min, limit 10 min, IgnoreNew.
 It calls `wide_scan.py step` (flag `WIDE_SCAN_ENABLED`; public GET only, no order). On every closed 15m bar it:

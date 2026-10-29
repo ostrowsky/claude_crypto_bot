@@ -124,7 +124,7 @@ def _wide_block(w) -> list:
 
 
 def build(day: str, day_rows, shadow_rows=None, demo_fills=None, exchange_rows=None, snapshot_share=None,
-          shadow_R=None, executor_rows=None, wide=None) -> str:
+          shadow_R=None, executor_rows=None, wide=None, parity=None) -> str:
     rows = list(day_rows.values()) if isinstance(day_rows, dict) else list(day_rows or [])
     cur = next((r for r in sorted(rows, key=lambda r: r.get("revision", 0), reverse=True) if r["day"] == day), None)
     L = [f"Трейдер, демо-счёт: отчёт за {day} (сутки UTC)", ""]
@@ -197,6 +197,9 @@ def build(day: str, day_rows, shadow_rows=None, demo_fills=None, exchange_rows=N
     if wide is not None:
         L.append("")
         L.extend(_wide_block(wide))
+    if parity is not None:                     # demo-paper-parity-1029-spec.md
+        L.append("")
+        L.extend(parity)
     return "\n".join(L) + "\n"
 
 
@@ -213,6 +216,17 @@ def _wide_report(day: str):
         return wide_scan.report(day)
     except Exception as ex:
         return {"day": day, "coverage": None, "leaders": None, "error": repr(ex)[:200]}
+
+
+def _parity_report(day: str):
+    """Demo vs paper over the whole demo period (journal rows up to the report day); None if it fails."""
+    try:
+        import audit_report as AR
+        import parity as PA
+        rows = [r for r in AR.load("decisions", 400) if str(r.get("ts", ""))[:10] <= day]
+        return PA.block(rows, day)
+    except Exception as e:                     # the report must not die on a measurement block
+        return ["6. Демо против бумаги", f"  ошибка расчёта: {type(e).__name__}: {e}"]
 
 
 def main(argv=None) -> int:
@@ -233,7 +247,8 @@ def main(argv=None) -> int:
                 demo_fills=_jsonl(TC.RUNTIME / "trading" / "ledger.jsonl"),
                 exchange_rows=AR.load("exchange", 3), snapshot_share=cur.get("snapshot_share"), shadow_R=shadow_R,
                 executor_rows=[r for r in AR.load("decisions", 3) if r.get("process") == "executor"
-                               or r.get("book") == "exec_x4"], wide=_wide_report(day))
+                               or r.get("book") == "exec_x4"], wide=_wide_report(day),
+                parity=_parity_report(day))
     out = TC.RUNTIME / "reports" / f"{day}.txt"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(txt, encoding="utf-8")
