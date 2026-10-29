@@ -909,6 +909,12 @@ only; the 2026 window was not opened for any of them:
     - The median trade is +3..+17%, but 1–18% of new perps double within the hold and wipe out the margin.
     - The CI lower bound of R is < 0 for every candidate, and the short pays funding.
     - Do not re-test (`short-new-perps-n6-1029-spec.md`).
+- **DIR, supervised direction forecast at 4h / 1d: REJECTED on train** (10-29, after the RL/analogues report found 15m/1h
+  cannot pay fees).
+  - CatBoost on 17 causal price / volume / BTC / market features, purged walk-forward, top-decile long on spot at 36 bp.
+  - OOS AUC is 0.517 (4h) and 0.529 (1d), CI above 0.5, but accuracy barely beats "always down".
+  - The selected longs rise only 49% / 48% of the time against the 61% / 55% needed. Net −0.195 % per 4h period, −0.257 %/day.
+  - Not better than the universe; 2024–2025 negative (`direction-forecast-dir-1029-spec.md`).
 
 ### ML promotion at matched admission — SHADOW (2026-10-09)
 
