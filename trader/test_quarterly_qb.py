@@ -136,3 +136,18 @@ class TestAdmission(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestT0SingleLook(unittest.TestCase):
+    """§9: the 2026 look runs QB_T0 only, all contracts allowed, window to the last full spot day."""
+
+    def test_last_full_day_and_decide(self):
+        import experiment_qb as EX
+        t0 = ms("2026-01-01 00:00")
+        spot = {"BTCUSDT": h1(t0, [100.0] * (24 * 3 + 5)), "ETHUSDT": h1(t0, [100.0] * (24 * 2 + 1))}
+        self.assertEqual(EX.last_full_day(spot), "2026-01-02")       # ETH has 2 full days
+        ok = EX.decide_t0({"lo95": 0.001, "max_dd_pct": -1.0}, 0)
+        self.assertTrue(ok["accepted"])
+        self.assertFalse(EX.decide_t0({"lo95": -0.001, "max_dd_pct": -1.0}, 0)["accepted"])
+        self.assertFalse(EX.decide_t0({"lo95": 0.001, "max_dd_pct": -1.0}, 1)["accepted"])
+        self.assertFalse(EX.decide_t0({"lo95": 0.001, "max_dd_pct": -10.5}, 0)["accepted"])

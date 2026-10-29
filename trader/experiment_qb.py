@@ -197,6 +197,59 @@ def run_train() -> dict:
     return out
 
 
+def last_full_day(spot: dict) -> str:
+    """Last UTC day with all 24 hourly bars for every pair (spec §9)."""
+    last = None
+    for a in spot.values():
+        t = np.asarray(a["t"], dtype=np.int64)
+        days, cnt = np.unique(t // Q.D, return_counts=True)
+        full = days[cnt == 24]
+        d = int(full[-1]) if len(full) else None
+        last = d if last is None or (d is not None and d < last) else last
+    return datetime.fromtimestamp(last * Q.D / 1000, timezone.utc).strftime("%Y-%m-%d")
+
+
+def decide_t0(agg: dict, liquidations: int) -> dict:
+    checks = {"R_lo_gt_0": agg.get("lo95") is not None and agg["lo95"] > 0, "no_liquidation": liquidations == 0,
+              "dd_ok": agg.get("max_dd_pct") is not None and agg["max_dd_pct"] >= DD_FLOOR_PCT}
+    return {"accepted": all(checks.values()), "checks": checks}
+
+
+def run_test_t0() -> dict:
+    """§9: QB_T0 once on 2026; marker first, then the run; all contracts allowed."""
+    import carry as C
+    import daily_revenue as DR
+    import money_validator as MV
+    spot, fut = load()
+    end = last_full_day(spot)
+    day_to = datetime.fromtimestamp((Q._ms(datetime.strptime(end, "%Y-%m-%d").replace(tzinfo=timezone.utc)) + Q.D) / 1000,
+                                    timezone.utc).strftime("%Y-%m-%d")
+    open_test(TEST_MARKER, {"spec": SPEC, "rule": "QB_T0", "window": [TEST_FROM, day_to], "k": 1})
+    r = Q.simulate(spot, fut, 0.0, C.fees(1), TEST_FROM, day_to, start_equity=START_EQUITY,
+                   expiries=sorted({Q.parse_expiry(s) for s in fut}))
+    v = decide_t0(r["agg"], r["liquidations"])
+    try:
+        fc = _fc_passive_series(TEST_FROM, day_to)
+        ref = {"fc_passive_agg": fc["agg"], "paired_fc_passive": DR.paired(r["series"], fc["series"])}
+    except Exception as ex:
+        ref = {"fc_passive_error": repr(ex)[:300]}
+    reasons = {}
+    for t in r["trades"]:
+        reasons[t["reason"]] = reasons.get(t["reason"], 0) + 1
+    out = {"spec": SPEC, "stage": "test", "rule": "QB_T0", "window": [TEST_FROM, day_to], "verdict": v, "agg": r["agg"],
+           "liquidations": r["liquidations"], "margin_stops": r["margin_stops"], "exit_reasons": reasons,
+           "trades": [{k: t[k] for k in ("pair", "symbol", "reason", "basis_ann", "ret_pct")} for t in r["trades"]],
+           "conservation_ok": r["conservation_ok"], "reference": ref, "utc": datetime.now(timezone.utc).isoformat()}
+    (OUT / "QB_TEST.json").write_text(json.dumps(out, ensure_ascii=False, indent=1, default=str), encoding="utf-8")
+    MV.log_trial({"family": "QB", "name": "QB_T0", "k_opened_on_test": 1, **v, "test_R": r["agg"]})
+    g = r["agg"]
+    print(f"QB_T0 TEST {TEST_FROM}..{day_to}: R {g['mean_pct']:+.4f} [{g['lo95']:+.4f}, {g['hi95']:+.4f}] "
+          f"~{g['mean_pct'] * 365:.2f}%/yr | dd {g['max_dd_pct']:+.2f}% | trades {reasons} | liq {r['liquidations']} | "
+          f"{'ACCEPTED' if v['accepted'] else 'REJECTED'}", flush=True)
+    print(json.dumps(ref, default=str)[:600])
+    return out
+
+
 def main(argv=None) -> int:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     argv = sys.argv[1:] if argv is None else argv
@@ -211,7 +264,8 @@ def main(argv=None) -> int:
         if "--operator-approved" not in argv:
             print("QB: the 2026 window is opened once and only on the operator's decision; add --operator-approved")
             return 2
-        raise SystemExit("QB: the test runner is written only if train produces a winner (spec §6)")
+        run_test_t0()
+        return 0
     print(__doc__)
     return 0
 
