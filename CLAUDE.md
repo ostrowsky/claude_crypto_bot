@@ -928,6 +928,13 @@ only; the 2026 window was not opened for any of them:
   - Adding 10 positioning features lowers the 4h AUC: −0.0056 [−0.0094, −0.0015]. On 1d the change is
     −0.0035 [−0.015, +0.008].
   - The top decile still loses after costs. Do not re-test (`dir-positioning-dpos-1029-spec.md`).
+- **EX-RL1, entry execution (limit at the bid vs market), phase 0 on the aggTrades tape: not a profitability tool.**
+  - The simulator is calibrated on 78 demo fills (median 9.5 bp). 1 964 X4 trades were replayed.
+  - A limit with a market chase after 2 min loses 3.7 bp [−5.0, −2.7] per trade.
+  - A 15-min limit without a chase gains +22.9 bp, but +21.8 of it comes from skipping 36% of a losing book. A random
+    skip of the same share gives +18.4 (p95 +28.7), so the selection is no better than random. The price itself is
+    worth only ~1–2 bp.
+  - No phase 1, and no learned execution bandit (`execution-bandit-exrl1-1029-spec.md`).
 
 ### ML promotion at matched admission — SHADOW (2026-10-09)
 

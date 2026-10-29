@@ -292,6 +292,13 @@ class ExchangeClient:
         return self._request("GET", path, {"symbol": symbol, "period": period, "startTime": int(start_ms),
                                            "endTime": int(end_ms), "limit": limit}, base=base)
 
+    def agg_trades(self, symbol: str, start_ms: int, end_ms: int, limit: int = 1000, base: str = "https://api.binance.com") -> list:
+        """Public spot aggTrades in [start, end] (<= 1 h apart), unsigned (EX-RL1 tape)."""
+        if end_ms - start_ms > 3_600_000:
+            raise ValueError("agg_trades: the window must be <= 1 hour")
+        return self._request("GET", "/api/v3/aggTrades", {"symbol": symbol, "startTime": int(start_ms),
+                                                          "endTime": int(end_ms), "limit": limit}, base=base)
+
     def premium_index(self, symbol: str, base: str = LIVE_FAPI) -> dict:
         return self._request("GET", "/fapi/v1/premiumIndex", {"symbol": symbol}, base=base)
 
