@@ -858,7 +858,7 @@ LA (2026-10-28) — exchange announcements as information that comes before the 
   - Do not re-test longs on these announcement types (`docs/specs/features/listing-announcements-la-1028-spec.md` §8).
 Phase C (2026-10-13): `trader/executor.py` executes the E7 book X4 at `TRADING_SCALE` 0.02 with a
 catastrophe stop 3% below the policy stop on the exchange; task `CryptoBot_TraderExecutor` (every 5 min,
-IgnoreNew) keeps it running. **C2 ON since 2026-10-20** (`TRADING_ENABLED = True`, `TRADING_MODE = "demo"`, operator): real orders on the DEMO account only; gate C after 7 days (>= 10-27). Rollback: `TRADING_ENABLED = False`. Control by files in
+IgnoreNew) keeps it running. **C2 ON since 2026-10-20** (`TRADING_ENABLED = True`, `TRADING_MODE = "demo"`, operator): real orders on the DEMO account only; gate C after 7 days (>= 10-27). **PAUSE since 2026-10-29** (operator): no new X4 entries; open positions run to their exits; remove the `PAUSE` file to resume. Rollback: `TRADING_ENABLED = False`. Control by files in
 `trader/runtime/executor/control/` (PAUSE, FLATTEN, RESET_NOTED). C0 smoke and C2 demo need the operator
 (`docs/specs/features/demo-execution-c-1013-spec.md`).
 
@@ -935,6 +935,9 @@ only; the 2026 window was not opened for any of them:
     skip of the same share gives +18.4 (p95 +28.7), so the selection is no better than random. The price itself is
     worth only ~1–2 bp.
   - No phase 1, and no learned execution bandit (`execution-bandit-exrl1-1029-spec.md`).
+- **RB, rebalancing BTC / ETH / USDT to fixed weights vs holding them: REJECTED on train, 0 of 6, PBO 0.57.**
+  - Best: BTC/ETH weekly +0.0033 [−0.0241, +0.0392] %/day.
+  - BTC/USDT is worse than holding by −0.02 %/day (`rebalancing-rb-1029-spec.md`).
 
 ### ML promotion at matched admission — SHADOW (2026-10-09)
 
