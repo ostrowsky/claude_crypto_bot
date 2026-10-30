@@ -912,6 +912,14 @@ FC_PASSIVE on the demo account: spot BTC+ETH long + USD-M perp short, L = 1 isol
 
 Hypotheses of 2026-10-28 (`docs/specs/features/trader-hypotheses-1028-spec.md` §5), all checked on train 2023-03..2025-12
 only; the 2026 window was not opened for any of them:
+- **Verdict audit 2026-10-30** (`docs/reports/2026-10-30-verdict-audit.md`).
+  - Price-only tests used 2023–2025 only, though Binance data goes back to 2017-08 (spot) and 2020-01 (futures and
+    funding). That breaks the max-period rule.
+  - A daily series of ~828 days cannot detect effects below ~0.11 %/day.
+  - **Not shown, NOT refuted:** DIR 1d, DPOS 1d, TM, N8, RV. Their CI reaches +0.06..+0.29 %/day. "Do not re-test"
+    does not apply to them; their frozen rules go to the unseen 2019–2022 backward holdout.
+  - **Refuted for real:** DIR 4h, DPOS 4h, QB_T0 (vs FC), EX-RL1 A1.
+  - **Rejected on other grounds:** XSMOM (random control), SN (liquidations), RB (theoretical ceiling).
 - **TM: BTC/ETH spot timing (trend, vol-managed, funding overheat) is REJECTED, 0 of 20.** None beats a circular-shift
   random timing of the same schedule, none beats buy-and-hold. Best vs constant exposure: T_sma_56 +0.027 [−0.039, +0.093]
   (`btc-eth-timing-tm-1028-spec.md`).
@@ -947,7 +955,8 @@ only; the 2026 window was not opened for any of them:
     ratios have 4 decimals.
   - Adding 10 positioning features lowers the 4h AUC: −0.0056 [−0.0094, −0.0015]. On 1d the change is
     −0.0035 [−0.015, +0.008].
-  - The top decile still loses after costs. Do not re-test (`dir-positioning-dpos-1029-spec.md`).
+  - The top decile still loses after costs. Do not re-test the 4h part; 1d is only "not shown" (verdict audit 10-30)
+    (`dir-positioning-dpos-1029-spec.md`).
 - **EX-RL1, entry execution (limit at the bid vs market), phase 0 on the aggTrades tape: not a profitability tool.**
   - The simulator is calibrated on 78 demo fills (median 9.5 bp). 1 964 X4 trades were replayed.
   - A limit with a market chase after 2 min loses 3.7 bp [−5.0, −2.7] per trade.
