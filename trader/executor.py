@@ -103,6 +103,40 @@ def pid_is_executor(pid: int) -> bool:
 
 # ================================================================ paper book (decisions)
 
+# ================================================================ FC-DEMO coexistence (fc-demo-execution-1030-spec.md §6)
+FC_STATE = TC.RUNTIME / "fc_demo" / "state.json"
+
+
+def load_fc_state():
+    try:
+        return json.loads(FC_STATE.read_text(encoding="utf-8")) if FC_STATE.exists() else None
+    except Exception:
+        return None
+
+
+def fc_reserved_pairs(cfg, fc_state) -> set:
+    """Pairs X4 must not trade: all FC pairs while FC runs in demo mode, plus any pair FC still holds on the account
+    (X4 protects and sells the FREE balance of a coin, which would include the FC spot leg)."""
+    out = set()
+    if getattr(cfg, "FC_DEMO_ENABLED", False) and getattr(cfg, "FC_DEMO_MODE", "paper") == "demo":
+        out |= set(getattr(cfg, "FC_DEMO_PAIRS", ()))
+    if fc_state and fc_state.get("mode") == "demo":
+        out |= set((fc_state.get("pos") or {}).keys())
+    return out
+
+
+def fc_spot_value(fc_state, price) -> float:
+    """USDT value of the demo FC spot legs: excluded from the X4 kill-switch equity (their hedge is on futures)."""
+    if not fc_state or fc_state.get("mode") != "demo":
+        return 0.0
+    v = 0.0
+    for sym, p in (fc_state.get("pos") or {}).items():
+        px = price(sym)
+        if px:
+            v += float(p.get("q_spot") or 0) * float(px)
+    return v
+
+
 class PaperBook:
     """The E7 book X4 as the executor's decision maker (spec §2.2). Same engine, same events, same bars."""
 
@@ -401,7 +435,7 @@ class Executor:
         if self.killed:
             return True
         try:
-            eq = float(self.ex.equity())
+            eq = float(self.ex.equity()) - fc_spot_value(load_fc_state(), self.ex.price)
         except Exception:
             return False
         self.peak_equity = eq if self.peak_equity is None else max(self.peak_equity, eq)
@@ -436,6 +470,8 @@ class Executor:
             return skip("daily_loss_limit_real", realized=self.realized.get(day, 0.0))
         if any(p["sym"] == sym for p in self._open().values()):
             return skip("asset_held")
+        if sym in fc_reserved_pairs(cfg, load_fc_state()):
+            return skip("fc_reserved")
         quote = float(a["notional"]) * cfg.TRADING_SCALE
         try:
             f = self.ex.filters(sym)

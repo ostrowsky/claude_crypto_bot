@@ -138,6 +138,10 @@ def build(day: str, day_rows, shadow_rows=None, demo_fills=None, exchange_rows=N
         L.append(f"  R счёта {_f(cur.get('R_pct'), 4)}%, вклад стейблкоинов {_f(cur.get('stable_contrib_pct'), 4)}%, "
                  + (f"вклад запаса BNB {_f(bnb, 4)}%, " if bnb else "")
                  + f"выручка политики {_f(cur.get('R_policy_pct'), 4)}%")
+        if cur.get("fc_spot_contrib_pct") is not None:      # fc-demo-execution-1030-spec.md §6
+            L.append(f"  FC на демо: вклад спот-ноги {_f(cur.get('fc_spot_contrib_pct'), 4)}% (вынесен из выручки политики), "
+                     f"FC обе ноги {_f(cur.get('R_fc_pct'), 4)}% капитала спот-счёта; демо-фандинг не равен живому -- "
+                     "проверка механики, не дохода")
         if cur.get("reason"):
             L.append(f"  примечание: {cur['reason']}")
         L.append(f"  сверка счёт - учёт: {_f(cur.get('P_minus_L_pct'), 4)}% капитала")

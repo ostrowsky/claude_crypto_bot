@@ -136,7 +136,7 @@ def _apply_fills(qty: dict, fills) -> dict:
     return q
 
 
-def compute_day(day: str, snaps, fills) -> dict:
+def compute_day(day: str, snaps, fills, fc: dict | None = None) -> dict:
     """One UTC day of the demo account: R by equity marks (P), reconciled against the ledger (L)."""
     d0 = _day_dt(day)
     d1 = d0 + timedelta(days=1)
@@ -165,6 +165,14 @@ def compute_day(day: str, snaps, fills) -> dict:
         reserve = sum(h["qty"] * (h1[a]["px"] - h["px"]) for a, h in h0.items() if a in FEE_RESERVE and a in h1)
         rec["fee_reserve_contrib_pct"] = reserve / e0 * 100
         rec["R_policy_pct"] = rec["R_pct"] - rec["stable_contrib_pct"] - rec["fee_reserve_contrib_pct"]
+        if fc is not None:                     # FC-DEMO: its spot leg is hedged on futures, not policy revenue
+            fq = fc.get("spot_qty") or {}
+            fcs = sum(q * (h1[a]["px"] - h0[a]["px"]) for a, q in fq.items() if a in h0 and a in h1)
+            rec["fc_spot_contrib_pct"] = fcs / e0 * 100
+            rec["R_policy_pct"] -= rec["fc_spot_contrib_pct"]
+            a, b = fc.get("equity_start"), fc.get("equity_end")
+            rec["R_fc_pct"] = ((b - a) / e0 * 100) if (a is not None and b is not None) else None
+            rec["fc_note"] = "FC both legs from the ~00:15 marks; demo funding is not live funding"
         q_end = _apply_fills({a: h["qty"] for a, h in h0.items()}, day_fills)
         px_end = {a: h["px"] for a, h in h1.items()}
         missing = [a for a, q in q_end.items() if abs(q) > 1e-12 and a not in px_end]
@@ -248,7 +256,17 @@ def compute_main(day: str | None = None, bench: bool = True) -> dict:
     d0 = _day_dt(day)
     snaps = [s for s in _read_rows(TC.RUNTIME / "trading" / "equity_snapshots.jsonl")
              if d0 - timedelta(minutes=15) <= _ts(s["ts"]) <= d0 + timedelta(days=1, minutes=15)]
-    rec = compute_day(day, snaps, _read_rows(TC.RUNTIME / "trading" / "ledger.jsonl"))
+    fc = None
+    try:
+        import audit_report as AR
+        import fc_demo as F
+        dec = [r for r in AR.load("decisions", 5) if r.get("book") == F.BOOK]
+        if any(r.get("mode") == "demo" for r in dec):
+            fc = {"spot_qty": F.fc_spot_qty_at(dec, d0), "equity_start": F.fc_equity_at(dec, d0),
+                  "equity_end": F.fc_equity_at(dec, d0 + timedelta(days=1))}
+    except Exception:
+        fc = None
+    rec = compute_day(day, snaps, _read_rows(TC.RUNTIME / "trading" / "ledger.jsonl"), fc=fc)
     if bench:
         rec.update(_bench_live(day))
     rec["computed_utc"] = datetime.now(timezone.utc).isoformat(timespec="seconds")

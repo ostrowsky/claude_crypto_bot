@@ -65,7 +65,7 @@ FC_SHADOW_ENABLED: bool = True
 # demo money checks mechanics only. Rollback: FC_DEMO_ENABLED = False + file FLATTEN in runtime/fc_demo/control/.
 FC_DEMO_ENABLED: bool = True
 FC_DEMO_MODE: str = "paper"
-FC_DEMO_NOTIONAL_USDT: float = 2500.0
+FC_DEMO_NOTIONAL_USDT: float = 2400.0     # 2 x N fits the free spot USDT (4 915 on 2026-10-30); futures margin 2 x N
 FC_DEMO_KILL_USDT: float = 300.0
 FC_DEMO_PAIRS: tuple = ("BTCUSDT", "ETHUSDT")
 

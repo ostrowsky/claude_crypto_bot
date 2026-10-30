@@ -127,7 +127,8 @@ class FcDemo:
             - p["fees_in"] - float(b.get("fee_usdt") or 0) - float(s.get("fee_usdt") or 0)
         self.state["realized"] += pnl
         del self.state["pos"][sym]
-        self.log("fc_exit", now, sym=sym, reason=reason, pnl=pnl, perp_exit=float(b["price"]))
+        self.log("fc_exit", now, sym=sym, reason=reason, pnl=pnl, perp_exit=float(b["price"]), q_spot=p["q_spot"],
+                 q_perp=p["q_perp"])
 
     def flatten(self, now, reason):
         for sym in list(self.state["pos"]):
@@ -178,6 +179,41 @@ class FcDemo:
                  realized=self.state["realized"], mode=getattr(self.cfg, "FC_DEMO_MODE", None),
                  note="demo funding is not live funding: mechanics only")
         self.state["last_mark_day"], self.state["last_mark_ms"] = _day(now), int(now.timestamp() * 1000)
+
+
+# ------------------------------------------------------------------ journal readers (daily revenue, report)
+def _rows_demo(decisions):
+    out = []
+    for r in decisions:
+        if r.get("book") == BOOK and r.get("mode") == "demo":
+            try:
+                t = datetime.fromisoformat(str(r["ts"]).replace("Z", "+00:00"))
+            except Exception:
+                continue
+            out.append((t, r))
+    return sorted(out, key=lambda x: x[0])
+
+
+def fc_spot_qty_at(decisions, ts) -> dict:
+    """{asset: qty} of the demo FC spot legs at `ts`, from fc_entry / fc_exit rows."""
+    q = {}
+    for t, r in _rows_demo(decisions):
+        if t > ts:
+            break
+        a = str(r.get("sym", ""))[:-4]
+        if r.get("kind") == "fc_entry":
+            q[a] = float(r.get("q_spot") or 0)
+        elif r.get("kind") == "fc_exit":
+            q.pop(a, None)
+    return {a: v for a, v in q.items() if v}
+
+
+def fc_equity_at(decisions, ts):
+    """FC equity change (both legs, funding) of the first demo fc_mark at or after `ts` (marks come at ~00:15 UTC)."""
+    for t, r in _rows_demo(decisions):
+        if t >= ts and r.get("kind") == "fc_mark":
+            return float(r.get("equity_change") or 0.0)
+    return None
 
 
 # ------------------------------------------------------------------ venues
@@ -291,6 +327,37 @@ class DemoVenue(PaperVenue):
         return sum(float(r["income"]) for r in rows if r.get("symbol") == sym and int(r.get("time", 0)) > since_ms)
 
 
+# ------------------------------------------------------------------ one step at a time (scheduler + a manual run)
+LOCK = DIR / "step.lock"
+LOCK_STALE = timedelta(minutes=10)
+
+
+def acquire_lock(path: Path, now) -> bool:
+    import os
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        fd = os.open(str(path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except FileExistsError:
+        try:
+            t = datetime.fromisoformat(path.read_text(encoding="utf-8").strip())
+        except Exception:
+            t = None
+        if t is not None and now - t < LOCK_STALE:
+            return False
+        path.write_text(now.isoformat(), encoding="utf-8")      # stale lock of a crashed step: take it
+        return True
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        fh.write(now.isoformat())
+    return True
+
+
+def release_lock(path: Path) -> None:
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        pass
+
+
 # ------------------------------------------------------------------ CLI
 def _logger():
     import audit as A
@@ -328,12 +395,20 @@ def main(argv=None) -> int:
     if st and st.get("mode") != TC.FC_DEMO_MODE and st.get("pos"):
         print(f"FC-DEMO: state was built in mode {st.get('mode')!r}; flatten it before switching")
         return 1
-    e = FcDemo(TC, venue, _logger(), state=st)
-    r = e.step(datetime.now(timezone.utc), CONTROL)
-    DIR.mkdir(parents=True, exist_ok=True)
-    tmp = STATE.with_suffix(".tmp")
-    tmp.write_text(json.dumps({**e.state, "mode": TC.FC_DEMO_MODE}, indent=1, default=str), encoding="utf-8")
-    tmp.replace(STATE)
+    now = datetime.now(timezone.utc)
+    if not acquire_lock(LOCK, now):
+        print("FC-DEMO: another step is running; skipped")
+        return 0
+    try:
+        st = json.loads(STATE.read_text(encoding="utf-8")) if STATE.exists() else None     # re-read under the lock
+        e = FcDemo(TC, venue, _logger(), state=st)
+        r = e.step(now, CONTROL)
+        DIR.mkdir(parents=True, exist_ok=True)
+        tmp = STATE.with_suffix(".tmp")
+        tmp.write_text(json.dumps({**e.state, "mode": TC.FC_DEMO_MODE}, indent=1, default=str), encoding="utf-8")
+        tmp.replace(STATE)
+    finally:
+        release_lock(LOCK)
     print(json.dumps(r))
     return 0
 
