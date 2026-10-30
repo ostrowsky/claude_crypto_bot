@@ -930,6 +930,12 @@ only; the 2026 window was not opened for any of them:
     - N8 vs equal weight: −0.083;
     - RV vs 50/50: +0.019, and it is below the random p95;
     - DIR_1d top decile: −0.082 [−0.429, +0.270], AUC 0.538.
+- **LQ, buying spot after a long-liquidation flush (OI 1h −5/−10% and price 1h −3/−6%, hold 4/24 h): REJECTED on train,
+  0 of 8** (`liquidation-flush-lq-1030-spec.md`; 351 perps, 2023-03..2025-12).
+  - No candidate beats the same price drop without the OI flush, so the OI drop adds no information.
+  - The best mean trades, +1.04 / +2.18 %, have a lower bound > 0, but 72–74 % of their sum comes from 5 crash days.
+  - In a 10-slot book they make −0.09..+0.015 %/day, max DD down to −74 %.
+  - Run 1 used the mean of daily means instead of the mean trade; disclosed. Do not re-test.
 - **TM: BTC/ETH spot timing (trend, vol-managed, funding overheat) is REJECTED, 0 of 20.** None beats a circular-shift
   random timing of the same schedule, none beats buy-and-hold. Best vs constant exposure: T_sma_56 +0.027 [−0.039, +0.093]
   (`btc-eth-timing-tm-1028-spec.md`).
