@@ -920,6 +920,16 @@ only; the 2026 window was not opened for any of them:
     does not apply to them; their frozen rules go to the unseen 2019–2022 backward holdout.
   - **Refuted for real:** DIR 4h, DPOS 4h, QB_T0 (vs FC), EX-RL1 A1.
   - **Rejected on other grounds:** XSMOM (random control), SN (liquidations), RB (theoretical ceiling).
+- **BH19, backward holdout 2018–2022** (`backward-holdout-bh19-1030-spec.md`): frozen rules, one look, α = 0.01;
+  418 spot pairs downloaded, stablecoins and fiat excluded as in the live universe.
+  - **FC_PASSIVE CONFIRMED** on 2020-02..2022-12: +0.0247 %/day [+0.0196, +0.0303], 0 liquidations, max DD −0.36 %.
+    It is now positive on three separate periods, but shrinking: 2022 +0.002, 2026 +0.0024.
+  - **DIR_1d, TM, N8, RV NOT confirmed. Their verdict is final: REJECTED, do not re-test.** Each has R > 0 in the
+    2019–2021 market, none beats its benchmark:
+    - TM vs constant exposure: +0.071 [−0.053, +0.181];
+    - N8 vs equal weight: −0.083;
+    - RV vs 50/50: +0.019, and it is below the random p95;
+    - DIR_1d top decile: −0.082 [−0.429, +0.270], AUC 0.538.
 - **TM: BTC/ETH spot timing (trend, vol-managed, funding overheat) is REJECTED, 0 of 20.** None beats a circular-shift
   random timing of the same schedule, none beats buy-and-hold. Best vs constant exposure: T_sma_56 +0.027 [−0.039, +0.093]
   (`btc-eth-timing-tm-1028-spec.md`).
