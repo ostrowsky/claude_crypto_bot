@@ -895,12 +895,20 @@ FC_PASSIVE on the demo account: spot BTC+ETH long + USD-M perp short, L = 1 isol
 - It runs as a step of `run_shadow.cmd`, log `runtime/fc_demo/fc_demo.log`.
 - It skips the pre-registered KEEP of FC-SHADOW; the deviation is disclosed. Demo funding is not live funding, so
   demo money checks mechanics only.
-- **Now in `FC_DEMO_MODE = "paper"`** (live prices, no order). Demo mode is blocked until these are fixed, each with
-  a test:
-  - the X4 kill switch sees the spot leg without its futures hedge;
-  - daily revenue would book the spot leg alone;
-  - spot USDT is 4 915 < 2 × 2 500.
-- `exchange_client.fut_order` (POST /fapi/v1/order behind `_trading_allowed`) exists since then.
+- **DEMO MODE LIVE since 2026-10-30 09:26 UTC** (`FC_DEMO_MODE = "demo"`, N = 2 400 per pair):
+  - BTC spot +0.030849 against perp −0.0308 at 77 694.8;
+  - ETH spot +1.077521 against perp −1.077 at 2 224.98.
+- Blockers fixed with tests before the switch:
+  - X4 cannot trade FC pairs (`fc_reserved`), because it sells the free balance of a coin;
+  - the X4 kill switch excludes the FC spot value;
+  - daily revenue books the FC spot leg outside the policy revenue, and both FC legs as `R_fc_pct`;
+  - a step lock prevents a double entry.
+- **Incident at the first demo step (09:18 UTC).** The demo `fut_order` RESULT has no `avgPrice`, and the code
+  read the filled perp as rejected. It unwound the spot legs and left naked shorts.
+  - Claude closed both shorts by hand the same minute (reduceOnly).
+  - Fix: price comes from `GET /fapi/v1/order`; a failed second leg now checks and closes the real perp position.
+  - Realized −1.69 USDT.
+- `exchange_client.fut_order` / `fut_get_order` / `fut_positions` exist since then.
 
 Hypotheses of 2026-10-28 (`docs/specs/features/trader-hypotheses-1028-spec.md` §5), all checked on train 2023-03..2025-12
 only; the 2026 window was not opened for any of them:
