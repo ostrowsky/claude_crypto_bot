@@ -102,6 +102,46 @@ class TestLock(unittest.TestCase):
             self.assertTrue(F.acquire_lock(lk, now + timedelta(minutes=20)))   # a stale lock (crashed step) is taken
 
 
+class TestPerpFillBug(unittest.TestCase):
+    """Bug 2026-10-30 (first demo step): demo fut_order RESULT answers FILLED + executedQty WITHOUT avgPrice; the code
+    read price 0 as 'not filled', unwound the spot leg and left naked perp shorts (closed by hand the same minute)."""
+
+    def test_filled_without_avg_price_is_a_fill(self):
+        import fc_demo as F
+
+        class Fut:
+            def fut_order(self, sym, side, type_, **kw):
+                return {"status": "FILLED", "executedQty": "0.0308", "orderId": 7}
+
+            def fut_get_order(self, sym, order_id):
+                return {"status": "FILLED", "executedQty": "0.0308", "avgPrice": "77775.0"}
+        v = F.DemoVenue.__new__(F.DemoVenue)
+        v.fut_c, v._setup = Fut(), {"BTCUSDT"}
+        r = v._perp("BTCUSDT", "SELL", 0.0308, "cid", False)
+        self.assertAlmostEqual(r["qty"], 0.0308)
+        self.assertAlmostEqual(r["price"], 77775.0)
+
+    def test_unwind_closes_an_opened_perp(self):
+        import fc_demo as F
+        from test_fc_demo import Venue, Log, cfg, at
+
+        class V(Venue):
+            def perp_sell(self, sym, qty, cid):
+                self.calls.append(("perp_sell", sym, qty))
+                self.opened = qty
+                raise RuntimeError("answer unreadable")
+
+            def perp_open_qty(self, sym):
+                return getattr(self, "opened", 0.0)
+        v, lg = V(), Log()
+        e = F.FcDemo(cfg(FC_DEMO_PAIRS=("BTCUSDT",)), v, lg)
+        e.step(at(0, 20), None)
+        kinds = [c[0] for c in v.calls]
+        self.assertIn("perp_buy", kinds)                                 # the opened short is closed
+        self.assertIn("spot_sell", kinds)
+        self.assertEqual(e.state["pos"], {})
+
+
 class TestNotional(unittest.TestCase):
     def test_fits_free_spot_usdt(self):
         import trader_config as TC

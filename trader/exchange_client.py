@@ -358,6 +358,10 @@ class ExchangeClient:
         return self._request("POST", "/fapi/v1/order", {"symbol": symbol, "side": side, "type": type_,
                                                         "newOrderRespType": "RESULT", **kw}, signed=True)
 
+    def fut_get_order(self, symbol: str, order_id) -> dict:
+        self._fut()
+        return self._request("GET", "/fapi/v1/order", {"symbol": symbol, "orderId": order_id}, signed=True)
+
     def fut_positions(self, symbol: str | None = None) -> list:
         self._fut()
         return self._request("GET", "/fapi/v2/positionRisk", {"symbol": symbol} if symbol else {}, signed=True)

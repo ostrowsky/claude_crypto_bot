@@ -98,7 +98,15 @@ class FcDemo:
         try:
             pr = self.v.perp_sell(sym, q, cp)
         except Exception as e:                                       # noqa: BLE001
-            self._unwind_spot(sym, s["qty"], now, d, "perp_rejected", error=str(e))
+            err = str(e)
+            try:                                                     # the order may have filled anyway (bug 10-30)
+                open_q = float(getattr(self.v, "perp_open_qty", lambda _s: 0.0)(sym) or 0)
+                if open_q > 0:
+                    self.v.perp_buy_reduce(sym, open_q, f"fc_{sym[:3].lower()}_{stamp}_r")
+                    err += f"; opened perp {open_q} closed"
+            except Exception as e2:                                  # noqa: BLE001
+                err += f"; perp check/close failed: {e2}"
+            self._unwind_spot(sym, s["qty"], now, d, "perp_rejected", error=err)
             return
         p = {"q_spot": float(s["qty"]), "spot_cost": float(s["cost"]), "q_perp": float(pr["qty"]),
              "perp_entry": float(pr["price"]), "margin": float(pr["qty"]) * float(pr["price"]),
@@ -265,6 +273,9 @@ class PaperVenue:
     def funding_since(self, sym, since_ms):
         return 0.0
 
+    def perp_open_qty(self, sym):
+        return 0.0
+
 
 class DemoVenue(PaperVenue):
     """Real orders on demo-api (spot) and demo-fapi (perp); signed requests go to demo hosts only."""
@@ -312,9 +323,24 @@ class DemoVenue(PaperVenue):
             kw["reduceOnly"] = "true"
         o = self.fut_c.fut_order(sym, side, "MARKET", **kw)
         q, px = float(o.get("executedQty") or 0), float(o.get("avgPrice") or 0)
-        if q <= 0 or px <= 0:
+        if q <= 0 and o.get("status") != "FILLED":
             raise RuntimeError(f"perp order not filled: {o.get('status')}")
-        return {"qty": q, "price": px, "fee_usdt": q * px * PERP_FEE, "fee_estimated": True}
+        est = False
+        if px <= 0 or q <= 0:                  # demo RESULT answers FILLED without avgPrice (bug 2026-10-30)
+            g = self.fut_c.fut_get_order(sym, o.get("orderId"))
+            q = q if q > 0 else float(g.get("executedQty") or 0)
+            px = float(g.get("avgPrice") or 0)
+            if px <= 0:
+                px, est = self.mark(sym), True
+        if q <= 0:
+            raise RuntimeError(f"perp order without executed quantity: {o.get('status')}")
+        return {"qty": q, "price": px, "fee_usdt": q * px * PERP_FEE, "fee_estimated": True, "price_estimated": est}
+
+    def perp_open_qty(self, sym):
+        for p in self.fut_c.fut_positions(sym) or []:
+            if p.get("symbol") == sym:
+                return abs(float(p.get("positionAmt") or 0))
+        return 0.0
 
     def perp_sell(self, sym, qty, cid):
         return self._perp(sym, "SELL", qty, cid, False)
