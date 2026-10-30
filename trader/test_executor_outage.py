@@ -38,6 +38,7 @@ class Net:
 
 def paper_executor(cfg=None):
     import executor as E
+    E.FC_STATE = Path(__file__).with_name("_no_fc_state_in_tests.json")   # never the live runtime/fc_demo state
     net = Net({s: 2.0 for s in SYMS})
     pe = E.PaperExchange(net, FM.model("taker", 1), {s: filt() for s in SYMS}, usdt=5000.0)
     paper, w = StubPaper(), W()

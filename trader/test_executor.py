@@ -238,6 +238,7 @@ class StubPaper:
 
 def make(prices=None, filters=None, cfg=None, usdt=5000.0):
     import executor as E
+    E.FC_STATE = Path(__file__).with_name("_no_fc_state_in_tests.json")   # never the live runtime/fc_demo state
     paper, ex, w = StubPaper(), FakeOrders(prices or {"ABCUSDT": 2.0}, filters, usdt=usdt), W()
     return E, paper, ex, w, E.Executor(paper, ex, cfg or CFG(), w)
 
