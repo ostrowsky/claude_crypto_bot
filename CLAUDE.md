@@ -903,6 +903,10 @@ FC_PASSIVE on the demo account: spot BTC+ETH long + USD-M perp short, L = 1 isol
   - the X4 kill switch excludes the FC spot value;
   - daily revenue books the FC spot leg outside the policy revenue, and both FC legs as `R_fc_pct`;
   - a step lock prevents a double entry.
+- **Fifth blocker, found live 2026-11-03 (fixed, c331db2).** From 10-30 to 11-03, X4 reconcile took the FC spot legs
+  for orphan balances.
+  - Every ~5 min it put a STOP_LOSS on the whole leg at −11 % and cancelled it on the next cycle.
+  - It never triggered. Now `reconcile.run(reserved=...)` leaves FC pairs alone.
 - **Incident at the first demo step (09:18 UTC).** The demo `fut_order` RESULT has no `avgPrice`, and the code
   read the filled perp as rejected. It unwound the spot legs and left naked shorts.
   - Claude closed both shorts by hand the same minute (reduceOnly).
