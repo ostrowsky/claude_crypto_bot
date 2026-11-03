@@ -858,7 +858,7 @@ LA (2026-10-28) — exchange announcements as information that comes before the 
   - Do not re-test longs on these announcement types (`docs/specs/features/listing-announcements-la-1028-spec.md` §8).
 Phase C (2026-10-13): `trader/executor.py` executes the E7 book X4 at `TRADING_SCALE` 0.02 with a
 catastrophe stop 3% below the policy stop on the exchange; task `CryptoBot_TraderExecutor` (every 5 min,
-IgnoreNew) keeps it running. **C2 ON since 2026-10-20** (`TRADING_ENABLED = True`, `TRADING_MODE = "demo"`, operator): real orders on the DEMO account only; gate C after 7 days (>= 10-27). **PAUSE since 2026-10-29** (operator): no new X4 entries; open positions run to their exits; remove the `PAUSE` file to resume. Rollback: `TRADING_ENABLED = False`. Control by files in
+IgnoreNew) keeps it running. **C2 ON since 2026-10-20** (`TRADING_ENABLED = True`, `TRADING_MODE = "demo"`, operator): real orders on the DEMO account only; gate C after 7 days (>= 10-27). **PAUSE 2026-10-29..11-03** (operator); **X4 entries resumed 2026-11-03 12:00 UTC** (operator). A kill switch had also tripped on 10-30 09:26: the long-running executor was still on pre-fix code (b72810d) when FC-DEMO bought its spot legs. **After any executor code change, restart the executor process.** Rollback: `TRADING_ENABLED = False`. Control by files in
 `trader/runtime/executor/control/` (PAUSE, FLATTEN, RESET_NOTED). C0 smoke and C2 demo need the operator
 (`docs/specs/features/demo-execution-c-1013-spec.md`).
 
