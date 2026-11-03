@@ -695,7 +695,8 @@ class Executor:
     def reconcile(self, now):
         self.last_reconcile = now
         try:
-            acts = RC.run(self._open(), self.ex, self.paper.stop_of, self.cfg, day_status=self.day_status)
+            acts = RC.run(self._open(), self.ex, self.paper.stop_of, self.cfg, day_status=self.day_status,
+                          reserved=frozenset(fc_reserved_pairs(self.cfg, load_fc_state())))
         except Exception as e:
             self._alert(now, "reconcile_error", error=repr(e))
             return []
@@ -714,7 +715,8 @@ class Executor:
                 if isinstance(o, X.ExchangeError):
                     self._alert(now, "orphan_stop_failed", sym=a["sym"], err_code=o.code, msg=o.msg)
             elif act == "cancel_order":
-                self._alert(now, "orphan_order", sym=a["sym"], order_id=a["order_id"])
+                self._alert(now, "fc_leftover_cancel" if a.get("reserved") else "orphan_order", sym=a["sym"],
+                            order_id=a["order_id"])
                 try:
                     self.ex.cancel(a["sym"], a["order_id"])
                 except X.ExchangeError as e:

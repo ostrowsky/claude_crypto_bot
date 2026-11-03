@@ -158,7 +158,7 @@ def build(day: str, day_rows, shadow_rows=None, demo_fills=None, exchange_rows=N
     L.append("3. Сделки предыдущего дня")
     fills = [f for f in (demo_fills or []) if _on_day(f.get("time"), day)]
     if not fills:
-        L.append("  демо-счёт: нет сделок (ордера на демо-счёт ещё не включены)")
+        L.append("  демо-счёт: исполнений за день нет")              # demo-ledger-d-1013-spec.md, amendment 2026-11-03
     else:
         fee = sum(float(f.get("commission_usdt") or 0) for f in fills)
         L.append(f"  демо-счёт: {len(fills)} исполнений, комиссии {fee:.2f} USDT")

@@ -193,7 +193,7 @@ class TestReport(unittest.TestCase):
         self.assertNotIn("растёт", txt)
         self.assertNotIn("падает", txt)
         self.assertIn("Сделки предыдущего дня", txt)
-        self.assertIn("нет сделок", txt)                         # demo account has none yet
+        self.assertIn("исполнений за день нет", txt)             # no fills that day (spec amendment 2026-11-03)
         self.assertIn("AUSDT", txt)
         self.assertIn("BUSDT", txt)
         self.assertNotIn("CUSDT", txt)                           # exited the day before

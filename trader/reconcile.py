@@ -11,6 +11,9 @@ Actions:
   alert             a foreign order (placed by hand) without a position  -> alert only, never touched
   close_from_trades position in the state, nothing on the account        -> close from myTrades
   block_entries     the metric's day status is RECONCILE_FAIL
+
+reserved (fc-demo-execution-1030-spec.md §6, 2026-11-03): pairs held by FC-DEMO. Their balance is never an orphan, FC
+orders (fc_...) are not touched or alerted, a leftover X4 order (cb_...) is cancelled with reserved=True.
 """
 from __future__ import annotations
 
@@ -61,7 +64,7 @@ def is_dust(orders, sym: str, qty: float) -> bool:
     return qty * px < min_notional(orders.filters(sym))
 
 
-def run(positions: dict, orders, policy_stop, cfg, day_status: str | None = None) -> list:
+def run(positions: dict, orders, policy_stop, cfg, day_status: str | None = None, reserved=frozenset()) -> list:
     acts = []
     if day_status == "RECONCILE_FAIL":
         acts.append({"action": "block_entries"})
@@ -98,6 +101,11 @@ def run(positions: dict, orders, policy_stop, cfg, day_status: str | None = None
         if o["orderId"] in pos_stop_ids:
             continue
         cid = str(o.get("clientOrderId") or "")
+        if o.get("symbol") in reserved:
+            if cid.startswith(OUR_PREFIX):
+                acts.append({"action": "cancel_order", "sym": o["symbol"], "order_id": o["orderId"],
+                             "client_order_id": cid, "reserved": True})
+            continue
         if o.get("symbol") in pos_syms and not cid.startswith(OUR_PREFIX):
             acts.append({"action": "alert", "code": "foreign_order", "sym": o.get("symbol"), "order_id": o["orderId"]})
         elif cid.startswith(OUR_PREFIX):
@@ -109,7 +117,7 @@ def run(positions: dict, orders, policy_stop, cfg, day_status: str | None = None
         if asset in STABLES or asset == "BNB":
             continue
         sym = asset + QUOTE
-        if sym in pos_syms:
+        if sym in pos_syms or sym in reserved:
             continue
         try:
             px = float(orders.price(sym))
