@@ -947,6 +947,9 @@ only; the 2026 window was not opened for any of them:
     - +3.57 % per event [−0.28, +7.21], n = 50; random p95 1.45; book +0.10 %/day, DD −28 %.
     - Exploratory 2023–25: +5.65 [+0.61, +14.11], n = 17.
     - Only this frozen rule may be re-tested, by operator decision.
+    - **2026 single look (operator 11-04): TOO_FEW.** Only 2 events: 01-19 +1.20 %, 02-06 +16.26 %.
+    - **CAP-SHADOW live since 2026-11-04** (`cap-shadow-1104-spec.md`, `trader/cap_shadow.py`, flag `CAP_SHADOW_ENABLED`).
+      It is a paper step of `run_shadow.cmd` on the W1 scanner candles. KEEP / REJECT at ≥ 15 events; review on 2027-11-04.
 - **FC-W, passive carry on the N = 4/6/10 most liquid pairs: REJECTED on train, 0 of 3** (`fc-wide-carry-fcw-1104-spec.md`).
   - Every alt beyond BTC/ETH lowers R and adds squeezes. N10 vs FC_PASSIVE: −0.0069 [−0.0130, −0.0021], 1–2 liquidations.
   - The holdout was not opened. Keep FC on BTC+ETH.

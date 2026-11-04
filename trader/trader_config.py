@@ -59,6 +59,10 @@ SHADOW_PORTFOLIO_ENABLED: bool = True
 # no key, no order; runs inside run_shadow.cmd after the E7 step. Rollback: False (the step does nothing).
 FC_SHADOW_ENABLED: bool = True
 
+# CAP-SHADOW (cap-shadow-1104-spec.md, operator 2026-11-04): forward paper book of the frozen CAP_W4_X50_H24 on the
+# W1 scanner candles, a step of run_shadow.cmd; paper only. Rollback: False.
+CAP_SHADOW_ENABLED: bool = True
+
 # ── FC_PASSIVE executed on the demo account (fc-demo-execution-1030-spec.md, operator 2026-10-29) ── spot BTC+ETH long
 # + USD-M perp short, L = 1 isolated; step inside run_shadow.cmd. "paper" = live prices, no order; "demo" = real orders
 # on demo-api / demo-fapi only (also needs TRADING_ENABLED and TRADING_MODE = "demo"). Demo funding is not live funding:

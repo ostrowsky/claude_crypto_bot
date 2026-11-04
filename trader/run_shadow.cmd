@@ -27,6 +27,10 @@ if errorlevel 1 echo FC SHADOW STEP FAILED with errorlevel %errorlevel% >> "%LOG
 
 REM FC_PASSIVE on the demo account (fc-demo-execution-1030-spec.md): flag FC_DEMO_ENABLED, mode FC_DEMO_MODE
 REM (paper | demo); own log and own errorlevel check, so a failure here never touches the steps above.
+if not exist "%ROOT%\trader\runtime\cap_shadow" mkdir "%ROOT%\trader\runtime\cap_shadow"
+"%PY%" cap_shadow.py step >> "%ROOT%\trader\runtime\cap_shadow\cap_shadow.log" 2>&1
+if errorlevel 1 echo CAP SHADOW STEP FAILED with errorlevel %errorlevel% >> "%ROOT%\trader\runtime\cap_shadow\cap_shadow.log"
+
 if not exist "%ROOT%\trader\runtime\fc_demo" mkdir "%ROOT%\trader\runtime\fc_demo"
 "%PY%" fc_demo.py step >> "%ROOT%\trader\runtime\fc_demo\fc_demo.log" 2>&1
 if errorlevel 1 echo FC DEMO STEP FAILED with errorlevel %errorlevel% >> "%ROOT%\trader\runtime\fc_demo\fc_demo.log"
