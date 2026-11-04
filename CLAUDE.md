@@ -940,6 +940,16 @@ only; the 2026 window was not opened for any of them:
   - The best mean trades, +1.04 / +2.18 %, have a lower bound > 0, but 72–74 % of their sum comes from 5 crash days.
   - In a 10-slot book they make −0.09..+0.015 %/day, max DD down to −74 %.
   - Run 1 used the mean of daily means instead of the mean trade; disclosed. Do not re-test.
+- **CAP, buying an equal-weight top-100 spot basket after a market-wide crash: REJECTED by the pre-registration, 0 of 8**
+  (`capitulation-basket-cap-1104-spec.md`). Decision window 2018–2022, where 2018–19 is nearly empty (< 50 USDT pairs);
+  PBO 0.27. 2022 is negative for most candidates.
+  - **Not shown, NOT refuted: CAP_W4_X50_H24** (half the market −10 % in 4 h, hold 24 h).
+    - +3.57 % per event [−0.28, +7.21], n = 50; random p95 1.45; book +0.10 %/day, DD −28 %.
+    - Exploratory 2023–25: +5.65 [+0.61, +14.11], n = 17.
+    - Only this frozen rule may be re-tested, by operator decision.
+- **FC-W, passive carry on the N = 4/6/10 most liquid pairs: REJECTED on train, 0 of 3** (`fc-wide-carry-fcw-1104-spec.md`).
+  - Every alt beyond BTC/ETH lowers R and adds squeezes. N10 vs FC_PASSIVE: −0.0069 [−0.0130, −0.0021], 1–2 liquidations.
+  - The holdout was not opened. Keep FC on BTC+ETH.
 - **TM: BTC/ETH spot timing (trend, vol-managed, funding overheat) is REJECTED, 0 of 20.** None beats a circular-shift
   random timing of the same schedule, none beats buy-and-hold. Best vs constant exposure: T_sma_56 +0.027 [−0.039, +0.093]
   (`btc-eth-timing-tm-1028-spec.md`).

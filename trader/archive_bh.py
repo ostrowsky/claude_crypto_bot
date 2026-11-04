@@ -6,8 +6,10 @@
   fetch                            spot 15m of every *USDT pair in the archive (delisted included), USD-M 15m and
                                    funding of BTCUSDT / ETHUSDT; per-symbol npz in runtime/history_bh/, resumable
   daily_panel / build              xsmom.Panel of the store cut at 2022-12-31 + the FC market (perp panel + funding)
+  fetch_perps / build_wide         FC-W holdout (fc-wide-carry-fcw-1104-spec.md §3): USD-M 15m + funding 2020-01..2022-12
+                                   of every archive USDT perp mapped to a BH spot pair (fcw.map_perp, ratio check)
 
-  (from trader/) ../pyembed/python.exe -u archive_bh.py fetch | build | status
+  (from trader/) ../pyembed/python.exe -u archive_bh.py fetch | build | fetch_perps | build_wide | status
 """
 from __future__ import annotations
 
@@ -43,6 +45,9 @@ FC_PAIRS = ("BTCUSDT", "ETHUSDT")
 WORKERS = 16
 PANEL = TC.RUNTIME / "experiments" / "bh_panel.npz"
 MARKET = TC.RUNTIME / "experiments" / "bh_market.npz"
+MARKET_WIDE = TC.RUNTIME / "experiments" / "bh_market_wide.npz"
+PERP_MAP = STORE / "perp_mapping.json"
+RATIO_TOL = 0.05
 # bases of 2017-2022 that are pegged (stablecoins / fiat) but delisted before trading_universe.STABLE_BASES was written
 OLD_PEGGED = frozenset({"PAX", "USDS", "USDSB", "SUSD", "AUD", "BKRW", "IDRT", "BIDR", "NGN", "RUB", "BVND", "VAI", "UST",
                         "USTC", "EUR", "GBP", "USDP", "TUSD", "BUSD", "USDC", "DAI"})
@@ -318,6 +323,89 @@ def load_market():
     return C.Market(spot=load_panel(), perp=perp, funding={s: {"t": z[f"f_t__{s}"], "rate": z[f"f_r__{s}"]} for s in syms})
 
 
+# ------------------------------------------------------------------ FC-W holdout market (fc-wide-carry-fcw-1104-spec.md §3)
+def fetch_perps(log=print) -> dict:
+    import fcw
+    t0 = time.time()
+    ex = ThreadPoolExecutor(WORKERS)
+    spot = {f.name[:-len("_15m.npz")] for f in STORE.glob("*_15m.npz")}
+    perps = sorted(p.rstrip("/").split("/")[-1] for p in list_all("data/futures/um/monthly/klines/"))
+    mapping = {}
+    for p in perps:
+        m = fcw.map_perp(p, spot)
+        if m and keep_symbol(m[0]) and m[0] not in mapping:
+            mapping[m[0]] = {"perp": p, "mult": m[1]}
+    log(f"archive perps {len(perps)}, mapped to BH spot {len(mapping)}")
+    tot = {"perps": 0, "kline_months": 0, "funding_months": 0, "errors": 0}
+    kl = ("o", "h", "l", "c", "v")
+    for n, (s, mp) in enumerate(sorted(mapping.items()), 1):
+        p = mp["perp"]
+        pm = months_in_range(list_all(f"data/futures/um/monthly/klines/{p}/15m/", delimiter=False), PERP_FIRST, LAST)
+        fm = months_in_range(list_all(f"data/futures/um/monthly/fundingRate/{p}/", delimiter=False), PERP_FIRST, LAST)
+        mp["kline_months"], mp["funding_months"] = len(pm), len(fm)
+        if not pm or not fm:
+            continue
+        a = fetch_series(f"data/futures/um/monthly/klines/{p}/15m/", p, pm, PERP / f"{p}_15m.npz", parse_klines, kl, ex)
+        b = fetch_series(f"data/futures/um/monthly/fundingRate/{p}/", p, fm, FUND / f"{p}_funding.npz", parse_funding,
+                         ("rate", "mark"), ex)
+        tot["perps"] += 1
+        tot["kline_months"] += a.get("new", 0)
+        tot["funding_months"] += b.get("new", 0)
+        tot["errors"] += a.get("errors", 0) + b.get("errors", 0)
+        if n % 20 == 0:
+            log(f"  perps {n}/{len(mapping)} {tot} {(time.time() - t0) / 60:.1f} min")
+    ex.shutdown()
+    PERP_MAP.write_text(json.dumps(mapping, sort_keys=True, indent=1), encoding="utf-8")
+    log(json.dumps({**tot, "minutes": round((time.time() - t0) / 60, 1)}))
+    return tot
+
+
+def build_wide() -> dict:
+    import carry as C
+    import fcw
+    import xsmom as XS
+    spot = load_panel()
+    mapping = json.loads(PERP_MAP.read_text(encoding="utf-8"))
+    kl = ("t", "o", "h", "l", "c", "v")
+    lim = XS.day_num(LAST_DAY)
+    pd, fund, mult, dropped = {}, {}, {}, {}
+    for s, mp in sorted(mapping.items()):
+        pp, pf = PERP / f"{mp['perp']}_15m.npz", FUND / f"{mp['perp']}_funding.npz"
+        if not pp.exists() or not pf.exists() or s not in spot.col:
+            dropped[s] = "no data"
+            continue
+        d = C.daily_perp(_load(pp, kl))
+        keep = np.asarray(d["day"]) <= lim
+        d = {k: np.asarray(v)[keep] for k, v in d.items()}
+        if not len(d["day"]):
+            dropped[s] = "no day"
+            continue
+        j = spot.col[s]
+        rows = np.asarray(d["day"], dtype=np.int64) - spot.d0
+        ok = (rows >= 0) & (rows < spot.n)
+        if not fcw.ratio_ok(spot.close[rows[ok], j], np.asarray(d["close"])[ok], mp["mult"], RATIO_TOL):
+            dropped[s] = "price ratio"
+            continue
+        pd[s], mult[s] = d, mp["mult"]
+        fund[s] = _load(pf, ("t", "rate"))
+    perp = C.PerpPanel.from_daily(pd, mult=mult)
+    np.savez_compressed(MARKET_WIDE, days=perp.days, syms=np.array(perp.syms), close=perp.close,
+                        first_close=perp.first_close, qv=perp.qv, complete=perp.complete, has_first=perp.has_first,
+                        has_bar=perp.has_bar, high=perp.high,
+                        **{f"f_t__{s}": fund[s]["t"] for s in perp.syms}, **{f"f_r__{s}": fund[s]["rate"] for s in perp.syms})
+    r = {"perps": len(perp.syms), "dropped": dropped, "perp_from": XS.day_str(perp.d0), "perp_to": XS.day_str(perp.d0 + perp.n - 1)}
+    print(json.dumps({k: (v if k != "dropped" else len(v)) for k, v in r.items()}))
+    return r
+
+
+def load_wide_market():
+    import carry as C
+    z = np.load(MARKET_WIDE, allow_pickle=False)
+    syms = [str(s) for s in z["syms"]]
+    perp = C.PerpPanel(z["days"], syms, z["close"], z["first_close"], z["qv"], z["complete"], z["has_first"],
+                       z["has_bar"], z["high"])
+    return C.Market(spot=load_panel(), perp=perp, funding={s: {"t": z[f"f_t__{s}"], "rate": z[f"f_r__{s}"]} for s in syms})
+
 def main(argv=None) -> int:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     argv = sys.argv[1:] if argv is None else argv
@@ -327,6 +415,12 @@ def main(argv=None) -> int:
         return 0
     if cmd == "build":
         build()
+        return 0
+    if cmd == "fetch_perps":
+        fetch_perps(log=lambda s: print(s, flush=True))
+        return 0
+    if cmd == "build_wide":
+        build_wide()
         return 0
     if cmd == "status":
         print(json.dumps({"spot_files": len(list(STORE.glob("*_15m.npz"))) if STORE.exists() else 0}))
