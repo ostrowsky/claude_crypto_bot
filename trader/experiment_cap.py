@@ -5,7 +5,10 @@
   test   the decision: §4 on 2018-2022, plus the same numbers on 2023-03..2025-12 as the exploratory origin of the idea
          -> runtime/experiments/CAP_TEST.json
 
-  (from trader/) ../pyembed/python.exe -u experiment_cap.py plan | test
+  look2026  operator 2026-11-04: ONE look at 2026 for the frozen CAP_W4_X50_H24 only, alpha 0.05, marker
+            runtime/experiments/CAP_2026_OPENED -> runtime/experiments/CAP_2026.json
+
+  (from trader/) ../pyembed/python.exe -u experiment_cap.py plan | test | look2026
 """
 from __future__ import annotations
 
@@ -34,6 +37,10 @@ PBO_MAX = 0.5
 PLAN_OUT = TC.RUNTIME / "experiments" / "CAP_PLAN.json"
 TEST_OUT = TC.RUNTIME / "experiments" / "CAP_TEST.json"
 SPEC = "capitulation-basket-cap-1104-spec.md"
+RULE_2026 = "CAP_W4_X50_H24"
+MARKER_2026 = TC.RUNTIME / "experiments" / "CAP_2026_OPENED"
+OUT_2026 = TC.RUNTIME / "experiments" / "CAP_2026.json"
+MIN_EVENTS_2026 = 5
 Z = {0.05 / 8: 2.7344}           # two-sided normal quantile at 1 - alpha/2
 
 
@@ -70,7 +77,7 @@ def _year(ms):
 
 
 # ------------------------------------------------------------------ data
-def load_window(kind: str, lo: str, hi: str):
+def load_window(kind: str, lo: str, hi: str, cut: str | None = "2026-01-01"):
     """(grid, pairs, uni) for one window; pairs only for symbols that are in some day's universe."""
     import xsmom as XS
     cfg = XS.Config(L=1, H=1, K=10, min_age_days=60)
@@ -81,7 +88,8 @@ def load_window(kind: str, lo: str, hi: str):
     else:
         import experiment_xsmom as EX
         import history_store as HS
-        P = EX.load_panel().cut("2026-01-01")
+        P = EX.load_panel()
+        P = P.cut(cut) if cut else P
         load = lambda s: HS.load(HS.path_of(s))
     uni = {}
     for r in range(max(P.row(lo), 0), min(P.row(hi), P.n)):
@@ -223,6 +231,66 @@ def run_test() -> dict:
     return out
 
 
+# ------------------------------------------------------------------ one look at 2026 (operator 2026-11-04)
+def verdict_2026(agg: dict, rand_p95) -> str:
+    if (agg.get("n") or 0) < MIN_EVENTS_2026:
+        return "TOO_FEW"
+    if agg.get("lo95") is not None and agg["lo95"] > 0 and rand_p95 is not None and agg["mean_pct"] > rand_p95:
+        return "CONFIRMED_2026"
+    return "NOT_SHOWN_2026"
+
+
+def open_2026(marker=MARKER_2026) -> None:
+    marker = Path(marker)
+    if marker.exists():
+        raise SystemExit("CAP 2026 already looked at once: %s" % marker)
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    marker.write_text(datetime.now(timezone.utc).isoformat(), encoding="utf-8")
+
+
+def run_2026() -> dict:
+    import daily_revenue as DR
+    import experiment_xsmom as EX
+    import fill_model as FM
+    import lq
+    import xsmom as XS
+    P = EX.load_panel()
+    last = XS.day_str(P.d0 + P.n - 1)                      # last full day of the panel
+    lo, hi = "2026-01-01", last                            # events end a day before: the 24 h hold must finish
+    open_2026()
+    t0 = time.time()
+    fm = FM.model("taker", 1)
+    c = candidates()[RULE_2026]
+    grid, pairs, uni = load_window("live", lo, hi, cut=None)
+    share = cap.breadth(grid, pairs, uni, c["W"], c["Y"])
+    ev = [i for i in cap.events(share, c["X"], c["H"]) if i + 1 + c["H"] < len(grid)]
+    bs = baskets(grid, ev, c["H"], pairs, uni, fm)
+    rets = [b["ret_pct"] for b in bs]
+    rmeans = []
+    for sd in range(N_RANDOM):
+        rb = baskets(grid, [i for i in lq.random_bars(grid, ev, len(ev), 9000 + sd) if i + 1 + c["H"] < len(grid)],
+                     c["H"], pairs, uni, fm)
+        if rb:
+            rmeans.append(float(np.mean([b["ret_pct"] for b in rb])))
+    agg = cap.mean_ci(rets, alpha=0.05)
+    p95 = float(np.percentile(rmeans, 95)) if rmeans else None
+    daily = {}
+    for b in bs:
+        d = datetime.fromtimestamp(b["exit_close_ms"] / 1000, timezone.utc).strftime("%Y-%m-%d")
+        daily[d] = daily.get(d, 0.0) + b["ret_pct"]
+    days = [XS.day_str(n) for n in range(XS.day_num(lo), XS.day_num(hi))]
+    out = {"spec": SPEC, "rule": RULE_2026, "config": c, "window": [lo, hi], "alpha": 0.05, "pairs": len(pairs),
+           "events": [{"entry": datetime.fromtimestamp(b["entry_close_ms"] / 1000, timezone.utc).isoformat(),
+                       "ret_pct": round(b["ret_pct"], 3), "n_pairs": b["n_pairs"]} for b in bs],
+           "agg": agg, "rand_p95": p95, "rand_mean": float(np.mean(rmeans)) if rmeans else None,
+           "book_R": DR.aggregate([(d, daily.get(d, 0.0)) for d in days]), "verdict": verdict_2026(agg, p95),
+           "minutes": round((time.time() - t0) / 60, 1), "utc": datetime.now(timezone.utc).isoformat()}
+    OUT_2026.write_text(json.dumps(out, ensure_ascii=False, indent=1, default=str), encoding="utf-8")
+    print(json.dumps({k: out[k] for k in ("window", "agg", "rand_p95", "verdict")}, default=str))
+    for e in out["events"]:
+        print(e)
+    return out
+
 def main(argv=None) -> int:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     argv = sys.argv[1:] if argv is None else argv
@@ -230,6 +298,8 @@ def main(argv=None) -> int:
         run_plan()
     elif argv[:1] == ["test"]:
         run_test()
+    elif argv[:1] == ["look2026"]:
+        run_2026()
     else:
         print(__doc__)
     return 0

@@ -124,5 +124,23 @@ class TestAdmission(unittest.TestCase):
             self.assertFalse(X.admit(dict(good, **{k: v}))[0], k)
 
 
+class Test2026Look(unittest.TestCase):
+    """Operator 2026-11-04: one look at 2026 for the frozen CAP_W4_X50_H24 (spec journal)."""
+
+    def test_verdict_and_single_look(self):
+        import tempfile
+        from pathlib import Path
+        import experiment_cap as X
+        self.assertEqual(X.RULE_2026, "CAP_W4_X50_H24")
+        self.assertEqual(X.verdict_2026({"n": 4, "mean_pct": 9.0, "lo95": 1.0}, 0.5), "TOO_FEW")
+        self.assertEqual(X.verdict_2026({"n": 6, "mean_pct": 2.0, "lo95": 0.1}, 0.5), "CONFIRMED_2026")
+        self.assertEqual(X.verdict_2026({"n": 6, "mean_pct": 2.0, "lo95": -0.1}, 0.5), "NOT_SHOWN_2026")
+        self.assertEqual(X.verdict_2026({"n": 6, "mean_pct": 0.4, "lo95": 0.1}, 0.5), "NOT_SHOWN_2026")
+        with tempfile.TemporaryDirectory() as d:
+            m = Path(d) / "CAP_2026_OPENED"
+            X.open_2026(m)
+            with self.assertRaises(SystemExit):
+                X.open_2026(m)
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
