@@ -953,6 +953,12 @@ only; the 2026 window was not opened for any of them:
 - **FC-W, passive carry on the N = 4/6/10 most liquid pairs: REJECTED on train, 0 of 3** (`fc-wide-carry-fcw-1104-spec.md`).
   - Every alt beyond BTC/ETH lowers R and adds squeezes. N10 vs FC_PASSIVE: −0.0069 [−0.0130, −0.0021], 1–2 liquidations.
   - The holdout was not opened. Keep FC on BTC+ETH.
+- **PX, market-neutral pairs (long spot of the cheap leg / short perp of the rich one): REJECTED on train, 0 of 4**
+  (`pairs-trading-px-1104-spec.md`; PBO 0.61).
+  - R is −0.004..−0.023 %/day, below random pairs, with 1–4 liquidations in every candidate.
+  - By price alone the mean trade is ≈ 0 or negative before costs. Converged pairs make +3.4..+7.1 %, but time and stop
+    exits lose as much. Costs are −0.31 %, funding +0.1 %.
+  - The holdout was not opened.
 - **TM: BTC/ETH spot timing (trend, vol-managed, funding overheat) is REJECTED, 0 of 20.** None beats a circular-shift
   random timing of the same schedule, none beats buy-and-hold. Best vs constant exposure: T_sma_56 +0.027 [−0.039, +0.093]
   (`btc-eth-timing-tm-1028-spec.md`).
