@@ -996,6 +996,14 @@ only; the 2026 window was not opened for any of them:
   - a is net of ~0.3 %/day costs. Gross it is ≈ 0 on Mar–Jun and negative after.
   - A beta hedge leaves the book at −0.56 / −0.96.
   - Spec §3 says close "trade the bot's signals". Stopping the demo X4 executor is the operator's call.
+- **H1 step 0, shorting after perp-listing announcements (2026-11-05, `la-short-feasibility-1105-spec.md`): all three types OUT.**
+  No returns were computed: the test only asks whether a Binance USD-M perp was trading at t_pub. The pre-registered
+  bound is 30% of events unshortable.
+  - BN_PERP_NEW: 0 of 106 live; the perp starts a median 5.2 h later.
+  - OKX_PERP_NEW: 41% unavailable.
+  - BYBIT_PERP_NEW: 49% unavailable.
+  A narrow version (only events with a live Binance perp, 133 of 248) would be a new hypothesis for the unopened 2026
+  window only; that is the operator's call.
 - **TM: BTC/ETH spot timing (trend, vol-managed, funding overheat) is REJECTED, 0 of 20.** None beats a circular-shift
   random timing of the same schedule, none beats buy-and-hold. Best vs constant exposure: T_sma_56 +0.027 [−0.039, +0.093]
   (`btc-eth-timing-tm-1028-spec.md`).

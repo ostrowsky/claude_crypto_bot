@@ -1,0 +1,2530 @@
+{
+ "spec": "la-short-feasibility-1105-spec.md",
+ "window": [
+  "2023-03-01",
+  "2026-01-01"
+ ],
+ "n_events": 354,
+ "perp_store_files": 425,
+ "summary": {
+  "BN_PERP_NEW": {
+   "n": 106,
+   "perp_live": 0,
+   "perp_later": 91,
+   "no_perp": 15,
+   "unavailable_share": 1.0,
+   "median_delay_h": 5.240874722222222,
+   "delay_h_p25_p75": [
+    2.2465520833333334,
+    15.12629625
+   ],
+   "out": true
+  },
+  "BYBIT_PERP_NEW": {
+   "n": 161,
+   "perp_live": 82,
+   "perp_later": 59,
+   "no_perp": 20,
+   "unavailable_share": 0.4906832298136646,
+   "median_delay_h": 5.3180555555555555,
+   "delay_h_p25_p75": [
+    1.3283333333333331,
+    411.40166666666664
+   ],
+   "out": true
+  },
+  "OKX_PERP_NEW": {
+   "n": 87,
+   "perp_live": 51,
+   "perp_later": 34,
+   "no_perp": 2,
+   "unavailable_share": 0.41379310344827586,
+   "median_delay_h": 3.741702777777778,
+   "delay_h_p25_p75": [
+    2.2752181944444443,
+    5.676632013888889
+   ],
+   "out": true
+  }
+ },
+ "rows": [
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "PERPUSDT",
+   "t_pub": 1677834510093,
+   "status": "perp_later",
+   "delay_h": 74.8583075
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "TRUUSDT",
+   "t_pub": 1678071991007,
+   "status": "perp_later",
+   "delay_h": 32.89138694444444
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "LQTYUSDT",
+   "t_pub": 1678335861744,
+   "status": "perp_later",
+   "delay_h": 31.59396
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "IDUSDT",
+   "t_pub": 1679548252598,
+   "status": "perp_later",
+   "delay_h": 9.318722777777777
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "IDUSDT",
+   "t_pub": 1679909176000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "JOEUSDT",
+   "t_pub": 1679990405272,
+   "status": "perp_later",
+   "delay_h": 27.998535555555556
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "RDNTUSDT",
+   "t_pub": 1680593107593,
+   "status": "perp_later",
+   "delay_h": 28.581224166666665
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "HFTUSDT",
+   "t_pub": 1680682504912,
+   "status": "perp_later",
+   "delay_h": 27.748635555555555
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "XVSUSDT",
+   "t_pub": 1681269904257,
+   "status": "perp_later",
+   "delay_h": 23.082150833333333
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "RDNTUSDT",
+   "t_pub": 1681728046000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "EDUUSDT",
+   "t_pub": 1682693154008,
+   "status": "perp_later",
+   "delay_h": 45.23499777777778
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "IDEXUSDT",
+   "t_pub": 1683009063503,
+   "status": "perp_later",
+   "delay_h": 29.48236027777778
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "SUIUSDT",
+   "t_pub": 1683110446000,
+   "status": "perp_later",
+   "delay_h": 5.320555555555556
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "SUIUSDT",
+   "t_pub": 1683127802372,
+   "status": "perp_later",
+   "delay_h": 0.4993411111111111
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "EDUUSDT",
+   "t_pub": 1683260574000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "PEPEUSDT",
+   "t_pub": 1683288919381,
+   "status": "perp_later",
+   "delay_h": 4.244616388888889
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "FLOKIUSDT",
+   "t_pub": 1683379411473,
+   "status": "perp_later",
+   "delay_h": 3.107924166666667
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "RADUSDT",
+   "t_pub": 1683615009386,
+   "status": "perp_later",
+   "delay_h": 29.164059444444444
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "UMAUSDT",
+   "t_pub": 1683630617763,
+   "status": "perp_later",
+   "delay_h": 25.328399166666667
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "PHBUSDT",
+   "t_pub": 1684406446000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "IDEXUSDT",
+   "t_pub": 1684836922000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "KEYUSDT",
+   "t_pub": 1684838742835,
+   "status": "perp_later",
+   "delay_h": 25.23810138888889
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "KEYUSDT",
+   "t_pub": 1685359583000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "AMBUSDT",
+   "t_pub": 1685961646000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "RADUSDT",
+   "t_pub": 1686220846000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "UMAUSDT",
+   "t_pub": 1686220846000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "COMBOUSDT",
+   "t_pub": 1686220846000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "NMRUSDT",
+   "t_pub": 1687334423410,
+   "status": "perp_later",
+   "delay_h": 27.99349722222222
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "MAVUSDT",
+   "t_pub": 1687940132338,
+   "status": "perp_later",
+   "delay_h": 27.741017222222222
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "MDTUSDT",
+   "t_pub": 1688022100973,
+   "status": "no_perp",
+   "delay_h": null
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "XVGUSDT",
+   "t_pub": 1688468407961,
+   "status": "perp_later",
+   "delay_h": 24.997788611111112
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "XVGUSDT",
+   "t_pub": 1688553646000,
+   "status": "perp_later",
+   "delay_h": 1.3205555555555555
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "PENDLEUSDT",
+   "t_pub": 1688553646000,
+   "status": "perp_later",
+   "delay_h": 543.8205555555555
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "WLDUSDT",
+   "t_pub": 1690192820157,
+   "status": "perp_later",
+   "delay_h": 1.9944008333333334
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "WLDUSDT",
+   "t_pub": 1690195246000,
+   "status": "perp_later",
+   "delay_h": 1.3205555555555555
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "PENDLEUSDT",
+   "t_pub": 1690424401834,
+   "status": "perp_later",
+   "delay_h": 24.16615722222222
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "ARKMUSDT",
+   "t_pub": 1690455603284,
+   "status": "perp_later",
+   "delay_h": 15.749087777777778
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "ARKMUSDT",
+   "t_pub": 1690512046000,
+   "status": "perp_later",
+   "delay_h": 0.07055555555555555
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "AGLDUSDT",
+   "t_pub": 1690540819158,
+   "status": "perp_later",
+   "delay_h": 15.828011666666667
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "AUCTIONUSDT",
+   "t_pub": 1690548046000,
+   "status": "perp_later",
+   "delay_h": 3360.3205555555555
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "ALPACAUSDT",
+   "t_pub": 1690972846000,
+   "status": "no_perp",
+   "delay_h": null
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "YGGUSDT",
+   "t_pub": 1691152225448,
+   "status": "perp_later",
+   "delay_h": 14.992931111111112
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "BNTUSDT",
+   "t_pub": 1691401246000,
+   "status": "perp_later",
+   "delay_h": 74.32055555555556
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "DODOUSDT",
+   "t_pub": 1691402103041,
+   "status": "no_perp",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "ATAUSDT",
+   "t_pub": 1691487646000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "BNTUSDT",
+   "t_pub": 1691553667224,
+   "status": "perp_later",
+   "delay_h": 31.981326666666668
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "OXTUSDT",
+   "t_pub": 1691661026947,
+   "status": "perp_later",
+   "delay_h": 26.15918138888889
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "OXTUSDT",
+   "t_pub": 1691664046000,
+   "status": "perp_later",
+   "delay_h": 25.320555555555554
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "GLMUSDT",
+   "t_pub": 1691664046000,
+   "status": "perp_later",
+   "delay_h": 4703.320555555556
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "MCUSDT",
+   "t_pub": 1692092446000,
+   "status": "no_perp",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "CYBERUSDT",
+   "t_pub": 1692178846000,
+   "status": "perp_later",
+   "delay_h": 122.32055555555556
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "SEIUSDT",
+   "t_pub": 1692178846000,
+   "status": "perp_later",
+   "delay_h": 16.820555555555554
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "SEIUSDT",
+   "t_pub": 1692183328493,
+   "status": "perp_later",
+   "delay_h": 15.575418611111111
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "YFIIUSDT",
+   "t_pub": 1692189646000,
+   "status": "no_perp",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "BADGERUSDT",
+   "t_pub": 1692189646000,
+   "status": "perp_later",
+   "delay_h": 2039.8205555555555
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "CYBERUSDT",
+   "t_pub": 1692518157094,
+   "status": "perp_later",
+   "delay_h": 28.067473888888888
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "NMRUSDT",
+   "t_pub": 1693813060000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "PROMUSDT",
+   "t_pub": 1693904400000,
+   "status": "perp_later",
+   "delay_h": 11955.5
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "PERPUSDT",
+   "t_pub": 1693990800000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "XVSUSDT",
+   "t_pub": 1694163600000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "HIFIUSDT",
+   "t_pub": 1694836831060,
+   "status": "perp_later",
+   "delay_h": 10.491372222222223
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "FRONTUSDT",
+   "t_pub": 1695114000000,
+   "status": "no_perp",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "LOOMUSDT",
+   "t_pub": 1695301908000,
+   "status": "perp_later",
+   "delay_h": 481.30333333333334
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "FRONTUSDT",
+   "t_pub": 1695365702930,
+   "status": "no_perp",
+   "delay_h": null
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "GLMRUSDT",
+   "t_pub": 1695645506665,
+   "status": "perp_later",
+   "delay_h": 12.859259722222221
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "BICOUSDT",
+   "t_pub": 1695870605650,
+   "status": "perp_later",
+   "delay_h": 9.331763888888888
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "STPTUSDT",
+   "t_pub": 1696426315000,
+   "status": "perp_later",
+   "delay_h": 336.96805555555557
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "STRAXUSDT",
+   "t_pub": 1696852800000,
+   "status": "perp_later",
+   "delay_h": 38.5
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "WAXPUSDT",
+   "t_pub": 1696932000000,
+   "status": "perp_later",
+   "delay_h": 196.75
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "STRAXUSDT",
+   "t_pub": 1696936465219,
+   "status": "perp_later",
+   "delay_h": 15.259661388888889
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "NTRNUSDT",
+   "t_pub": 1696947270000,
+   "status": "perp_later",
+   "delay_h": 837.7583333333333
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "LOOMUSDT",
+   "t_pub": 1696997177546,
+   "status": "perp_later",
+   "delay_h": 10.39512611111111
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "BONDUSDT",
+   "t_pub": 1697345978273,
+   "status": "perp_later",
+   "delay_h": 9.506035277777778
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "BONDUSDT",
+   "t_pub": 1697446800000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "RIFUSDT",
+   "t_pub": 1697862003215,
+   "status": "perp_later",
+   "delay_h": 8.165773611111112
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "RIFUSDT",
+   "t_pub": 1698055200000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "GASUSDT",
+   "t_pub": 1698055200000,
+   "status": "perp_later",
+   "delay_h": 40.75
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "POLYXUSDT",
+   "t_pub": 1698141600000,
+   "status": "perp_later",
+   "delay_h": 16.5
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "POWRUSDT",
+   "t_pub": 1698141600000,
+   "status": "perp_later",
+   "delay_h": 64.5
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "STEEMUSDT",
+   "t_pub": 1698224400000,
+   "status": "perp_later",
+   "delay_h": 341.5
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "POWRUSDT",
+   "t_pub": 1698321002985,
+   "status": "perp_later",
+   "delay_h": 14.6658375
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "SLPUSDT",
+   "t_pub": 1698731158402,
+   "status": "no_perp",
+   "delay_h": null
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "TIAUSDT",
+   "t_pub": 1698768499741,
+   "status": "perp_later",
+   "delay_h": 1.8611830555555555
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "TIAUSDT",
+   "t_pub": 1698770870000,
+   "status": "perp_later",
+   "delay_h": 1.2027777777777777
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "SNTUSDT",
+   "t_pub": 1698892513670,
+   "status": "no_perp",
+   "delay_h": null
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "CAKEUSDT",
+   "t_pub": 1698910232851,
+   "status": "perp_later",
+   "delay_h": 5.240874722222222
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "SNTUSDT",
+   "t_pub": 1698928180000,
+   "status": "no_perp",
+   "delay_h": null
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "TWTUSDT",
+   "t_pub": 1698988203438,
+   "status": "perp_later",
+   "delay_h": 9.332378333333333
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "MEMEUSDT",
+   "t_pub": 1699003203190,
+   "status": "perp_later",
+   "delay_h": 2.6657805555555556
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "MEMEUSDT",
+   "t_pub": 1699006470000,
+   "status": "perp_later",
+   "delay_h": 1.7583333333333333
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "CAKEUSDT",
+   "t_pub": 1699006470000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "ORDIUSDT",
+   "t_pub": 1699342203152,
+   "status": "perp_later",
+   "delay_h": 4.999124444444444
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "STEEMUSDT",
+   "t_pub": 1699431187566,
+   "status": "perp_later",
+   "delay_h": 6.281231666666667
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "BADGERUSDT",
+   "t_pub": 1699503088430,
+   "status": "perp_later",
+   "delay_h": 8.308769444444444
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "ILVUSDT",
+   "t_pub": 1699613867763,
+   "status": "perp_later",
+   "delay_h": 5.5367325
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "NTRNUSDT",
+   "t_pub": 1699929174947,
+   "status": "perp_later",
+   "delay_h": 9.451403611111111
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "MBLUSDT",
+   "t_pub": 1699956000000,
+   "status": "no_perp",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "BEAMUSDT",
+   "t_pub": 1699956000000,
+   "status": "no_perp",
+   "delay_h": null
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "MBLUSDT",
+   "t_pub": 1699956293099,
+   "status": "no_perp",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "AERGOUSDT",
+   "t_pub": 1700148049000,
+   "status": "no_perp",
+   "delay_h": null
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "BEAMXUSDT",
+   "t_pub": 1700203809901,
+   "status": "perp_later",
+   "delay_h": 6.663916388888889
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "MOVRUSDT",
+   "t_pub": 1700733600000,
+   "status": "perp_later",
+   "delay_h": 794.5
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "SUPERUSDT",
+   "t_pub": 1700733600000,
+   "status": "perp_later",
+   "delay_h": 75.0
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "SUPERUSDT",
+   "t_pub": 1700988341945,
+   "status": "perp_later",
+   "delay_h": 4.238348611111111
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "RAREUSDT",
+   "t_pub": 1701079200000,
+   "status": "perp_later",
+   "delay_h": 6291.0
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "ONGUSDT",
+   "t_pub": 1701081932675,
+   "status": "perp_later",
+   "delay_h": 2.240923611111111
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "ONGUSDT",
+   "t_pub": 1701165600000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "JTOUSDT",
+   "t_pub": 1702020007305,
+   "status": "perp_later",
+   "delay_h": 2.6646375
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "1000SATSUSDT",
+   "t_pub": 1702368945949,
+   "status": "perp_later",
+   "delay_h": 5.737236388888889
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "AUCTIONUSDT",
+   "t_pub": 1702632304955,
+   "status": "perp_later",
+   "delay_h": 3.5819569444444443
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "ACEUSDT",
+   "t_pub": 1702883703825,
+   "status": "perp_later",
+   "delay_h": 2.7489375
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "MOVRUSDT",
+   "t_pub": 1703575533016,
+   "status": "perp_later",
+   "delay_h": 5.074162222222222
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "NFPUSDT",
+   "t_pub": 1703673305599,
+   "status": "perp_later",
+   "delay_h": 2.915111388888889
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "BONKUSDT",
+   "t_pub": 1704680171532,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "JTOUSDT",
+   "t_pub": 1704680171532,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "MOVRUSDT",
+   "t_pub": 1704780004465,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "GALUSDT",
+   "t_pub": 1704780004465,
+   "status": "no_perp",
+   "delay_h": null
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "NMRUSDT",
+   "t_pub": 1704952802929,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "JOEUSDT",
+   "t_pub": 1704952802929,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "FXSUSDT",
+   "t_pub": 1704955244985,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "LQTYUSDT",
+   "t_pub": 1704955244985,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "MANTAUSDT",
+   "t_pub": 1705579727000,
+   "status": "perp_later",
+   "delay_h": 1.853611111111111
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "MBOXUSDT",
+   "t_pub": 1705581891000,
+   "status": "perp_later",
+   "delay_h": 5348.7525
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "LSKUSDT",
+   "t_pub": 1706164815354,
+   "status": "perp_later",
+   "delay_h": 7.579068333333334
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "ALTUSDT",
+   "t_pub": 1706188483000,
+   "status": "perp_later",
+   "delay_h": 0.7547222222222222
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "LSKUSDT",
+   "t_pub": 1706595256807,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "JUPUSDT",
+   "t_pub": 1706713979588,
+   "status": "perp_later",
+   "delay_h": 3.283447777777778
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "OMUSDT",
+   "t_pub": 1707801308559,
+   "status": "perp_later",
+   "delay_h": 8.7476225
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "STRKUSDT",
+   "t_pub": 1708432802992,
+   "status": "perp_later",
+   "delay_h": 4.332502222222222
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "STRKUSDT",
+   "t_pub": 1708439857000,
+   "status": "perp_later",
+   "delay_h": 2.3730555555555557
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "GLMUSDT",
+   "t_pub": 1708574741551,
+   "status": "perp_later",
+   "delay_h": 5.905124722222222
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "ORNUSDT",
+   "t_pub": 1710151181000,
+   "status": "no_perp",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "PORTALUSDT",
+   "t_pub": 1710154100000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "METISUSDT",
+   "t_pub": 1710217805954,
+   "status": "no_perp",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "AEVOUSDT",
+   "t_pub": 1710320035000,
+   "status": "perp_later",
+   "delay_h": 4.601388888888889
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "AEVOUSDT",
+   "t_pub": 1710324623385,
+   "status": "perp_later",
+   "delay_h": 3.3268375
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "VANRYUSDT",
+   "t_pub": 1710338706348,
+   "status": "perp_later",
+   "delay_h": 3.414903333333333
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "VANRYUSDT",
+   "t_pub": 1710419041000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "BOMEUSDT",
+   "t_pub": 1710564310142,
+   "status": "perp_later",
+   "delay_h": 7.747182777777778
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "OMUSDT",
+   "t_pub": 1710760466000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "ETHFIUSDT",
+   "t_pub": 1710764230616,
+   "status": "perp_later",
+   "delay_h": 3.2137177777777777
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "ETHFIUSDT",
+   "t_pub": 1710766009000,
+   "status": "perp_later",
+   "delay_h": 2.7197222222222224
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "LTOUSDT",
+   "t_pub": 1711984677000,
+   "status": "no_perp",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "ENAUSDT",
+   "t_pub": 1712058137000,
+   "status": "perp_later",
+   "delay_h": 0.7952777777777778
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "WUSDT",
+   "t_pub": 1712146357389,
+   "status": "perp_later",
+   "delay_h": 3.2896141666666665
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "TNSRUSDT",
+   "t_pub": 1712590234331,
+   "status": "perp_later",
+   "delay_h": 1.4904636111111111
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "TNSRUSDT",
+   "t_pub": 1712659439000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "SAGAUSDT",
+   "t_pub": 1712666213000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "OMNIUSDT",
+   "t_pub": 1713362575000,
+   "status": "perp_later",
+   "delay_h": -0.04861111111111111
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "REZUSDT",
+   "t_pub": 1715166411000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "COSUSDT",
+   "t_pub": 1715242555000,
+   "status": "perp_later",
+   "delay_h": 3460.7347222222224
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "GLMUSDT",
+   "t_pub": 1715320802876,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "OPUSDT",
+   "t_pub": 1715580002388,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "BBUSDT",
+   "t_pub": 1715690045000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "GNOUSDT",
+   "t_pub": 1715690289000,
+   "status": "no_perp",
+   "delay_h": null
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "NOTUSDT",
+   "t_pub": 1715862241571,
+   "status": "perp_later",
+   "delay_h": 1.5995636111111111
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "NOTUSDT",
+   "t_pub": 1715875734000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "OSMOUSDT",
+   "t_pub": 1717066006000,
+   "status": "no_perp",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "PHAUSDT",
+   "t_pub": 1717152165000,
+   "status": "perp_later",
+   "delay_h": 5112.7875
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "IOUSDT",
+   "t_pub": 1718117257000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "ZKUSDT",
+   "t_pub": 1718698455100,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "ZKUSDT",
+   "t_pub": 1718883944000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "ZROUSDT",
+   "t_pub": 1718885012458,
+   "status": "perp_later",
+   "delay_h": 2.440983888888889
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "ZROUSDT",
+   "t_pub": 1718896437000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "LISTAUSDT",
+   "t_pub": 1718967979000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "CVXUSDT",
+   "t_pub": 1719295202897,
+   "status": "perp_later",
+   "delay_h": 9437.499195277778
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "DEXEUSDT",
+   "t_pub": 1721904611000,
+   "status": "perp_later",
+   "delay_h": 3648.663611111111
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "RENDERUSDT",
+   "t_pub": 1721984378000,
+   "status": "perp_later",
+   "delay_h": 1.0061111111111112
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "RENDERUSDT",
+   "t_pub": 1723096802043,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "BANANAUSDT",
+   "t_pub": 1723636805633,
+   "status": "perp_later",
+   "delay_h": 13.998435277777778
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "BOMEUSDT",
+   "t_pub": 1723715513379,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "SYSUSDT",
+   "t_pub": 1724149582000,
+   "status": "no_perp",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "SYNUSDT",
+   "t_pub": 1724149702000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "VOXELUSDT",
+   "t_pub": 1724239533000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "VIDTUSDT",
+   "t_pub": 1724662347000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "DOGSUSDT",
+   "t_pub": 1724679395000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "NULSUSDT",
+   "t_pub": 1724755314000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "CHESSUSDT",
+   "t_pub": 1725269709000,
+   "status": "no_perp",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "SLFUSDT",
+   "t_pub": 1725356143000,
+   "status": "no_perp",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "FLUXUSDT",
+   "t_pub": 1725440572000,
+   "status": "no_perp",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "QUICKUSDT",
+   "t_pub": 1725961311000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "NEIROUSDT",
+   "t_pub": 1726475435843,
+   "status": "perp_later",
+   "delay_h": 2.990043611111111
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "1MBABYDOGEUSDT",
+   "t_pub": 1726475435843,
+   "status": "perp_later",
+   "delay_h": 2.990043611111111
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "KDAUSDT",
+   "t_pub": 1726659001250,
+   "status": "perp_later",
+   "delay_h": 1.9996527777777777
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "FIDAUSDT",
+   "t_pub": 1726741822746,
+   "status": "perp_later",
+   "delay_h": 1.9936816666666666
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "TAOUSDT",
+   "t_pub": 1726804802728,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "FIOUSDT",
+   "t_pub": 1726824612129,
+   "status": "no_perp",
+   "delay_h": null
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "CATIUSDT",
+   "t_pub": 1726826771031,
+   "status": "perp_later",
+   "delay_h": 1.3969358333333333
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "GHSTUSDT",
+   "t_pub": 1727089206478,
+   "status": "perp_later",
+   "delay_h": 1.9982005555555555
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "POLUSDT",
+   "t_pub": 1727157602168,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "LOKAUSDT",
+   "t_pub": 1727170211745,
+   "status": "perp_later",
+   "delay_h": 1.9967375
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "FIDAUSDT",
+   "t_pub": 1727259834000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "HMSTRUSDT",
+   "t_pub": 1727318932552,
+   "status": "perp_later",
+   "delay_h": 9.685402222222223
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "FIOUSDT",
+   "t_pub": 1727339214000,
+   "status": "no_perp",
+   "delay_h": null
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "REIUSDT",
+   "t_pub": 1727427603823,
+   "status": "perp_later",
+   "delay_h": 1.9989380555555556
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "COSUSDT",
+   "t_pub": 1727692857877,
+   "status": "perp_later",
+   "delay_h": 2.317256388888889
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "EIGENUSDT",
+   "t_pub": 1727757235076,
+   "status": "perp_later",
+   "delay_h": 1.4347011111111112
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "DIAUSDT",
+   "t_pub": 1727865144788,
+   "status": "perp_later",
+   "delay_h": 1.9597811111111112
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "NEIROUSDT",
+   "t_pub": 1727931602155,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "PYRUSDT",
+   "t_pub": 1728292116000,
+   "status": "no_perp",
+   "delay_h": null
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "SUIUSDT",
+   "t_pub": 1729049637715,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "SCRUSDT",
+   "t_pub": 1729596604772,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "LUMIAUSDT",
+   "t_pub": 1729847974000,
+   "status": "perp_later",
+   "delay_h": 1298.173888888889
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "SANTOSUSDT",
+   "t_pub": 1730116800976,
+   "status": "perp_later",
+   "delay_h": 1.999728888888889
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "TROYUSDT",
+   "t_pub": 1730372403363,
+   "status": "perp_later",
+   "delay_h": 1.9990658333333333
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "KAIAUSDT",
+   "t_pub": 1730453601000,
+   "status": "perp_later",
+   "delay_h": 796.4441666666667
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "COWUSDT",
+   "t_pub": 1731062507000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "PNUTUSDT",
+   "t_pub": 1731309055000,
+   "status": "perp_later",
+   "delay_h": 5.3180555555555555
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "ACTUSDT",
+   "t_pub": 1731310230000,
+   "status": "perp_later",
+   "delay_h": 4.741666666666666
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "PNUTUSDT",
+   "t_pub": 1731377273744,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "TROYUSDT",
+   "t_pub": 1731490842000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "ACTUSDT",
+   "t_pub": 1731571202568,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "PROSUSDT",
+   "t_pub": 1731666473000,
+   "status": "no_perp",
+   "delay_h": null
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "SCRTUSDT",
+   "t_pub": 1732181402071,
+   "status": "no_perp",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "THEUSDT",
+   "t_pub": 1732700366000,
+   "status": "perp_later",
+   "delay_h": 2.5927777777777776
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "KAIAUSDT",
+   "t_pub": 1733313823583,
+   "status": "perp_later",
+   "delay_h": 1.9378936111111111
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "ACXUSDT",
+   "t_pub": 1733481472000,
+   "status": "perp_later",
+   "delay_h": 4.368888888888889
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "MOVEUSDT",
+   "t_pub": 1733746212723,
+   "status": "perp_later",
+   "delay_h": 1.8297991666666666
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "MOVEUSDT",
+   "t_pub": 1733746991000,
+   "status": "perp_later",
+   "delay_h": 1.613611111111111
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "MEUSDT",
+   "t_pub": 1733841879552,
+   "status": "perp_later",
+   "delay_h": 2.25568
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "VELODROMEUSDT",
+   "t_pub": 1734084353000,
+   "status": "perp_later",
+   "delay_h": 6.151944444444444
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "AVAUSDT",
+   "t_pub": 1734086380907,
+   "status": "perp_later",
+   "delay_h": 2.3386369444444446
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "DEGOUSDT",
+   "t_pub": 1734086380907,
+   "status": "perp_later",
+   "delay_h": 2.5886369444444446
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "AVAUSDT",
+   "t_pub": 1734345177000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "VANAUSDT",
+   "t_pub": 1734350663000,
+   "status": "perp_later",
+   "delay_h": 1.4269444444444443
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "VANAUSDT",
+   "t_pub": 1734404402410,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "PENGUUSDT",
+   "t_pub": 1734443698202,
+   "status": "perp_later",
+   "delay_h": 2.333832777777778
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "PENGUUSDT",
+   "t_pub": 1734446419000,
+   "status": "perp_later",
+   "delay_h": 1.5780555555555555
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "LUMIAUSDT",
+   "t_pub": 1734514149028,
+   "status": "perp_later",
+   "delay_h": 2.014158888888889
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "HIVEUSDT",
+   "t_pub": 1734945318480,
+   "status": "perp_later",
+   "delay_h": 2.244866666666667
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "HIVEUSDT",
+   "t_pub": 1734951667000,
+   "status": "perp_later",
+   "delay_h": 0.48138888888888887
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "DEXEUSDT",
+   "t_pub": 1735031705604,
+   "status": "perp_later",
+   "delay_h": 2.2484433333333333
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "PHAUSDT",
+   "t_pub": 1735550106345,
+   "status": "perp_later",
+   "delay_h": 2.2482375
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "DFUSDT",
+   "t_pub": 1735550106345,
+   "status": "perp_later",
+   "delay_h": 2.4982375
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "BIOUSDT",
+   "t_pub": 1735887480148,
+   "status": "perp_later",
+   "delay_h": 5.283292222222222
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "CGPTUSDT",
+   "t_pub": 1736507031000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "PROMUSDT",
+   "t_pub": 1736937009822,
+   "status": "perp_later",
+   "delay_h": 1.9972716666666666
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "SOLVUSDT",
+   "t_pub": 1737110290000,
+   "status": "perp_later",
+   "delay_h": 1.613888888888889
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "TRUMPUSDT",
+   "t_pub": 1737257683047,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "SUSDT",
+   "t_pub": 1737430202194,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "VTHOUSDT",
+   "t_pub": 1737531016033,
+   "status": "perp_later",
+   "delay_h": 1.995546388888889
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "ANIMEUSDT",
+   "t_pub": 1737603562043,
+   "status": "perp_later",
+   "delay_h": 13.343876944444444
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "ANIMEUSDT",
+   "t_pub": 1737642919000,
+   "status": "perp_later",
+   "delay_h": 2.411388888888889
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "COOKIEUSDT",
+   "t_pub": 1737702002990,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "BERAUSDT",
+   "t_pub": 1738825201810,
+   "status": "perp_later",
+   "delay_h": 7.999497222222222
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "BERAUSDT",
+   "t_pub": 1738849190000,
+   "status": "perp_later",
+   "delay_h": 1.336111111111111
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "LAYERUSDT",
+   "t_pub": 1739273402395,
+   "status": "perp_later",
+   "delay_h": 4.249334722222223
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "RONINUSDT",
+   "t_pub": 1739432705000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "HEIUSDT",
+   "t_pub": 1739527483000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "KAITOUSDT",
+   "t_pub": 1740027602921,
+   "status": "perp_later",
+   "delay_h": 7.999188611111111
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "KAITOUSDT",
+   "t_pub": 1740058931000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "SHELLUSDT",
+   "t_pub": 1740650402607,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "GPSUSDT",
+   "t_pub": 1741086200523,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "VICUSDT",
+   "t_pub": 1741791567497,
+   "status": "perp_later",
+   "delay_h": 2.0090286111111113
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "VICUSDT",
+   "t_pub": 1741856118000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "EPICUSDT",
+   "t_pub": 1741941149000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "FORMUSDT",
+   "t_pub": 1742380290000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "PARTIUSDT",
+   "t_pub": 1742890269224,
+   "status": "perp_later",
+   "delay_h": 4.814104444444444
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "PARTIUSDT",
+   "t_pub": 1742909342000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "PAXGUSDT",
+   "t_pub": 1743059245182,
+   "status": "perp_later",
+   "delay_h": 3.3763383333333334
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "BANANAS31USDT",
+   "t_pub": 1743156036000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "GUNUSDT",
+   "t_pub": 1743400802965,
+   "status": "perp_later",
+   "delay_h": 6.9991763888888885
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "FUNUSDT",
+   "t_pub": 1743404526565,
+   "status": "perp_later",
+   "delay_h": 1.4648430555555556
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "MLNUSDT",
+   "t_pub": 1743404526565,
+   "status": "no_perp",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "GUNUSDT",
+   "t_pub": 1743428002000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "FORTHUSDT",
+   "t_pub": 1744093268604,
+   "status": "no_perp",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "MLNUSDT",
+   "t_pub": 1744188766000,
+   "status": "no_perp",
+   "delay_h": null
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "BABYUSDT",
+   "t_pub": 1744265421332,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "KERNELUSDT",
+   "t_pub": 1744634120000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "WCTUSDT",
+   "t_pub": 1744688112755,
+   "status": "perp_later",
+   "delay_h": 7.413123611111111
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "WCTUSDT",
+   "t_pub": 1744717526000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "AERGOUSDT",
+   "t_pub": 1744789658622,
+   "status": "no_perp",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "HYPERUSDT",
+   "t_pub": 1745324950000,
+   "status": "perp_later",
+   "delay_h": 0.5138888888888888
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "INITUSDT",
+   "t_pub": 1745474401854,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "FISUSDT",
+   "t_pub": 1745557375191,
+   "status": "perp_later",
+   "delay_h": 2.4513358333333333
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "SIGNUSDT",
+   "t_pub": 1745820002847,
+   "status": "perp_later",
+   "delay_h": 4.999209166666667
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "JSTUSDT",
+   "t_pub": 1745825387253,
+   "status": "perp_later",
+   "delay_h": 2.0035408333333335
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "SIGNUSDT",
+   "t_pub": 1745839382000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "PUNDIXUSDT",
+   "t_pub": 1746001831246,
+   "status": "perp_later",
+   "delay_h": 1.4913205555555555
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "CTKUSDT",
+   "t_pub": 1746001831246,
+   "status": "no_perp",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "PUNDIXUSDT",
+   "t_pub": 1746014857000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "ASRUSDT",
+   "t_pub": 1746517100916,
+   "status": "perp_later",
+   "delay_h": 1.8608566666666666
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "ALPINEUSDT",
+   "t_pub": 1746517100916,
+   "status": "perp_later",
+   "delay_h": 2.110856666666667
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "NILUSDT",
+   "t_pub": 1746673203369,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "NXPCUSDT",
+   "t_pub": 1747290816000,
+   "status": "perp_later",
+   "delay_h": -0.06
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "CVCUSDT",
+   "t_pub": 1747377375939,
+   "status": "no_perp",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "SYRUPUSDT",
+   "t_pub": 1747641668000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "AWEUSDT",
+   "t_pub": 1747906870000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "HUMAUSDT",
+   "t_pub": 1748244932161,
+   "status": "perp_later",
+   "delay_h": 5.407733055555555
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "HUMAUSDT",
+   "t_pub": 1748265136000,
+   "status": "perp_later",
+   "delay_h": -0.20444444444444446
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "SOPHUSDT",
+   "t_pub": 1748417402374,
+   "status": "perp_later",
+   "delay_h": 5.4993405555555555
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "SOPHUSDT",
+   "t_pub": 1748438160000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "AUSDT",
+   "t_pub": 1748504454363,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "KMNOUSDT",
+   "t_pub": 1748517004890,
+   "status": "no_perp",
+   "delay_h": null
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "NXPCUSDT",
+   "t_pub": 1748930403901,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "MUBARAKUSDT",
+   "t_pub": 1748930403901,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "HOMEUSDT",
+   "t_pub": 1749783602666,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "SPKUSDT",
+   "t_pub": 1750141801911,
+   "status": "perp_later",
+   "delay_h": 2.4994691666666666
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "SPKUSDT",
+   "t_pub": 1750152144000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "SAHARAUSDT",
+   "t_pub": 1750918551375,
+   "status": "perp_later",
+   "delay_h": 5.735729166666666
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "SYRUPUSDT",
+   "t_pub": 1751511602926,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "ERAUSDT",
+   "t_pub": 1752768155000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "CVXUSDT",
+   "t_pub": 1753250402225,
+   "status": "perp_later",
+   "delay_h": 5.499381944444444
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "SLPUSDT",
+   "t_pub": 1753250402225,
+   "status": "no_perp",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "DIAUSDT",
+   "t_pub": 1753258866000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "NEWTUSDT",
+   "t_pub": 1753430420161,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "FISUSDT",
+   "t_pub": 1753693928000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "TREEUSDT",
+   "t_pub": 1753790410334,
+   "status": "perp_later",
+   "delay_h": 1.9971294444444445
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "TREEUSDT",
+   "t_pub": 1753798858000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "A2ZUSDT",
+   "t_pub": 1753953978000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "TOWNSUSDT",
+   "t_pub": 1754405213000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "PROVEUSDT",
+   "t_pub": 1754413977000,
+   "status": "perp_later",
+   "delay_h": -0.21583333333333332
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "ASRUSDT",
+   "t_pub": 1755165404000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "ALPINEUSDT",
+   "t_pub": 1755165464000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "MITOUSDT",
+   "t_pub": 1756463324000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "SOMIUSDT",
+   "t_pub": 1756824740000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "OPENUSDT",
+   "t_pub": 1757337269000,
+   "status": "perp_later",
+   "delay_h": -0.24138888888888888
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "HOLOUSDT",
+   "t_pub": 1757592939000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "ZKCUSDT",
+   "t_pub": 1757945665000,
+   "status": "perp_later",
+   "delay_h": -0.24027777777777778
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "ENAUSDT",
+   "t_pub": 1758083409090,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "PENDLEUSDT",
+   "t_pub": 1758083409090,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "BARDUSDT",
+   "t_pub": 1758178837293,
+   "status": "perp_later",
+   "delay_h": 3.9896408333333335
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "0GUSDT",
+   "t_pub": 1758524418920,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "AVNTUSDT",
+   "t_pub": 1758553215568,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "HEMIUSDT",
+   "t_pub": 1758633679000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "MIRAUSDT",
+   "t_pub": 1758891517000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "FFUSDT",
+   "t_pub": 1759156624000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "EDENUSDT",
+   "t_pub": 1759230005240,
+   "status": "perp_later",
+   "delay_h": -0.0014555555555555556
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "EDENUSDT",
+   "t_pub": 1759233542000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "NOMUSDT",
+   "t_pub": 1759308614000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "2ZUSDT",
+   "t_pub": 1759377615074,
+   "status": "perp_later",
+   "delay_h": 8.495812777777777
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "2ZUSDT",
+   "t_pub": 1759412963000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "EULUSDT",
+   "t_pub": 1760431717000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "ENSOUSDT",
+   "t_pub": 1760434396000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "PROVEUSDT",
+   "t_pub": 1760686209301,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "ZBTUSDT",
+   "t_pub": 1760698826791,
+   "status": "perp_later",
+   "delay_h": 0.49255805555555554
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "ZBTUSDT",
+   "t_pub": 1760707266000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "TURTLEUSDT",
+   "t_pub": 1761146350000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "TURTLEUSDT",
+   "t_pub": 1761298809774,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "GIGGLEUSDT",
+   "t_pub": 1761373803981,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "FUSDT",
+   "t_pub": 1761377410068,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "ENSOUSDT",
+   "t_pub": 1761728415998,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "ZENUSDT",
+   "t_pub": 1762147808853,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "MMTUSDT",
+   "t_pub": 1762245022447,
+   "status": "perp_later",
+   "delay_h": 3.493764722222222
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "MMTUSDT",
+   "t_pub": 1762259326000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "DASHUSDT",
+   "t_pub": 1762396204387,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "ZECUSDT",
+   "t_pub": 1762396204387,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "SAPIENUSDT",
+   "t_pub": 1762427708913,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "ALLOUSDT",
+   "t_pub": 1762878610363,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "SEIUSDT",
+   "t_pub": 1763103612574,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "ALLOUSDT",
+   "t_pub": 1763124605000,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BN_PERP_NEW",
+   "sym": "LITUSDT",
+   "t_pub": 1766498015803,
+   "status": "perp_later",
+   "delay_h": 3.606721388888889
+  },
+  {
+   "etype": "OKX_PERP_NEW",
+   "sym": "LITUSDT",
+   "t_pub": 1766545210155,
+   "status": "perp_live",
+   "delay_h": null
+  },
+  {
+   "etype": "BYBIT_PERP_NEW",
+   "sym": "LITUSDT",
+   "t_pub": 1767103643000,
+   "status": "perp_live",
+   "delay_h": null
+  }
+ ]
+}
