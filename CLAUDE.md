@@ -926,7 +926,7 @@ only; the 2026 window was not opened for any of them:
   - **Rejected on other grounds:** XSMOM (random control), SN (liquidations), RB (theoretical ceiling).
 - **BH19, backward holdout 2018–2022** (`backward-holdout-bh19-1030-spec.md`): frozen rules, one look, α = 0.01;
   418 spot pairs downloaded, stablecoins and fiat excluded as in the live universe.
-  - **FC_PASSIVE CONFIRMED** on 2020-02..2022-12: +0.0247 %/day [+0.0196, +0.0303], 0 liquidations, max DD −0.36 %.
+  - **FC_PASSIVE CONFIRMED** on 2020-02..2022-12: +0.0247 %/day, 99% CI [+0.0187, +0.0318] (the [+0.0196, +0.0303] quoted until 11-05 was the 95% interval), 0 liquidations, max DD −0.36 %.
     It is now positive on three separate periods, but shrinking: 2022 +0.002, 2026 +0.0024.
   - **DIR_1d, TM, N8, RV NOT confirmed. Their verdict is final: REJECTED, do not re-test.** Each has R > 0 in the
     2019–2021 market, none beats its benchmark:
