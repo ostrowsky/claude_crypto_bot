@@ -360,6 +360,31 @@ def fetch_perps(log=print) -> dict:
     return tot
 
 
+EXTRA_PERPS = ("BNXUSDT", "DOTECOUSDT", "LUNA2USDT", "TLMUSDT")   # coin perps of 2020-22 without a BH spot pair
+
+
+def fetch_extra(perps=EXTRA_PERPS, log=print) -> dict:
+    """The coin perps that traded in 2020-2022 but are missing from the store because fetch_perps maps perps to BH spot
+    pairs (hype-short-family-1105-spec.md §1). Same months window, same files; PERP_MAP is not touched."""
+    ex = ThreadPoolExecutor(WORKERS)
+    tot = {"perps": 0, "kline_months": 0, "funding_months": 0, "errors": 0}
+    kl = ("o", "h", "l", "c", "v")
+    for pp in perps:
+        pm = months_in_range(list_all(f"data/futures/um/monthly/klines/{pp}/15m/", delimiter=False), PERP_FIRST, LAST)
+        fm = months_in_range(list_all(f"data/futures/um/monthly/fundingRate/{pp}/", delimiter=False), PERP_FIRST, LAST)
+        a = fetch_series(f"data/futures/um/monthly/klines/{pp}/15m/", pp, pm, PERP / f"{pp}_15m.npz", parse_klines, kl, ex)
+        b = fetch_series(f"data/futures/um/monthly/fundingRate/{pp}/", pp, fm, FUND / f"{pp}_funding.npz", parse_funding,
+                         ("rate", "mark"), ex)
+        tot["perps"] += 1
+        tot["kline_months"] += a.get("new", 0)
+        tot["funding_months"] += b.get("new", 0)
+        tot["errors"] += a.get("errors", 0) + b.get("errors", 0)
+        log(f"  {pp}: kline months {len(pm)}, funding months {len(fm)}")
+    ex.shutdown()
+    log(json.dumps(tot))
+    return tot
+
+
 def build_wide() -> dict:
     import carry as C
     import fcw
@@ -418,6 +443,9 @@ def main(argv=None) -> int:
         return 0
     if cmd == "fetch_perps":
         fetch_perps(log=lambda s: print(s, flush=True))
+        return 0
+    if cmd == "fetch_extra":
+        fetch_extra(log=lambda s: print(s, flush=True))
         return 0
     if cmd == "build_wide":
         build_wide()

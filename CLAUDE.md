@@ -1017,6 +1017,11 @@ only; the 2026 window was not opened for any of them:
   - The post-announcement fall the LA long saw came from coins without a Binance perp, which could not be shorted.
   - 2026 has 20 + 2 such events, so a look has 1–8% power and the window stays closed. The announcement-short line is
     closed.
+- **Hype-short family H-A / H-B (2026-11-05, `hype-short-family-1105-spec.md`): exploration 2023–25 shows nothing worth the decisive window.**
+  - H-A shorts the top-10 past-return perps against an equal-weight perp long. L=1: -0.010 %/day; L=7: -0.019. Random-name shorts give the same median, −0.010.
+  - H-B shorts the 2–60 day new-perp cohort against a BTC hedge: +0.084 [-0.042, +0.212]. That is above random p95, but mostly from 2025, and the worst month is −29.6%, which breaks its own −25% bound.
+  - Decisive power 2020–22: H-A MDE 0.07–0.10 against an estimate ≤ 0; H-B power ~20%.
+  - The 2020–22 window is NOT opened; that is the operator's call. RC3 was misread by the review as reversal evidence: it was continuation.
 - **TM: BTC/ETH spot timing (trend, vol-managed, funding overheat) is REJECTED, 0 of 20.** None beats a circular-shift
   random timing of the same schedule, none beats buy-and-hold. Best vs constant exposure: T_sma_56 +0.027 [−0.039, +0.093]
   (`btc-eth-timing-tm-1028-spec.md`).
