@@ -1,0 +1,223 @@
+{
+ "spec": "funding-premium-g1g2-1105-spec.md",
+ "stage": "G2-v2, exploration",
+ "window": [
+  "2023-03-01",
+  "2026-01-01"
+ ],
+ "alpha": 0.016666666666666666,
+ "dropped_pairs": [
+  "FTTUSDT",
+  "GLMRUSDT",
+  "IDEXUSDT",
+  "LITUSDT",
+  "RADUSDT",
+  "RAYUSDT",
+  "SCUSDT",
+  "STRAXUSDT"
+ ],
+ "rows": {
+  "lag1": {
+   "n": 224,
+   "n_days": 92,
+   "mean": -0.1531186552943211,
+   "lo": -0.7458526367852828,
+   "hi": 0.6175571635293596,
+   "ci_level": 0.9833333333333333,
+   "tail_draws": 33,
+   "sd": 3.6747726928105564,
+   "median": -0.24403211761467833,
+   "pos_share": 0.3392857142857143,
+   "mde_80": 0.9213552109227354,
+   "by_bucket": {
+    "B1": {
+     "n": 6,
+     "mean": -0.060062378070187133
+    },
+    "B2": {
+     "n": 79,
+     "mean": -0.08704369116993384
+    },
+    "B3": {
+     "n": 139,
+     "mean": -0.19468886989267647
+    }
+   },
+   "by_year": {
+    "2023": {
+     "n": 32,
+     "mean": -0.019843935262293444
+    },
+    "2024": {
+     "n": 84,
+     "mean": -0.4299381877403959
+    },
+    "2025": {
+     "n": 108,
+     "mean": 0.022696619561654814
+    }
+   },
+   "mean_without_B4": -0.1531186552943211,
+   "n_without_B4": 224,
+   "mean_price_pct": 0.23918767506282185,
+   "mean_funding_pct": -0.05269139732142858,
+   "mean_cost_pct": 0.3396149330357143,
+   "mean_prem_entry": 3.8562683424791078,
+   "mean_prem_exit": 3.701522363057657,
+   "mean_bars": 11.517857142857142,
+   "passes": false,
+   "top_syms": [
+    [
+     "MUBARAKUSDT",
+     28
+    ],
+    [
+     "UNFIUSDT",
+     27
+    ],
+    [
+     "AGIXUSDT",
+     17
+    ],
+    [
+     "FTMUSDT",
+     16
+    ],
+    [
+     "WAVESUSDT",
+     16
+    ],
+    [
+     "BNXUSDT",
+     7
+    ],
+    [
+     "TRBUSDT",
+     6
+    ],
+    [
+     "BTCUSDT",
+     5
+    ]
+   ],
+   "median_prem_entry": 0.43290043290042934,
+   "median_price_pct": 0.1256485960086982,
+   "reasons": {
+    "converged": 164,
+    "time": 60
+   }
+  },
+  "lag0": {
+   "n": 228,
+   "n_days": 93,
+   "mean": 1.6243089112907951,
+   "lo": -0.4821762871496237,
+   "hi": 4.398212125598491,
+   "ci_level": 0.9833333333333333,
+   "tail_draws": 33,
+   "sd": 10.7592782568488,
+   "median": 0.31591379756257165,
+   "pos_share": 0.6754385964912281,
+   "mde_80": 3.298033573159524,
+   "by_bucket": {
+    "B1": {
+     "n": 6,
+     "mean": 0.27016159419033453
+    },
+    "B2": {
+     "n": 81,
+     "mean": 0.22414086161652091
+    },
+    "B3": {
+     "n": 141,
+     "mean": 2.4862840597036953
+    }
+   },
+   "by_year": {
+    "2023": {
+     "n": 33,
+     "mean": 0.23807610741064678
+    },
+    "2024": {
+     "n": 83,
+     "mean": -0.1586487462989281
+    },
+    "2025": {
+     "n": 112,
+     "mean": 3.35405148368358
+    }
+   },
+   "mean_without_B4": 1.6243089112907951,
+   "n_without_B4": 228,
+   "mean_price_pct": 2.053452744624128,
+   "mean_funding_pct": -0.08974534649122808,
+   "mean_cost_pct": 0.3393984868421053,
+   "mean_prem_entry": 5.071851242409049,
+   "mean_prem_exit": 3.593459480472864,
+   "mean_bars": 11.763157894736842,
+   "passes": false,
+   "top_syms": [
+    [
+     "MUBARAKUSDT",
+     29
+    ],
+    [
+     "UNFIUSDT",
+     27
+    ],
+    [
+     "AGIXUSDT",
+     17
+    ],
+    [
+     "FTMUSDT",
+     17
+    ],
+    [
+     "WAVESUSDT",
+     16
+    ],
+    [
+     "BNXUSDT",
+     8
+    ],
+    [
+     "TRBUSDT",
+     6
+    ],
+    [
+     "BTCUSDT",
+     5
+    ]
+   ],
+   "median_prem_entry": 1.0353699778723469,
+   "median_price_pct": 0.7635208519538698,
+   "reasons": {
+    "converged": 167,
+    "time": 61
+   }
+  }
+ },
+ "decision": "propose a 1m download with a new pre-registration",
+ "lag1_passes": false,
+ "lag0_passes": false,
+ "provenance": {
+  "code": {
+   "head": "4b0f4c7ac6c49be0a0a6bf5730268e7a64451943",
+   "dirty": false,
+   "bot": {
+    "files": {
+     "files/config.py": "07d7b02153a89b3b",
+     "files/exit_validator.py": "0979bfc8008e9043",
+     "files/_backtest_trend_start_detector.py": "5b56efa89f8e3a8c",
+     "files/_compute_early_capture.py": "f21dd6307c55e8d6",
+     ".runtime/release/runtime_overrides.json": "6f78825c315421e6",
+     "files/watchlist.json": "061e69c119e4cea1"
+    },
+    "dirty": true
+   }
+  },
+  "utc": "2026-11-05T20:09:56.876556+00:00"
+ },
+ "minutes": 0.8
+}

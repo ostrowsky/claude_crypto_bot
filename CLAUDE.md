@@ -1032,6 +1032,11 @@ only; the 2026 window was not opened for any of them:
   - `provenance.require_clean` refuses a run on uncommitted trader code.
   - Frozen forward rules, computed once from the archive, no live recorder: HB-F (not before 2027-05-05), HC-F (not before
     2027-11-05). H-E is dropped. H-D still needs a mainnet read-only key.
+- **G1 / G2 / G3b, stage 0 on bars already on disk (2026-11-05, exploration 2023-25, `funding-premium-g1g2-1105-spec.md`).**
+  - G1, funding harvest around the event: STOP. Causal row after costs: −0.036 [−0.126, +0.064] at 0.10%, −0.026 [−0.204, +0.153] at 0.30%. Even the look-ahead upper bound has lower bound < 0. Price takes 58–84% of the rate; trade sd 2.3–2.8%.
+  - G2, premium convergence: first run invalid (PEPE tick rounding, mismatched pairs like STRAX, RAY). G2-v2 causal 15m: −0.153 [−0.746, +0.618], ~75 signals a year. The zero-latency ceiling +1.62 is carried by single events (2025-10-10); below a 3% premium +0.30 at zero latency.
+  - G3b, FC at L = 2: +0.0008 [−0.0007, +0.0021] over L = 1 on train, margin stops 11 vs 5.
+  - G3a (COIN-M) and the 1m G2 refinement wait for a download decision. G4 needs a mainnet read-only key.
 - **TM: BTC/ETH spot timing (trend, vol-managed, funding overheat) is REJECTED, 0 of 20.** None beats a circular-shift
   random timing of the same schedule, none beats buy-and-hold. Best vs constant exposure: T_sma_56 +0.027 [−0.039, +0.093]
   (`btc-eth-timing-tm-1028-spec.md`).
