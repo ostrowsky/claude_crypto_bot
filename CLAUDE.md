@@ -959,6 +959,12 @@ only; the 2026 window was not opened for any of them:
   - By price alone the mean trade is ≈ 0 or negative before costs. Converged pairs make +3.4..+7.1 %, but time and stop
     exits lose as much. Costs are −0.31 %, funding +0.1 %.
   - The holdout was not opened.
+- **OB, futures order-book depth imbalance (public `bookDepth` archive, 30 perps 2023–2025): step 1 STOP, 0 of 10**
+  (`orderbook-depth-ob-1105-spec.md`). Data: hourly summaries in `trader/runtime/bookdepth/` (`trader/bookdepth.py`).
+  - No imbalance feature has a positive IC.
+  - The reverse sign shows at 24 h (imb_5 −0.032 [−0.053, −0.006]), but it was not pre-registered. Its top-bottom
+    quintile is at most −0.15 %, below the 0.36 % round trip.
+  - The ±0.2 % level exists only from 2026-01-15. Do not re-test.
 - **TM: BTC/ETH spot timing (trend, vol-managed, funding overheat) is REJECTED, 0 of 20.** None beats a circular-shift
   random timing of the same schedule, none beats buy-and-hold. Best vs constant exposure: T_sma_56 +0.027 [−0.039, +0.093]
   (`btc-eth-timing-tm-1028-spec.md`).
