@@ -1,0 +1,156 @@
+{
+ "spec": "la-short-feasibility-1105-spec.md",
+ "stage": "train",
+ "alpha": 0.008333333333333333,
+ "k": 6,
+ "n_events": 133,
+ "candidates": {
+  "OKX_PERP_NEW|h1": {
+   "ci": {
+    "n": 51,
+    "n_days": 41,
+    "mean": 0.21249501962691195,
+    "lo": -1.4485894256121263,
+    "hi": 1.6262095948733546,
+    "ci_level": 0.9916666666666667,
+    "tail_draws": 16
+   },
+   "rand_p95": 0.40985954433387406,
+   "rand_mean": -0.19812196375464872,
+   "liquidations": 0,
+   "sd": 4.250445675715705,
+   "median": -0.3078757474028056,
+   "pos_share": 0.43137254901960786,
+   "funding_mean_pct": -0.07241417647058823,
+   "admitted": false
+  },
+  "OKX_PERP_NEW|h4": {
+   "ci": {
+    "n": 51,
+    "n_days": 41,
+    "mean": -2.3879408763551546,
+    "lo": -6.71231342287149,
+    "hi": 2.792528159378368,
+    "ci_level": 0.9916666666666667,
+    "tail_draws": 16
+   },
+   "rand_p95": 0.8414450196058004,
+   "rand_mean": -0.5774649494362173,
+   "liquidations": 0,
+   "sd": 12.075297007584862,
+   "median": -1.467571145755991,
+   "pos_share": 0.3333333333333333,
+   "funding_mean_pct": -0.16636982352941176,
+   "admitted": false
+  },
+  "OKX_PERP_NEW|h24": {
+   "ci": {
+    "n": 51,
+    "n_days": 41,
+    "mean": -3.6539899152852646,
+    "lo": -14.34025953310348,
+    "hi": 4.896721086149033,
+    "ci_level": 0.9916666666666667,
+    "tail_draws": 16
+   },
+   "rand_p95": 1.0383529957653477,
+   "rand_mean": -1.730652217956266,
+   "liquidations": 2,
+   "sd": 24.914036148947446,
+   "median": -1.8054024985540786,
+   "pos_share": 0.45098039215686275,
+   "funding_mean_pct": -0.8143573529411764,
+   "admitted": false
+  },
+  "BYBIT_PERP_NEW|h1": {
+   "ci": {
+    "n": 82,
+    "n_days": 75,
+    "mean": -0.7599113808832298,
+    "lo": -3.3503387681748444,
+    "hi": 1.3024453908012277,
+    "ci_level": 0.9916666666666667,
+    "tail_draws": 16
+   },
+   "rand_p95": 0.20990759472169915,
+   "rand_mean": -0.25834903149252936,
+   "liquidations": 0,
+   "sd": 7.648732844019297,
+   "median": -0.3749657385901032,
+   "pos_share": 0.4268292682926829,
+   "funding_mean_pct": -0.07164528048780489,
+   "admitted": false
+  },
+  "BYBIT_PERP_NEW|h4": {
+   "ci": {
+    "n": 82,
+    "n_days": 75,
+    "mean": -0.3871955818453789,
+    "lo": -5.698991719425287,
+    "hi": 3.3858005730940093,
+    "ci_level": 0.9916666666666667,
+    "tail_draws": 16
+   },
+   "rand_p95": 1.2542975201913003,
+   "rand_mean": 0.32637630751797003,
+   "liquidations": 1,
+   "sd": 14.923719027837118,
+   "median": 0.9573671771493804,
+   "pos_share": 0.5609756097560976,
+   "funding_mean_pct": -0.33747639024390247,
+   "admitted": false
+  },
+  "BYBIT_PERP_NEW|h24": {
+   "ci": {
+    "n": 82,
+    "n_days": 75,
+    "mean": 0.6024212552154522,
+    "lo": -6.038269630295593,
+    "hi": 6.549540811870635,
+    "ci_level": 0.9916666666666667,
+    "tail_draws": 16
+   },
+   "rand_p95": 2.898133339109236,
+   "rand_mean": 1.2171369346292633,
+   "liquidations": 1,
+   "sd": 21.32650548667304,
+   "median": 4.04938343818593,
+   "pos_share": 0.6585365853658537,
+   "funding_mean_pct": -0.8823377073170732,
+   "admitted": false
+  }
+ },
+ "n_2026_perp_live": {
+  "OKX_PERP_NEW": 20,
+  "BYBIT_PERP_NEW": 2
+ },
+ "power_2026": {
+  "OKX_PERP_NEW|h1": 0.07761833933439816,
+  "OKX_PERP_NEW|h4": 0.00571553458420937,
+  "OKX_PERP_NEW|h24": 0.010702753971033208,
+  "BYBIT_PERP_NEW|h1": 0.03710166966357248,
+  "BYBIT_PERP_NEW|h4": 0.04632851594330423,
+  "BYBIT_PERP_NEW|h24": 0.05425729303280269
+ },
+ "admitted": [],
+ "verdict": "STOP: 0 admitted on train",
+ "provenance": {
+  "code": {
+   "head": "b9d7cfb3d0a48e13cb8fa77b8e420cd582e82d12",
+   "dirty": true,
+   "bot": {
+    "files": {
+     "files/config.py": "07d7b02153a89b3b",
+     "files/exit_validator.py": "0979bfc8008e9043",
+     "files/_backtest_trend_start_detector.py": "5b56efa89f8e3a8c",
+     "files/_compute_early_capture.py": "f21dd6307c55e8d6",
+     ".runtime/release/runtime_overrides.json": "6f78825c315421e6",
+     "files/watchlist.json": "061e69c119e4cea1"
+    },
+    "dirty": true
+   }
+  },
+  "utc": "2026-11-05T15:56:44.847333+00:00"
+ },
+ "minutes": 0.2
+}

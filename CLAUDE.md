@@ -1010,6 +1010,13 @@ only; the 2026 window was not opened for any of them:
   - BYBIT_PERP_NEW: 49% unavailable.
   A narrow version (only events with a live Binance perp, 133 of 248) would be a new hypothesis for the unopened 2026
   window only; that is the operator's call.
+- **H1 step 1-train, the narrow version (2026-11-05): STOP, 0 of 6.** It shorts only OKX/BYBIT perp-listing events
+  whose coin already had a live Binance perp (133 train events; funding and liquidation counted).
+  - Mean short trades: OKX 4 h −2.39 [−6.71, +2.79], 24 h −3.65, with 2 liquidations; BYBIT −0.76..+0.60. None beats
+    its control.
+  - The post-announcement fall the LA long saw came from coins without a Binance perp, which could not be shorted.
+  - 2026 has 20 + 2 such events, so a look has 1–8% power and the window stays closed. The announcement-short line is
+    closed.
 - **TM: BTC/ETH spot timing (trend, vol-managed, funding overheat) is REJECTED, 0 of 20.** None beats a circular-shift
   random timing of the same schedule, none beats buy-and-hold. Best vs constant exposure: T_sma_56 +0.027 [−0.039, +0.093]
   (`btc-eth-timing-tm-1028-spec.md`).
