@@ -11,7 +11,7 @@ H-B shorts the 2-60 day cohort of new perps against BTC. Daily book on USD-M per
   pnl        qty * price change (perps: no cash outlay), funding: short receives rate * notional, long pays it;
              cost per side = costs(col, i) * |traded notional|
 
-  (from trader/) ../pyembed/python.exe -u hype_short.py explore      -- 2023-03..2025-12, exploration only
+  (from trader/) ../pyembed/python.exe -u hype_short.py explore | legs      -- 2023-03..2025-12, exploration only
 """
 from __future__ import annotations
 
@@ -103,6 +103,7 @@ class _Book:
         self.p, self.costs, self.eq0, self.equity = p, costs, equity, equity
         self.pos = {}                  # key -> [col, qty, last price]
         self.pnl = self.fund = self.cost = 0.0
+        self.fund_long = self.fund_short = 0.0   # by the sign of the net position of the name in its tranche
 
     def px(self, col, i, fallback):
         c = self.p.close[i, col]
@@ -117,6 +118,10 @@ class _Book:
             self.equity += d
             f = -q * pr * float(self.p.fund[i, col])        # short (q < 0) receives a positive rate
             self.fund += f
+            if q < 0:
+                self.fund_short += f
+            else:
+                self.fund_long += f
             self.equity += f
             v[2] = pr
 
@@ -181,7 +186,8 @@ def run_ha(p: Panel, L: int, costs, seed=None, k: int = K, start: int = 0, end=N
         series.append((i, (b.equity / prev - 1) * 100 if prev > 0 else 0.0))
         prev = b.equity
     return {"series": series, "equity_min": eq_min, "final_equity": b.equity, "pnl": b.pnl, "funding": b.fund,
-            "costs": b.cost, "conservation_ok": b.conservation_ok()}
+            "fund_long": b.fund_long, "fund_short": b.fund_short, "costs": b.cost,
+            "conservation_ok": b.conservation_ok()}
 
 
 # ------------------------------------------------------------------ H-B
@@ -189,7 +195,7 @@ def run_hb(p: Panel, btc: int, costs, seed=None, start: int = 0, end=None) -> di
     end = len(p.days) if end is None else end
     rnd = random.Random(seed) if seed is not None else None
     b = _Book(p, costs)
-    series, entries, shares = [], [], []
+    series, entries, shares, daily_share = [], [], [], []
     open_ = {}                                       # col -> entry record
     cohort_r, btc_r = [], []
     prev = b.equity
@@ -228,10 +234,12 @@ def run_hb(p: Panel, btc: int, costs, seed=None, start: int = 0, end=None) -> di
         beta = beta_past(cohort_r, btc_r)
         if np.isfinite(p.close[i, btc]):
             b.trade(("h", btc), btc, beta * shorts / p.close[i, btc], i)
+        daily_share.append(shorts / b.equity if b.equity > 0 else 0.0)
         series.append((i, (b.equity / prev - 1) * 100 if prev > 0 else 0.0))
         prev = b.equity
     return {"series": series, "entries": entries, "short_share_after_entry": shares, "final_equity": b.equity,
-            "pnl": b.pnl, "funding": b.fund, "costs": b.cost, "conservation_ok": b.conservation_ok()}
+            "pnl": b.pnl, "funding": b.fund, "fund_long": b.fund_long, "fund_short": b.fund_short, "costs": b.cost,
+            "short_share_daily": daily_share, "conservation_ok": b.conservation_ok()}
 
 
 # ------------------------------------------------------------------ data
@@ -350,6 +358,7 @@ def _summary(res, p: Panel, alpha: float) -> dict:
 def explore(n_random: int = N_RANDOM) -> dict:
     """Exploration window only (2023-03..2025-12, survivorship disclosed): sigma, MDE for the decisive window, code check."""
     import provenance as PV
+    PV.require_clean()
     t0 = time.time()
     p = build_panel("recent", *EXPLORE)
     a, b = _window(p, *EXPLORE)
@@ -376,11 +385,59 @@ def explore(n_random: int = N_RANDOM) -> dict:
     return out
 
 
+def legs(n_random: int = N_RANDOM) -> dict:
+    """fourth-review-1105-spec.md §3: the base runs on committed code, funding by leg, H-B exposure, and H-B against
+    its control day by day (the paired series sets the power of the forward look). Exploration window only."""
+    import daily_revenue as DR
+    import provenance as PV
+    PV.require_clean()
+    t0 = time.time()
+    p = build_panel("recent", *EXPLORE)
+    a, b = _window(p, *EXPLORE)
+    costs = cost_fn(p)
+    btc = p.syms.index("BTCUSDT")
+    day = lambda i: datetime.fromtimestamp(p.days[i] * DAY / 1000, timezone.utc).strftime("%Y-%m-%d")      # noqa: E731
+    out = {"spec": "fourth-review-1105-spec.md", "stage": "exploration", "window": EXPLORE, "runs": {}}
+    base = {"HA_L1": run_ha(p, 1, costs, start=a, end=b), "HA_L7": run_ha(p, 7, costs, start=a, end=b),
+            "HB": run_hb(p, btc, costs, start=a, end=b)}
+    n = b - a
+    for name, r in base.items():
+        out["runs"][name] = {"mean_pct": float(np.mean([v for _, v in r["series"]])),
+                             "fund_long_pct_day": r["fund_long"] * 100 / n, "fund_short_pct_day": r["fund_short"] * 100 / n,
+                             "funding_pct_day": r["funding"] * 100 / n, "costs_pct_day": r["costs"] * 100 / n,
+                             "conservation_ok": r["conservation_ok"]}
+        print(name, json.dumps(out["runs"][name]), flush=True)
+    hb = base["HB"]
+    out["hb_mean_short_share"] = float(np.mean(hb["short_share_daily"]))
+    out["hb_entries"] = len(hb["entries"])
+    ctrl = [run_hb(p, btc, costs, seed=sd, start=a, end=b)["series"] for sd in range(n_random)]
+    cm = np.mean([[v for _, v in c] for c in ctrl], axis=0)
+    paired = [(day(i), v - float(m)) for (i, v), m in zip(hb["series"], cm)]
+    agg = DR.aggregate(paired, block=20)
+    sd_d = float(np.std([v for _, v in paired], ddof=1))
+    se_day = (agg["hi95"] - agg["lo95"]) / 2 / 1.96 * n ** 0.5                       # per sqrt(day), block-adjusted
+    edge = agg["mean_pct"]
+    from statistics import NormalDist
+    N = NormalDist()
+    out["hb_paired_vs_control"] = {"agg": agg, "sd_daily": sd_d, "se_scale_per_sqrt_day": se_day,
+                                   "days_for_80pct_power": ((1.96 + 0.8416) * se_day / edge) ** 2 if edge > 0 else None,
+                                   "power_180d": N.cdf(edge / (se_day / 180 ** 0.5) - 1.96) if edge > 0 else 0.0,
+                                   "power_309d": N.cdf(edge / (se_day / 309 ** 0.5) - 1.96) if edge > 0 else 0.0}
+    print(json.dumps({k: out[k] for k in ("hb_mean_short_share", "hb_entries", "hb_paired_vs_control")}, default=str), flush=True)
+    out["provenance"] = PV.block()
+    out["minutes"] = round((time.time() - t0) / 60, 1)
+    (TC.RUNTIME / "experiments" / "HYPE_SHORT_LEGS.json").write_text(json.dumps(out, ensure_ascii=False, indent=1, default=str),
+                                                                     encoding="utf-8")
+    return out
+
+
 def main(argv=None) -> int:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     argv = sys.argv[1:] if argv is None else argv
     if argv[:1] == ["explore"]:
         explore(int(argv[1]) if len(argv) > 1 else N_RANDOM)
+    elif argv[:1] == ["legs"]:
+        legs(int(argv[1]) if len(argv) > 1 else N_RANDOM)
     else:
         print(__doc__)
     return 0

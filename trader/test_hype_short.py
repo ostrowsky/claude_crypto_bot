@@ -144,5 +144,70 @@ class TestHB(unittest.TestCase):
         self.assertEqual(H.beta_past(list(b[:20]), list(b[:20])), 1.0)
 
 
+class TestFundingByLeg(unittest.TestCase):
+    """The book's own funding formula, not the helper (fourth-review-1105-spec.md §3)."""
+
+    def flat(self, D=120, S=S_N):
+        p = panel(D=D, S=S)
+        p.close[:] = 100.0
+        return p
+
+    def test_book_long_pays_short_receives(self):
+        import hype_short as H
+        p = self.flat()
+        p.fund[5, :2] = 0.001
+        b = H._Book(p, zero_cost)
+        b.pos[("x", 0)] = [0, 2.0, 100.0]
+        b.pos[("x", 1)] = [1, -3.0, 100.0]
+        b.mark(5)
+        self.assertAlmostEqual(b.fund_long, -2.0 * 100 * 0.001)
+        self.assertAlmostEqual(b.fund_short, 3.0 * 100 * 0.001)
+        self.assertAlmostEqual(b.fund, b.fund_long + b.fund_short)
+
+    def test_negative_rate_flips_both(self):
+        import hype_short as H
+        p = self.flat()
+        p.fund[5, :2] = -0.001
+        b = H._Book(p, zero_cost)
+        b.pos[("x", 0)] = [0, 2.0, 100.0]
+        b.pos[("x", 1)] = [1, -3.0, 100.0]
+        b.mark(5)
+        self.assertGreater(b.fund_long, 0)
+        self.assertLess(b.fund_short, 0)
+
+    def test_run_ha_short_names_receive(self):
+        import hype_short as H
+        p = self.flat()
+        p.fund[:, :10] = 0.001                      # ties make cols 0-9 the leaders: net short there
+        r = H.run_ha(p, 7, zero_cost)
+        self.assertGreater(r["fund_short"], 0)
+        self.assertEqual(r["fund_long"], 0.0)
+        self.assertGreater(r["final_equity"], 1.0)
+
+    def test_run_ha_long_leg_pays(self):
+        import hype_short as H
+        p = self.flat()
+        p.fund[:, 10:] = 0.001                      # only names outside the short leg: held long
+        r = H.run_ha(p, 7, zero_cost)
+        self.assertLess(r["fund_long"], 0)
+        self.assertEqual(r["fund_short"], 0.0)
+        self.assertLess(r["final_equity"], 1.0)
+
+    def test_run_hb_short_receives_and_hedge_pays(self):
+        import hype_short as H
+        D, S = 200, 5
+        p = panel(D=D, S=S, first=np.array([0, 20, 20, 20, 20]))
+        p.close[:] = np.where(np.isfinite(p.close), 100.0, np.nan)
+        p.fund[:, 1:] = 0.001
+        r = H.run_hb(p, 0, zero_cost)
+        self.assertGreater(r["fund_short"], 0)
+        self.assertEqual(r["fund_long"], 0.0)
+        p.fund[:] = 0.0
+        p.fund[:, 0] = 0.001
+        r = H.run_hb(p, 0, zero_cost)
+        self.assertLess(r["fund_long"], 0)
+        self.assertEqual(r["fund_short"], 0.0)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

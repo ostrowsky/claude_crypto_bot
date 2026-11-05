@@ -8,6 +8,7 @@
   events_digest  sha256 + count of bot_events lines with ts < until: the file keeps growing, the past does not
   grid_digest    sha256 of the C/H/L/O arrays of a 15m grid on bars [i0, i1)
   block          the dict a result stores as "provenance"
+  require_clean  refuses to start an experiment on uncommitted trader code
 """
 from __future__ import annotations
 
@@ -40,6 +41,14 @@ def bot_state() -> dict:
 def code_state() -> dict:
     return {"head": _git("rev-parse", "HEAD"), "dirty": bool(_git("status", "--porcelain", "--", ".")),
             "bot": bot_state()}
+
+
+def require_clean(status=None) -> None:
+    """No experiment result on uncommitted trader code (fourth-review-1105-spec.md §4). files/ of the bot is only
+    recorded: its models change all the time and they are not this code."""
+    st = _git("status", "--porcelain", "--", ".") if status is None else status
+    if st:
+        raise RuntimeError("uncommitted code in trader/, commit before running:\n" + st)
 
 
 def file_digest(path) -> str | None:

@@ -158,5 +158,19 @@ class TestAlphaLedger(unittest.TestCase):
             self.assertTrue(0 < float(x["alpha"]) <= 0.05, x)
 
 
+class TestRequireClean(unittest.TestCase):
+    """No result on uncommitted code (fourth-review-1105-spec.md §4)."""
+
+    def test_clean_passes(self):
+        import provenance as PV
+        self.assertIsNone(PV.require_clean(status=""))
+
+    def test_modified_or_untracked_code_refuses(self):
+        import provenance as PV
+        for st in (" M trader/hype_short.py", "?? trader/new_module.py", "M  trader/x.py"):
+            with self.assertRaises(RuntimeError):
+                PV.require_clean(status=st)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
