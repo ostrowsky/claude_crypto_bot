@@ -1,0 +1,360 @@
+{
+ "spec": "backward-holdout-bh19-1030-spec.md",
+ "alpha": 0.01,
+ "windows": {
+  "DIR_1d": [
+   "2019-03-01",
+   "2023-01-01"
+  ],
+  "TM": [
+   "2018-01-01",
+   "2023-01-01"
+  ],
+  "N8": [
+   "2019-03-01",
+   "2023-01-01"
+  ],
+  "RV": [
+   "2018-01-01",
+   "2023-01-01"
+  ],
+  "FC_PASSIVE": [
+   "2020-02-01",
+   "2023-01-01"
+  ]
+ },
+ "results": {
+  "FC_PASSIVE": {
+   "agg": {
+    "n_days": 1065,
+    "excluded": 0,
+    "from": "2020-02-01",
+    "to": "2022-12-31",
+    "mean_pct": 0.0247,
+    "lo95": 0.0196,
+    "hi95": 0.0303,
+    "sd_pct": 0.0538,
+    "compound_pct": 30.108,
+    "max_dd_pct": -0.362,
+    "pos_share": 0.768,
+    "worst_pct": -0.2823
+   },
+   "liquidations": 0,
+   "r_by_year": {
+    "2020": 0.02871218858760445,
+    "2021": 0.043886179143103325,
+    "2022": 0.0019209695203004846
+   },
+   "accepted": true,
+   "profitable": true,
+   "safe": true,
+   "alpha": 0.01,
+   "lo": 0.0187,
+   "hi": 0.0318,
+   "outcome": "accepted"
+  },
+  "RV": {
+   "agg": {
+    "n_days": 1826,
+    "excluded": 0,
+    "from": "2018-01-01",
+    "to": "2022-12-31",
+    "mean_pct": 0.1324,
+    "lo95": -0.1466,
+    "hi95": 0.3791,
+    "sd_pct": 4.627,
+    "compound_pct": 50.69,
+    "max_dd_pct": -86.189,
+    "pos_share": 0.51,
+    "worst_pct": -44.5969
+   },
+   "paired_5050": {
+    "n_days": 1826,
+    "excluded": 0,
+    "from": "2018-01-01",
+    "to": "2022-12-31",
+    "mean_pct": 0.0193,
+    "lo95": -0.0758,
+    "hi95": 0.1082,
+    "sd_pct": 1.4234,
+    "compound_pct": 18.419,
+    "max_dd_pct": -48.686,
+    "pos_share": 0.505,
+    "worst_pct": -7.3547
+   },
+   "half_agg": {
+    "n_days": 1826,
+    "excluded": 0,
+    "from": "2018-01-01",
+    "to": "2022-12-31",
+    "mean_pct": 0.113,
+    "lo95": -0.1462,
+    "hi95": 0.3485,
+    "sd_pct": 4.2669,
+    "compound_pct": 42.986,
+    "max_dd_pct": -88.092,
+    "pos_share": 0.52,
+    "worst_pct": -41.1024
+   },
+   "bh": {
+    "BTCUSDT": {
+     "n_days": 1826,
+     "excluded": 0,
+     "from": "2018-01-01",
+     "to": "2022-12-31",
+     "mean_pct": 0.0892,
+     "lo95": -0.1558,
+     "hi95": 0.3212,
+     "sd_pct": 3.9179,
+     "compound_pct": 21.809,
+     "max_dd_pct": -81.185,
+     "pos_share": 0.512,
+     "worst_pct": -39.5048
+    },
+    "ETHUSDT": {
+     "n_days": 1826,
+     "excluded": 0,
+     "from": "2018-01-01",
+     "to": "2022-12-31",
+     "mean_pct": 0.1608,
+     "lo95": -0.1351,
+     "hi95": 0.4431,
+     "sd_pct": 5.1142,
+     "compound_pct": 64.164,
+     "max_dd_pct": -93.966,
+     "pos_share": 0.51,
+     "worst_pct": -44.5969
+    }
+   },
+   "eth_share": 0.48576122672508215,
+   "n_switches": 75,
+   "accepted": false,
+   "checks": {
+    "R_lo_gt_0": false,
+    "paired_5050_lo_gt_0": false,
+    "beats_random_p95": false
+   },
+   "random_p95": 0.16124
+  },
+  "TM": {
+   "agg": {
+    "n_days": 1826,
+    "excluded": 0,
+    "from": "2018-01-01",
+    "to": "2022-12-31",
+    "mean_pct": 0.1357,
+    "lo95": -0.0391,
+    "hi95": 0.2981,
+    "sd_pct": 2.7873,
+    "compound_pct": 483.123,
+    "max_dd_pct": -60.991,
+    "pos_share": 0.301,
+    "worst_pct": -18.3796
+   },
+   "paired_ce": {
+    "n_days": 1826,
+    "excluded": 0,
+    "from": "2018-01-01",
+    "to": "2022-12-31",
+    "mean_pct": 0.0712,
+    "lo95": -0.0531,
+    "hi95": 0.1806,
+    "sd_pct": 1.9319,
+    "compound_pct": 161.114,
+    "max_dd_pct": -33.171,
+    "pos_share": 0.517,
+    "worst_pct": -9.4035
+   },
+   "paired_bh": {
+    "n_days": 1826,
+    "excluded": 0,
+    "from": "2018-01-01",
+    "to": "2022-12-31",
+    "mean_pct": 0.0226,
+    "lo95": -0.148,
+    "hi95": 0.2064,
+    "sd_pct": 3.0934,
+    "compound_pct": -36.352,
+    "max_dd_pct": -80.686,
+    "pos_share": 0.497,
+    "worst_pct": -19.5721
+   },
+   "bh_agg": {
+    "n_days": 1826,
+    "excluded": 0,
+    "from": "2018-01-01",
+    "to": "2022-12-31",
+    "mean_pct": 0.113,
+    "lo95": -0.0817,
+    "hi95": 0.292,
+    "sd_pct": 4.2669,
+    "compound_pct": 42.986,
+    "max_dd_pct": -88.092,
+    "pos_share": 0.52,
+    "worst_pct": -41.1024
+   },
+   "random_p95": 0.11729999999999999,
+   "exposure_share": 0.47535596933187296,
+   "accepted": false,
+   "checks": {
+    "R_lo_gt_0": false,
+    "paired_ce_lo_gt_0": false,
+    "beats_random_p95": true
+   },
+   "alpha": 0.01
+  },
+  "N8": {
+   "agg": {
+    "n_days": 1402,
+    "excluded": 0,
+    "from": "2019-03-01",
+    "to": "2022-12-31",
+    "mean_pct": 0.1068,
+    "lo95": -0.1175,
+    "hi95": 0.3394,
+    "sd_pct": 3.3671,
+    "compound_pct": 99.648,
+    "max_dd_pct": -81.455,
+    "pos_share": 0.435,
+    "worst_pct": -20.9824
+   },
+   "paired_ew": {
+    "n_days": 1402,
+    "excluded": 0,
+    "from": "2019-03-01",
+    "to": "2022-12-31",
+    "mean_pct": -0.0826,
+    "lo95": -0.2735,
+    "hi95": 0.1167,
+    "sd_pct": 3.1676,
+    "compound_pct": -84.25,
+    "max_dd_pct": -92.72,
+    "pos_share": 0.47,
+    "worst_pct": -28.6083
+   },
+   "ew_agg": {
+    "n_days": 1402,
+    "excluded": 0,
+    "from": "2019-03-01",
+    "to": "2022-12-31",
+    "mean_pct": 0.1893,
+    "lo95": -0.1418,
+    "hi95": 0.4853,
+    "sd_pct": 4.8817,
+    "compound_pct": 150.224,
+    "max_dd_pct": -89.904,
+    "pos_share": 0.556,
+    "worst_pct": -36.7993
+   },
+   "btc_agg": {
+    "n_days": 1402,
+    "excluded": 0,
+    "from": "2019-03-01",
+    "to": "2022-12-31",
+    "mean_pct": 0.18,
+    "lo95": -0.0737,
+    "hi95": 0.4362,
+    "sd_pct": 3.8412,
+    "compound_pct": 332.302,
+    "max_dd_pct": -76.629,
+    "pos_share": 0.513,
+    "worst_pct": -39.5048
+   },
+   "paired_ew_by_year": {
+    "2019": -0.025905384541920345,
+    "2020": -0.17891549440859317,
+    "2021": -0.2683482074264693,
+    "2022": 0.15236274915069092
+   },
+   "n_trades": 3583,
+   "accepted": false,
+   "checks": {
+    "R_lo_gt_0": false,
+    "paired_ew_lo_gt_0": false,
+    "beats_random_p95": true
+   },
+   "random_p95": 0.09612499999999999
+  },
+  "DIR_1d": {
+   "n_rows": 118050,
+   "n_times": 1373,
+   "base_up": 0.48826768318509106,
+   "accuracy": 0.5315628970775095,
+   "auc": 0.5375542829526802,
+   "auc_lo": 0.5101518049476105,
+   "auc_hi": 0.5638915571071453,
+   "sel": {
+    "n_days": 1373,
+    "excluded": 0,
+    "from": "2019-03-01",
+    "to": "2022-12-30",
+    "mean_pct": -0.082,
+    "lo95": -0.4292,
+    "hi95": 0.2702,
+    "sd_pct": 5.2143,
+    "compound_pct": -95.441,
+    "max_dd_pct": -98.164,
+    "pos_share": 0.513,
+    "worst_pct": -42.8668
+   },
+   "paired": {
+    "n_days": 1373,
+    "excluded": 0,
+    "from": "2019-03-01",
+    "to": "2022-12-30",
+    "mean_pct": -0.0168,
+    "lo95": -0.1513,
+    "hi95": 0.1209,
+    "sd_pct": 1.8265,
+    "compound_pct": -36.987,
+    "max_dd_pct": -51.526,
+    "pos_share": 0.476,
+    "worst_pct": -23.7408
+   },
+   "ew_universe_gross": {
+    "n_days": 1373,
+    "excluded": 0,
+    "from": "2019-03-01",
+    "to": "2022-12-30",
+    "mean_pct": 0.1732,
+    "lo95": -0.1536,
+    "hi95": 0.5182,
+    "sd_pct": 5.0338,
+    "compound_pct": 72.297,
+    "max_dd_pct": -90.833,
+    "pos_share": 0.557,
+    "worst_pct": -46.2795
+   },
+   "sel_by_year": {
+    "2019": -0.2127004550013444,
+    "2020": 0.18313496813259852,
+    "2021": 0.33691773210843534,
+    "2022": -0.645956314702515
+   },
+   "sel_hit_rate": 0.5011203033436746,
+   "sel_mean_abs_pct": 4.254823958285887,
+   "sel_breakeven_p": 0.5423049230155494,
+   "n_selected": 11604,
+   "turnover_cost_per_period_pct": 0.23843549058370617,
+   "n_train_rows": 103500,
+   "n_bh_rows": 118050,
+   "checks": {
+    "sel_net_lo_gt_0": false,
+    "paired_lo_gt_0": false
+   },
+   "accepted": false
+  }
+ },
+ "overall": {
+  "confirmed": [
+   "FC_PASSIVE"
+  ],
+  "not_confirmed": [
+   "DIR_1d",
+   "N8",
+   "RV",
+   "TM"
+  ]
+ },
+ "utc": "2026-10-30T12:29:58.580447+00:00"
+}

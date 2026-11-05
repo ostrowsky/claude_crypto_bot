@@ -1,0 +1,170 @@
+{
+ "stop": false,
+ "hypotheses": [
+  "FC_PASSIVE"
+ ],
+ "alpha": 0.05,
+ "test": {
+  "FC_PASSIVE": {
+   "alpha": 0.05,
+   "verdict": {
+    "profitable": true,
+    "safe": true,
+    "outcome": "accepted"
+   },
+   "result": {
+    "name": "FC_PASSIVE",
+    "config": {
+     "W": 3,
+     "K": 2,
+     "theta_in": 0.0,
+     "lev": 1.0,
+     "passive": true,
+     "n_liq": 100,
+     "liq_days": 30,
+     "liq_min_days": 20,
+     "min_age_days": 0,
+     "margin_stop": 0.5,
+     "mmr": 0.01,
+     "min_trade_usdt": 10.0
+    },
+    "window": [
+     "2026-01-01",
+     "2026-10-22"
+    ],
+    "mean_pct": 0.0024,
+    "agg": {
+     "n_days": 294,
+     "excluded": 0,
+     "from": "2026-01-01",
+     "to": "2026-10-21",
+     "mean_pct": 0.0024,
+     "lo95": 0.0015,
+     "hi95": 0.0038,
+     "sd_pct": 0.0105,
+     "compound_pct": 0.7,
+     "max_dd_pct": -0.194,
+     "pos_share": 0.684,
+     "worst_pct": -0.1453
+    },
+    "n_trades": 2,
+    "trade_ci": {
+     "n": 2,
+     "mean": 0.5613,
+     "lo95": 0.3982,
+     "hi95": 0.7243
+    },
+    "exit_reasons": {
+     "flush": 2
+    },
+    "liquidations": 0,
+    "margin_stops": 0,
+    "funding_income": 8544.489472438265,
+    "turnover_per_day": 0.006426493610806304,
+    "exposure_share": 0.9965986394557823,
+    "random_means": [],
+    "random_p95": null,
+    "r_by_year": {
+     "2026": 0.0023720912488831222
+    },
+    "sd_r": 0.010525314629847089,
+    "conservation_ok": true
+   },
+   "reference": {
+    "fees_level0": {
+     "n_days": 294,
+     "excluded": 0,
+     "from": "2026-01-01",
+     "to": "2026-10-21",
+     "mean_pct": 0.0026,
+     "lo95": 0.0016,
+     "hi95": 0.0039,
+     "sd_pct": 0.0072,
+     "compound_pct": 0.78,
+     "max_dd_pct": -0.194,
+     "pos_share": 0.684,
+     "worst_pct": -0.0655
+    },
+    "fees_level2": {
+     "n_days": 294,
+     "excluded": 0,
+     "from": "2026-01-01",
+     "to": "2026-10-21",
+     "mean_pct": 0.002,
+     "lo95": 0.0011,
+     "hi95": 0.0038,
+     "sd_pct": 0.0167,
+     "compound_pct": 0.579,
+     "max_dd_pct": -0.265,
+     "pos_share": 0.684,
+     "worst_pct": -0.2648
+    },
+    "lev2": {
+     "name": "FC_PASSIVE",
+     "config": {
+      "W": 3,
+      "K": 2,
+      "theta_in": 0.0,
+      "lev": 2.0,
+      "passive": true,
+      "n_liq": 100,
+      "liq_days": 30,
+      "liq_min_days": 20,
+      "min_age_days": 0,
+      "margin_stop": 0.5,
+      "mmr": 0.01,
+      "min_trade_usdt": 10.0
+     },
+     "window": [
+      "2026-01-01",
+      "2026-10-22"
+     ],
+     "mean_pct": 0.0032,
+     "agg": {
+      "n_days": 294,
+      "excluded": 0,
+      "from": "2026-01-01",
+      "to": "2026-10-21",
+      "mean_pct": 0.0032,
+      "lo95": 0.0019,
+      "hi95": 0.0051,
+      "sd_pct": 0.014,
+      "compound_pct": 0.933,
+      "max_dd_pct": -0.258,
+      "pos_share": 0.684,
+      "worst_pct": -0.1937
+     },
+     "n_trades": 2,
+     "trade_ci": {
+      "n": 2,
+      "mean": 0.7483,
+      "lo95": 0.531,
+      "hi95": 0.9657
+     },
+     "exit_reasons": {
+      "flush": 2
+     },
+     "liquidations": 0,
+     "margin_stops": 0,
+     "funding_income": 11392.652629917688,
+     "turnover_per_day": 0.008564920643014381,
+     "exposure_share": 0.9965986394557823,
+     "random_means": [],
+     "random_p95": null,
+     "r_by_year": {
+      "2026": 0.0031593858701353993
+     },
+     "sd_r": 0.014031287056903234,
+     "conservation_ok": true
+    }
+   }
+  }
+ },
+ "spec": "carry-funding-money-1021-spec.md",
+ "stage": "test",
+ "window": [
+  "2026-01-01",
+  "2026-10-22"
+ ],
+ "utc": "2026-10-22T08:21:49.977935+00:00"
+}

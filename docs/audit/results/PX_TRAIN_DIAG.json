@@ -1,0 +1,118 @@
+{
+ "PX_F30_Z20": {
+  "n": 462,
+  "gross_price": -0.179,
+  "funding": 0.097,
+  "costs": -0.311,
+  "net": -0.393,
+  "gross_by_reason": {
+   "converged": [
+    309,
+    3.36
+   ],
+   "liquidation": [
+    4,
+    -34.44
+   ],
+   "stop": [
+    13,
+    -5.93
+   ],
+   "time": [
+    127,
+    -7.09
+   ],
+   "window_end": [
+    9,
+    -0.79
+   ]
+  }
+ },
+ "PX_F30_Z25": {
+  "n": 320,
+  "gross_price": -0.512,
+  "funding": 0.101,
+  "costs": -0.313,
+  "net": -0.724,
+  "gross_by_reason": {
+   "converged": [
+    195,
+    3.53
+   ],
+   "liquidation": [
+    4,
+    -34.06
+   ],
+   "stop": [
+    11,
+    -4.57
+   ],
+   "time": [
+    105,
+    -6.32
+   ],
+   "window_end": [
+    5,
+    -0.34
+   ]
+  }
+ },
+ "PX_F60_Z20": {
+  "n": 264,
+  "gross_price": -0.361,
+  "funding": 0.104,
+  "costs": -0.311,
+  "net": -0.567,
+  "gross_by_reason": {
+   "converged": [
+    88,
+    6.28
+   ],
+   "liquidation": [
+    2,
+    -27.76
+   ],
+   "stop": [
+    25,
+    -6.73
+   ],
+   "time": [
+    141,
+    -2.95
+   ],
+   "window_end": [
+    8,
+    -0.97
+   ]
+  }
+ },
+ "PX_F60_Z25": {
+  "n": 200,
+  "gross_price": -0.009,
+  "funding": 0.092,
+  "costs": -0.311,
+  "net": -0.228,
+  "gross_by_reason": {
+   "converged": [
+    66,
+    7.14
+   ],
+   "liquidation": [
+    1,
+    -15.98
+   ],
+   "stop": [
+    32,
+    -5.81
+   ],
+   "time": [
+    96,
+    -2.76
+   ],
+   "window_end": [
+    5,
+    -1.28
+   ]
+  }
+ }
+}

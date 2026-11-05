@@ -1,0 +1,124 @@
+{
+ "since": "2026-03-03",
+ "until": "2026-10-13",
+ "window_from": "2025-12-15",
+ "symbols": 92,
+ "watchlist": 93,
+ "overall": {
+  "n_bot": 6160,
+  "n_matched": 4868,
+  "recall": 0.7902597402597402,
+  "n_cands": 77966,
+  "n_taken": 7429,
+  "width": 0.09528512428494472,
+  "tol_bars": 1
+ },
+ "tf_15m": {
+  "n_bot": 4546,
+  "n_matched": 3602,
+  "recall": 0.7923449186097669,
+  "n_cands": 60214,
+  "n_taken": 5603,
+  "width": 0.09305144982894344,
+  "tol_bars": 1
+ },
+ "tf_1h": {
+  "n_bot": 1614,
+  "n_matched": 1266,
+  "recall": 0.7843866171003717,
+  "n_cands": 17752,
+  "n_taken": 1826,
+  "width": 0.10286164939161785,
+  "tol_bars": 1
+ },
+ "by_bot_mode": {
+  "alignment": {
+   "n_bot": 1563,
+   "n_matched": 1077,
+   "recall": 0.6890595009596929,
+   "n_cands": 77966,
+   "n_taken": 1686,
+   "width": 0.021624810814970627,
+   "tol_bars": 1
+  },
+  "breakout": {
+   "n_bot": 178,
+   "n_matched": 38,
+   "recall": 0.21348314606741572,
+   "n_cands": 77966,
+   "n_taken": 49,
+   "width": 0.0006284790806248878,
+   "tol_bars": 1
+  },
+  "impulse": {
+   "n_bot": 557,
+   "n_matched": 495,
+   "recall": 0.8886894075403949,
+   "n_cands": 77966,
+   "n_taken": 634,
+   "width": 0.008131749737064875,
+   "tol_bars": 1
+  },
+  "impulse_cross": {
+   "n_bot": 7,
+   "n_matched": 0,
+   "recall": 0.0,
+   "n_cands": 77966,
+   "n_taken": 0,
+   "width": 0.0,
+   "tol_bars": 1
+  },
+  "impulse_speed": {
+   "n_bot": 2358,
+   "n_matched": 2228,
+   "recall": 0.9448685326547922,
+   "n_cands": 77966,
+   "n_taken": 3644,
+   "width": 0.046738321832593695,
+   "tol_bars": 1
+  },
+  "retest": {
+   "n_bot": 357,
+   "n_matched": 97,
+   "recall": 0.27170868347338933,
+   "n_cands": 77966,
+   "n_taken": 108,
+   "width": 0.0013852191981119975,
+   "tol_bars": 1
+  },
+  "strong_trend": {
+   "n_bot": 110,
+   "n_matched": 90,
+   "recall": 0.8181818181818182,
+   "n_cands": 77966,
+   "n_taken": 102,
+   "width": 0.0013082625759946644,
+   "tol_bars": 1
+  },
+  "trend": {
+   "n_bot": 1030,
+   "n_matched": 843,
+   "recall": 0.8184466019417476,
+   "n_cands": 77966,
+   "n_taken": 1242,
+   "width": 0.015930020778287972,
+   "tol_bars": 1
+  }
+ },
+ "cands_by_mode": {
+  "alignment": 17344,
+  "impulse": 1563,
+  "impulse_speed": 33827,
+  "trend": 25232
+ },
+ "gate_ok": true,
+ "seconds": 1184.8,
+ "not_reproduced": [
+  "ML gate, ranker, bandit, guards, rotation, cooldowns of the bot",
+  "catch-up entry on a recently discovered coin (live state)",
+  "impulse_speed -> trend while the mode is curtailed (state by day)"
+ ],
+ "gate_ok_at_0_80": false,
+ "recall_min": 0.79,
+ "gate_rule_change": "2026-10-14 operator decision: RECALL_MIN 0.80 -> 0.79 after seeing recall 0.7903; gate_ok recomputed from the saved numbers, data not re-run"
+}

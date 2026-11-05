@@ -1,0 +1,94 @@
+{
+ "spec": "capitulation-basket-cap-1104-spec.md",
+ "window": [
+  "2018-03-01",
+  "2023-01-01"
+ ],
+ "pairs": 290,
+ "days_with_universe": 1730,
+ "alpha": 0.00625,
+ "candidates": {
+  "CAP_W1_X25_H24": {
+   "n_events": 176,
+   "random_basket_sd_pct": 4.2374592625765555,
+   "mde_pct": 0.873,
+   "events_by_period": {
+    "2018-2019": 4,
+    "2020-2021": 132,
+    "2022": 40
+   }
+  },
+  "CAP_W1_X25_H72": {
+   "n_events": 122,
+   "random_basket_sd_pct": 7.654273199904181,
+   "mde_pct": 1.895,
+   "events_by_period": {
+    "2018-2019": 4,
+    "2020-2021": 89,
+    "2022": 29
+   }
+  },
+  "CAP_W1_X50_H24": {
+   "n_events": 104,
+   "random_basket_sd_pct": 4.2374592625765555,
+   "mde_pct": 1.136,
+   "events_by_period": {
+    "2018-2019": 3,
+    "2020-2021": 76,
+    "2022": 25
+   }
+  },
+  "CAP_W1_X50_H72": {
+   "n_events": 80,
+   "random_basket_sd_pct": 7.654273199904181,
+   "mde_pct": 2.34,
+   "events_by_period": {
+    "2018-2019": 3,
+    "2020-2021": 57,
+    "2022": 20
+   }
+  },
+  "CAP_W4_X25_H24": {
+   "n_events": 76,
+   "random_basket_sd_pct": 4.2374592625765555,
+   "mde_pct": 1.329,
+   "events_by_period": {
+    "2018-2019": 0,
+    "2020-2021": 62,
+    "2022": 14
+   }
+  },
+  "CAP_W4_X25_H72": {
+   "n_events": 55,
+   "random_basket_sd_pct": 7.654273199904181,
+   "mde_pct": 2.822,
+   "events_by_period": {
+    "2018-2019": 0,
+    "2020-2021": 45,
+    "2022": 10
+   }
+  },
+  "CAP_W4_X50_H24": {
+   "n_events": 52,
+   "random_basket_sd_pct": 4.2374592625765555,
+   "mde_pct": 1.607,
+   "events_by_period": {
+    "2018-2019": 0,
+    "2020-2021": 42,
+    "2022": 10
+   }
+  },
+  "CAP_W4_X50_H72": {
+   "n_events": 40,
+   "random_basket_sd_pct": 7.654273199904181,
+   "mde_pct": 3.309,
+   "events_by_period": {
+    "2018-2019": 0,
+    "2020-2021": 33,
+    "2022": 7
+   }
+  }
+ },
+ "minutes": 2.8,
+ "utc": "2026-11-04T10:58:30.581691+00:00"
+}

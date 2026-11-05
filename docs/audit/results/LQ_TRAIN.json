@@ -1,0 +1,696 @@
+{
+ "spec": "liquidation-flush-lq-1030-spec.md",
+ "window": [
+  "2023-03-01",
+  "2026-01-01"
+ ],
+ "pairs": 351,
+ "alpha": 0.00625,
+ "candidates": {
+  "PO_o5_p3_H4": {
+   "config": {
+    "oi": -0.05,
+    "p": -0.03,
+    "H": 4
+   },
+   "n_events": 4657,
+   "n_price_only": 22130,
+   "agg": {
+    "n_trades": 4657,
+    "n_days": 851,
+    "mean_pct": 0.3572,
+    "lo95": -0.2866,
+    "hi95": 0.9798,
+    "top5_days_share_of_sum": 1.197
+   },
+   "daily_mean_agg": {
+    "n_days": 851,
+    "excluded": 0,
+    "from": "2023-03-02",
+    "to": "2025-12-31",
+    "mean_pct": -0.3235,
+    "lo95": -0.5815,
+    "hi95": -0.0808,
+    "sd_pct": 2.8606,
+    "compound_pct": -95.533,
+    "max_dd_pct": -95.865,
+    "pos_share": 0.461,
+    "worst_pct": -17.5691
+   },
+   "price_only_agg": {
+    "n_trades": 22130,
+    "n_days": 1025,
+    "mean_pct": -0.2592,
+    "lo95": -0.4873,
+    "hi95": -0.0182,
+    "top5_days_share_of_sum": -0.242
+   },
+   "trade_mean_pct": 0.3571849226604415,
+   "price_only_mean_pct": -0.25921027581380757,
+   "vs_p": {
+    "n_days": 34,
+    "excluded": 0,
+    "from": "2023-03",
+    "to": "2025-12",
+    "mean_pct": 0.3323,
+    "lo95": -0.1551,
+    "hi95": 0.6396,
+    "sd_pct": 1.2394,
+    "compound_pct": 11.661,
+    "max_dd_pct": -3.149,
+    "pos_share": 0.559,
+    "worst_pct": -1.308
+   },
+   "rand_p95": -0.19742980870771767,
+   "rand_mean": -0.32717403615553176,
+   "by_year": {
+    "2023": 0.24718216108467977,
+    "2024": 0.526835691436235,
+    "2025": 0.2899267442827413
+   },
+   "book_R": {
+    "n_days": 1037,
+    "excluded": 0,
+    "from": "2023-03-01",
+    "to": "2025-12-31",
+    "mean_pct": -0.0887,
+    "lo95": -0.1654,
+    "hi95": -0.0086,
+    "sd_pct": 1.2721,
+    "compound_pct": -63.274,
+    "max_dd_pct": -65.7,
+    "pos_share": 0.381,
+    "worst_pct": -8.4582
+   },
+   "book_conservation_ok": true,
+   "admitted": false,
+   "checks": {
+    "mean_lo_gt_0": false,
+    "beats_random_p95": true,
+    "beats_price_only": false,
+    "enough_events": true,
+    "years_agree": true
+   }
+  },
+  "PO_o5_p3_H24": {
+   "config": {
+    "oi": -0.05,
+    "p": -0.03,
+    "H": 24
+   },
+   "n_events": 4656,
+   "n_price_only": 22116,
+   "agg": {
+    "n_trades": 4656,
+    "n_days": 850,
+    "mean_pct": 1.0381,
+    "lo95": 0.0349,
+    "hi95": 2.033,
+    "top5_days_share_of_sum": 0.74
+   },
+   "daily_mean_agg": {
+    "n_days": 850,
+    "excluded": 0,
+    "from": "2023-03-02",
+    "to": "2025-12-27",
+    "mean_pct": 0.0389,
+    "lo95": -0.7272,
+    "hi95": 0.8348,
+    "sd_pct": 8.154,
+    "compound_pct": -89.597,
+    "max_dd_pct": -97.119,
+    "pos_share": 0.461,
+    "worst_pct": -25.5623
+   },
+   "price_only_agg": {
+    "n_trades": 22116,
+    "n_days": 1024,
+    "mean_pct": 0.127,
+    "lo95": -0.4928,
+    "hi95": 0.7892,
+    "top5_days_share_of_sum": 1.427
+   },
+   "trade_mean_pct": 1.0381376212799318,
+   "price_only_mean_pct": 0.12704062643837674,
+   "vs_p": {
+    "n_days": 34,
+    "excluded": 0,
+    "from": "2023-03",
+    "to": "2025-12",
+    "mean_pct": 0.5376,
+    "lo95": -0.306,
+    "hi95": 1.3843,
+    "sd_pct": 2.2857,
+    "compound_pct": 18.997,
+    "max_dd_pct": -4.561,
+    "pos_share": 0.676,
+    "worst_pct": -3.9803
+   },
+   "rand_p95": 0.33405220297972016,
+   "rand_mean": -0.1010862954044191,
+   "by_year": {
+    "2023": 0.5253650907631179,
+    "2024": 1.6863504425920817,
+    "2025": 0.9639782002380487
+   },
+   "book_R": {
+    "n_days": 1037,
+    "excluded": 0,
+    "from": "2023-03-01",
+    "to": "2025-12-31",
+    "mean_pct": -0.0884,
+    "lo95": -0.2162,
+    "hi95": 0.0496,
+    "sd_pct": 2.3983,
+    "compound_pct": -70.433,
+    "max_dd_pct": -74.19,
+    "pos_share": 0.437,
+    "worst_pct": -20.0232
+   },
+   "book_conservation_ok": true,
+   "admitted": false,
+   "checks": {
+    "mean_lo_gt_0": true,
+    "beats_random_p95": true,
+    "beats_price_only": false,
+    "enough_events": true,
+    "years_agree": true
+   }
+  },
+  "PO_o5_p6_H4": {
+   "config": {
+    "oi": -0.05,
+    "p": -0.06,
+    "H": 4
+   },
+   "n_events": 2120,
+   "n_price_only": 3151,
+   "agg": {
+    "n_trades": 2120,
+    "n_days": 469,
+    "mean_pct": 1.0349,
+    "lo95": -0.2087,
+    "hi95": 2.2377,
+    "top5_days_share_of_sum": 0.882
+   },
+   "daily_mean_agg": {
+    "n_days": 469,
+    "excluded": 0,
+    "from": "2023-03-03",
+    "to": "2025-12-27",
+    "mean_pct": -0.5969,
+    "lo95": -1.2806,
+    "hi95": 0.0688,
+    "sd_pct": 5.2757,
+    "compound_pct": -96.809,
+    "max_dd_pct": -97.548,
+    "pos_share": 0.437,
+    "worst_pct": -26.9146
+   },
+   "price_only_agg": {
+    "n_trades": 3151,
+    "n_days": 641,
+    "mean_pct": -0.0706,
+    "lo95": -1.0279,
+    "hi95": 0.9692,
+    "top5_days_share_of_sum": -6.618
+   },
+   "trade_mean_pct": 1.034906267633602,
+   "price_only_mean_pct": -0.07063913393263302,
+   "vs_p": {
+    "n_days": 34,
+    "excluded": 0,
+    "from": "2023-03",
+    "to": "2025-12",
+    "mean_pct": 0.3969,
+    "lo95": -0.3782,
+    "hi95": 1.0938,
+    "sd_pct": 1.6266,
+    "compound_pct": 13.927,
+    "max_dd_pct": -6.31,
+    "pos_share": 0.529,
+    "worst_pct": -2.9308
+   },
+   "rand_p95": -0.11438225306605425,
+   "rand_mean": -0.34904326779901473,
+   "by_year": {
+    "2023": 0.58156469404316,
+    "2024": 1.4389613424374041,
+    "2025": 1.1136788508607822
+   },
+   "book_R": {
+    "n_days": 1037,
+    "excluded": 0,
+    "from": "2023-03-01",
+    "to": "2025-12-31",
+    "mean_pct": -0.0111,
+    "lo95": -0.0729,
+    "hi95": 0.0587,
+    "sd_pct": 1.1022,
+    "compound_pct": -15.926,
+    "max_dd_pct": -38.738,
+    "pos_share": 0.214,
+    "worst_pct": -7.169
+   },
+   "book_conservation_ok": true,
+   "admitted": false,
+   "checks": {
+    "mean_lo_gt_0": false,
+    "beats_random_p95": true,
+    "beats_price_only": false,
+    "enough_events": true,
+    "years_agree": true
+   }
+  },
+  "PO_o5_p6_H24": {
+   "config": {
+    "oi": -0.05,
+    "p": -0.06,
+    "H": 24
+   },
+   "n_events": 2120,
+   "n_price_only": 3150,
+   "agg": {
+    "n_trades": 2120,
+    "n_days": 469,
+    "mean_pct": 2.1839,
+    "lo95": 0.3608,
+    "hi95": 3.6509,
+    "top5_days_share_of_sum": 0.723
+   },
+   "daily_mean_agg": {
+    "n_days": 469,
+    "excluded": 0,
+    "from": "2023-03-03",
+    "to": "2025-12-27",
+    "mean_pct": -0.0351,
+    "lo95": -1.4187,
+    "hi95": 1.5059,
+    "sd_pct": 11.9098,
+    "compound_pct": -96.359,
+    "max_dd_pct": -99.2,
+    "pos_share": 0.426,
+    "worst_pct": -54.6448
+   },
+   "price_only_agg": {
+    "n_trades": 3150,
+    "n_days": 640,
+    "mean_pct": 1.4269,
+    "lo95": -0.1058,
+    "hi95": 2.895,
+    "top5_days_share_of_sum": 0.804
+   },
+   "trade_mean_pct": 2.1839121870048537,
+   "price_only_mean_pct": 1.4269156795213076,
+   "vs_p": {
+    "n_days": 34,
+    "excluded": 0,
+    "from": "2023-03",
+    "to": "2025-12",
+    "mean_pct": 0.3889,
+    "lo95": -0.8469,
+    "hi95": 1.8623,
+    "sd_pct": 2.876,
+    "compound_pct": 12.577,
+    "max_dd_pct": -12.018,
+    "pos_share": 0.559,
+    "worst_pct": -5.4751
+   },
+   "rand_p95": 0.2653026410293929,
+   "rand_mean": -0.2061485610350639,
+   "by_year": {
+    "2023": 1.6490499811709296,
+    "2024": 2.8778905985361836,
+    "2025": 1.8619364689292028
+   },
+   "book_R": {
+    "n_days": 1037,
+    "excluded": 0,
+    "from": "2023-03-01",
+    "to": "2025-12-31",
+    "mean_pct": -0.0129,
+    "lo95": -0.1077,
+    "hi95": 0.0801,
+    "sd_pct": 1.7331,
+    "compound_pct": -25.05,
+    "max_dd_pct": -35.986,
+    "pos_share": 0.314,
+    "worst_pct": -11.8265
+   },
+   "book_conservation_ok": true,
+   "admitted": false,
+   "checks": {
+    "mean_lo_gt_0": true,
+    "beats_random_p95": true,
+    "beats_price_only": false,
+    "enough_events": true,
+    "years_agree": true
+   }
+  },
+  "PO_o10_p3_H4": {
+   "config": {
+    "oi": -0.1,
+    "p": -0.03,
+    "H": 4
+   },
+   "n_events": 1260,
+   "n_price_only": 22130,
+   "agg": {
+    "n_trades": 1260,
+    "n_days": 383,
+    "mean_pct": 0.7123,
+    "lo95": -0.3995,
+    "hi95": 1.7296,
+    "top5_days_share_of_sum": 1.033
+   },
+   "daily_mean_agg": {
+    "n_days": 383,
+    "excluded": 0,
+    "from": "2023-03-03",
+    "to": "2025-12-27",
+    "mean_pct": -0.574,
+    "lo95": -1.2471,
+    "hi95": 0.0573,
+    "sd_pct": 4.5287,
+    "compound_pct": -92.703,
+    "max_dd_pct": -94.005,
+    "pos_share": 0.491,
+    "worst_pct": -26.3638
+   },
+   "price_only_agg": {
+    "n_trades": 22130,
+    "n_days": 1025,
+    "mean_pct": -0.2592,
+    "lo95": -0.4873,
+    "hi95": -0.0182,
+    "top5_days_share_of_sum": -0.242
+   },
+   "trade_mean_pct": 0.712329465060697,
+   "price_only_mean_pct": -0.25921027581380757,
+   "vs_p": {
+    "n_days": 34,
+    "excluded": 0,
+    "from": "2023-03",
+    "to": "2025-12",
+    "mean_pct": 0.1144,
+    "lo95": -1.0662,
+    "hi95": 0.9997,
+    "sd_pct": 2.2566,
+    "compound_pct": 3.099,
+    "max_dd_pct": -13.015,
+    "pos_share": 0.5,
+    "worst_pct": -5.2272
+   },
+   "rand_p95": -0.07892709643245958,
+   "rand_mean": -0.3071161214772232,
+   "by_year": {
+    "2023": 0.21348945470430855,
+    "2024": 1.3370099256611074,
+    "2025": 0.9700805210471315
+   },
+   "book_R": {
+    "n_days": 1037,
+    "excluded": 0,
+    "from": "2023-03-01",
+    "to": "2025-12-31",
+    "mean_pct": -0.0111,
+    "lo95": -0.0487,
+    "hi95": 0.0259,
+    "sd_pct": 0.6452,
+    "compound_pct": -12.792,
+    "max_dd_pct": -21.162,
+    "pos_share": 0.19,
+    "worst_pct": -5.8105
+   },
+   "book_conservation_ok": true,
+   "admitted": false,
+   "checks": {
+    "mean_lo_gt_0": false,
+    "beats_random_p95": true,
+    "beats_price_only": false,
+    "enough_events": true,
+    "years_agree": true
+   }
+  },
+  "PO_o10_p3_H24": {
+   "config": {
+    "oi": -0.1,
+    "p": -0.03,
+    "H": 24
+   },
+   "n_events": 1260,
+   "n_price_only": 22116,
+   "agg": {
+    "n_trades": 1260,
+    "n_days": 383,
+    "mean_pct": 1.3277,
+    "lo95": -0.4617,
+    "hi95": 2.9002,
+    "top5_days_share_of_sum": 1.03
+   },
+   "daily_mean_agg": {
+    "n_days": 383,
+    "excluded": 0,
+    "from": "2023-03-03",
+    "to": "2025-12-27",
+    "mean_pct": -0.6886,
+    "lo95": -2.0324,
+    "hi95": 0.7396,
+    "sd_pct": 9.9623,
+    "compound_pct": -98.932,
+    "max_dd_pct": -99.369,
+    "pos_share": 0.441,
+    "worst_pct": -50.3085
+   },
+   "price_only_agg": {
+    "n_trades": 22116,
+    "n_days": 1024,
+    "mean_pct": 0.127,
+    "lo95": -0.4928,
+    "hi95": 0.7892,
+    "top5_days_share_of_sum": 1.427
+   },
+   "trade_mean_pct": 1.3277432155177746,
+   "price_only_mean_pct": 0.12704062643837674,
+   "vs_p": {
+    "n_days": 34,
+    "excluded": 0,
+    "from": "2023-03",
+    "to": "2025-12",
+    "mean_pct": -0.092,
+    "lo95": -1.6274,
+    "hi95": 1.5621,
+    "sd_pct": 3.5762,
+    "compound_pct": -5.092,
+    "max_dd_pct": -22.33,
+    "pos_share": 0.412,
+    "worst_pct": -8.5068
+   },
+   "rand_p95": 0.47421585007794353,
+   "rand_mean": -0.1522544718913264,
+   "by_year": {
+    "2023": 1.013230153744166,
+    "2024": 1.8236622664656357,
+    "2025": 1.2909141863386047
+   },
+   "book_R": {
+    "n_days": 1037,
+    "excluded": 0,
+    "from": "2023-03-01",
+    "to": "2025-12-31",
+    "mean_pct": 0.0043,
+    "lo95": -0.0667,
+    "hi95": 0.0818,
+    "sd_pct": 1.1485,
+    "compound_pct": -2.195,
+    "max_dd_pct": -28.416,
+    "pos_share": 0.274,
+    "worst_pct": -7.4129
+   },
+   "book_conservation_ok": true,
+   "admitted": false,
+   "checks": {
+    "mean_lo_gt_0": false,
+    "beats_random_p95": true,
+    "beats_price_only": false,
+    "enough_events": true,
+    "years_agree": true
+   }
+  },
+  "PO_o10_p6_H4": {
+   "config": {
+    "oi": -0.1,
+    "p": -0.06,
+    "H": 4
+   },
+   "n_events": 843,
+   "n_price_only": 3151,
+   "agg": {
+    "n_trades": 843,
+    "n_days": 229,
+    "mean_pct": 1.1031,
+    "lo95": -0.4346,
+    "hi95": 2.2223,
+    "top5_days_share_of_sum": 0.985
+   },
+   "daily_mean_agg": {
+    "n_days": 229,
+    "excluded": 0,
+    "from": "2023-03-03",
+    "to": "2025-12-27",
+    "mean_pct": -0.8679,
+    "lo95": -1.8723,
+    "hi95": 0.0113,
+    "sd_pct": 5.6327,
+    "compound_pct": -90.711,
+    "max_dd_pct": -92.309,
+    "pos_share": 0.476,
+    "worst_pct": -26.3638
+   },
+   "price_only_agg": {
+    "n_trades": 3151,
+    "n_days": 641,
+    "mean_pct": -0.0706,
+    "lo95": -1.0279,
+    "hi95": 0.9692,
+    "top5_days_share_of_sum": -6.618
+   },
+   "trade_mean_pct": 1.103104118549679,
+   "price_only_mean_pct": -0.07063913393263302,
+   "vs_p": {
+    "n_days": 34,
+    "excluded": 0,
+    "from": "2023-03",
+    "to": "2025-12",
+    "mean_pct": -0.2967,
+    "lo95": -1.5221,
+    "hi95": 0.7598,
+    "sd_pct": 2.572,
+    "compound_pct": -10.605,
+    "max_dd_pct": -21.942,
+    "pos_share": 0.471,
+    "worst_pct": -6.9071
+   },
+   "rand_p95": -0.0691279305925911,
+   "rand_mean": -0.31745487394938665,
+   "by_year": {
+    "2023": 0.4293465647809965,
+    "2024": 1.6968227970094825,
+    "2025": 1.6805868332283989
+   },
+   "book_R": {
+    "n_days": 1037,
+    "excluded": 0,
+    "from": "2023-03-01",
+    "to": "2025-12-31",
+    "mean_pct": 0.0045,
+    "lo95": -0.0275,
+    "hi95": 0.0369,
+    "sd_pct": 0.5479,
+    "compound_pct": 3.18,
+    "max_dd_pct": -14.869,
+    "pos_share": 0.112,
+    "worst_pct": -3.3978
+   },
+   "book_conservation_ok": true,
+   "admitted": false,
+   "checks": {
+    "mean_lo_gt_0": false,
+    "beats_random_p95": true,
+    "beats_price_only": false,
+    "enough_events": true,
+    "years_agree": true
+   }
+  },
+  "PO_o10_p6_H24": {
+   "config": {
+    "oi": -0.1,
+    "p": -0.06,
+    "H": 24
+   },
+   "n_events": 843,
+   "n_price_only": 3150,
+   "agg": {
+    "n_trades": 843,
+    "n_days": 229,
+    "mean_pct": 1.9131,
+    "lo95": -0.5972,
+    "hi95": 3.8123,
+    "top5_days_share_of_sum": 1.056
+   },
+   "daily_mean_agg": {
+    "n_days": 229,
+    "excluded": 0,
+    "from": "2023-03-03",
+    "to": "2025-12-27",
+    "mean_pct": -1.7987,
+    "lo95": -3.8266,
+    "hi95": 0.5708,
+    "sd_pct": 11.8556,
+    "compound_pct": -99.719,
+    "max_dd_pct": -99.827,
+    "pos_share": 0.424,
+    "worst_pct": -50.3085
+   },
+   "price_only_agg": {
+    "n_trades": 3150,
+    "n_days": 640,
+    "mean_pct": 1.4269,
+    "lo95": -0.1058,
+    "hi95": 2.895,
+    "top5_days_share_of_sum": 0.804
+   },
+   "trade_mean_pct": 1.9131432925337883,
+   "price_only_mean_pct": 1.4269156795213076,
+   "vs_p": {
+    "n_days": 34,
+    "excluded": 0,
+    "from": "2023-03",
+    "to": "2025-12",
+    "mean_pct": -1.6046,
+    "lo95": -5.5957,
+    "hi95": 1.5055,
+    "sd_pct": 5.5811,
+    "compound_pct": -45.45,
+    "max_dd_pct": -55.212,
+    "pos_share": 0.441,
+    "worst_pct": -17.7016
+   },
+   "rand_p95": 0.88151260838221,
+   "rand_mean": -0.21886286500112231,
+   "by_year": {
+    "2023": 1.6863268168147867,
+    "2024": 2.3751509842549026,
+    "2025": 1.5672286283573944
+   },
+   "book_R": {
+    "n_days": 1037,
+    "excluded": 0,
+    "from": "2023-03-01",
+    "to": "2025-12-31",
+    "mean_pct": 0.0147,
+    "lo95": -0.047,
+    "hi95": 0.082,
+    "sd_pct": 0.9819,
+    "compound_pct": 10.855,
+    "max_dd_pct": -28.799,
+    "pos_share": 0.172,
+    "worst_pct": -6.9702
+   },
+   "book_conservation_ok": true,
+   "admitted": false,
+   "checks": {
+    "mean_lo_gt_0": false,
+    "beats_random_p95": true,
+    "beats_price_only": false,
+    "enough_events": true,
+    "years_agree": true
+   }
+  }
+ },
+ "pbo": 0.04285714285714286,
+ "winner": null,
+ "verdict": "STOP: no winner",
+ "minutes": 36.8,
+ "utc": "2026-10-30T13:16:09.260759+00:00"
+}

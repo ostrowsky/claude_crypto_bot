@@ -1,0 +1,223 @@
+{
+ "spec": "pairs-trading-px-1104-spec.md",
+ "window": [
+  "2023-03-01",
+  "2026-01-01"
+ ],
+ "alpha": 0.0125,
+ "candidates": {
+  "PX_F30_Z20": {
+   "config": {
+    "F": 30,
+    "z_in": 2.0
+   },
+   "window": [
+    "2023-03-01",
+    "2026-01-01"
+   ],
+   "agg": {
+    "n_days": 1037,
+    "excluded": 0,
+    "from": "2023-03-01",
+    "to": "2025-12-31",
+    "mean_pct": -0.0178,
+    "lo95": -0.065,
+    "hi95": 0.0293,
+    "sd_pct": 0.6099,
+    "compound_pct": -18.429,
+    "max_dd_pct": -28.084,
+    "pos_share": 0.491,
+    "worst_pct": -2.7601
+   },
+   "random_p95": 0.025767084810983058,
+   "n_trades": 462,
+   "liquidations": 4,
+   "exit_reasons": {
+    "converged": 309,
+    "time": 127,
+    "stop": 13,
+    "liquidation": 4,
+    "window_end": 9
+   },
+   "trade_mean_pct": -0.39286201236838203,
+   "trade_mean_before_fees_pct": -0.3429250127606242,
+   "funding_share_of_pnl": -0.24356723093932958,
+   "converged_share": 0.6688311688311688,
+   "r_by_year": {
+    "2023": -0.011043663024091191,
+    "2024": 0.038527082566665274,
+    "2025": -0.07990197962844019
+   },
+   "conservation_ok": true,
+   "admitted": false,
+   "checks": {
+    "mean_lo_gt_0": false,
+    "beats_random_p95": false,
+    "years_agree": false,
+    "enough_trades": true,
+    "no_liquidation": false
+   }
+  },
+  "PX_F30_Z25": {
+   "config": {
+    "F": 30,
+    "z_in": 2.5
+   },
+   "window": [
+    "2023-03-01",
+    "2026-01-01"
+   ],
+   "agg": {
+    "n_days": 1037,
+    "excluded": 0,
+    "from": "2023-03-01",
+    "to": "2025-12-31",
+    "mean_pct": -0.0228,
+    "lo95": -0.062,
+    "hi95": 0.0194,
+    "sd_pct": 0.5539,
+    "compound_pct": -22.267,
+    "max_dd_pct": -28.004,
+    "pos_share": 0.471,
+    "worst_pct": -2.9496
+   },
+   "random_p95": 0.025834989325678744,
+   "n_trades": 320,
+   "liquidations": 4,
+   "exit_reasons": {
+    "converged": 195,
+    "time": 105,
+    "stop": 11,
+    "liquidation": 4,
+    "window_end": 5
+   },
+   "trade_mean_pct": -0.7239860722974946,
+   "trade_mean_before_fees_pct": -0.6739276262861709,
+   "funding_share_of_pnl": -0.1347368342107208,
+   "converged_share": 0.609375,
+   "r_by_year": {
+    "2023": -0.026461937322212463,
+    "2024": 0.013011124977872122,
+    "2025": -0.05551713750528545
+   },
+   "conservation_ok": true,
+   "admitted": false,
+   "checks": {
+    "mean_lo_gt_0": false,
+    "beats_random_p95": false,
+    "years_agree": false,
+    "enough_trades": true,
+    "no_liquidation": false
+   }
+  },
+  "PX_F60_Z20": {
+   "config": {
+    "F": 60,
+    "z_in": 2.0
+   },
+   "window": [
+    "2023-03-01",
+    "2026-01-01"
+   ],
+   "agg": {
+    "n_days": 1037,
+    "excluded": 0,
+    "from": "2023-03-01",
+    "to": "2025-12-31",
+    "mean_pct": -0.0145,
+    "lo95": -0.0522,
+    "hi95": 0.0223,
+    "sd_pct": 0.4893,
+    "compound_pct": -15.034,
+    "max_dd_pct": -21.317,
+    "pos_share": 0.435,
+    "worst_pct": -4.485
+   },
+   "random_p95": 0.01864753538790837,
+   "n_trades": 264,
+   "liquidations": 2,
+   "exit_reasons": {
+    "time": 141,
+    "converged": 88,
+    "stop": 25,
+    "liquidation": 2,
+    "window_end": 8
+   },
+   "trade_mean_pct": -0.5674906987106961,
+   "trade_mean_before_fees_pct": -0.5175032230419482,
+   "funding_share_of_pnl": -0.17751412307239042,
+   "converged_share": 0.3333333333333333,
+   "r_by_year": {
+    "2023": -0.002699609959777038,
+    "2024": -0.006818320146944993,
+    "2025": -0.03212755687111354
+   },
+   "conservation_ok": true,
+   "admitted": false,
+   "checks": {
+    "mean_lo_gt_0": false,
+    "beats_random_p95": false,
+    "years_agree": false,
+    "enough_trades": true,
+    "no_liquidation": false
+   }
+  },
+  "PX_F60_Z25": {
+   "config": {
+    "F": 60,
+    "z_in": 2.5
+   },
+   "window": [
+    "2023-03-01",
+    "2026-01-01"
+   ],
+   "agg": {
+    "n_days": 1037,
+    "excluded": 0,
+    "from": "2023-03-01",
+    "to": "2025-12-31",
+    "mean_pct": -0.0043,
+    "lo95": -0.0344,
+    "hi95": 0.0268,
+    "sd_pct": 0.4284,
+    "compound_pct": -5.249,
+    "max_dd_pct": -14.803,
+    "pos_share": 0.447,
+    "worst_pct": -4.7333
+   },
+   "random_p95": 0.009303649531866113,
+   "n_trades": 200,
+   "liquidations": 1,
+   "exit_reasons": {
+    "converged": 66,
+    "time": 96,
+    "stop": 32,
+    "liquidation": 1,
+    "window_end": 5
+   },
+   "trade_mean_pct": -0.22780087694446596,
+   "trade_mean_before_fees_pct": -0.1778477913834593,
+   "funding_share_of_pnl": -0.3451758720475431,
+   "converged_share": 0.33,
+   "r_by_year": {
+    "2023": -0.013999050309773175,
+    "2024": 0.015259531007605444,
+    "2025": -0.015723648010581254
+   },
+   "conservation_ok": true,
+   "admitted": false,
+   "checks": {
+    "mean_lo_gt_0": false,
+    "beats_random_p95": false,
+    "years_agree": false,
+    "enough_trades": true,
+    "no_liquidation": false
+   }
+  }
+ },
+ "pbo": 0.6142857142857143,
+ "winner": null,
+ "verdict": "STOP: no winner",
+ "minutes": 43.8,
+ "utc": "2026-11-04T14:58:27.164149+00:00"
+}

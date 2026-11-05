@@ -1,0 +1,128 @@
+{
+ "spec": "quarterly-basis-qb-1029-spec.md",
+ "stage": "test",
+ "rule": "QB_T0",
+ "window": [
+  "2026-01-01",
+  "2026-10-22"
+ ],
+ "verdict": {
+  "accepted": false,
+  "checks": {
+   "R_lo_gt_0": false,
+   "no_liquidation": true,
+   "dd_ok": true
+  }
+ },
+ "agg": {
+  "n_days": 294,
+  "excluded": 0,
+  "from": "2026-01-01",
+  "to": "2026-10-21",
+  "mean_pct": 0.0004,
+  "lo95": -0.0039,
+  "hi95": 0.0046,
+  "sd_pct": 0.037,
+  "compound_pct": 0.108,
+  "max_dd_pct": -0.515,
+  "pos_share": 0.578,
+  "worst_pct": -0.3106
+ },
+ "liquidations": 0,
+ "margin_stops": 1,
+ "exit_reasons": {
+  "expiry": 5,
+  "margin_stop": 1,
+  "flush": 2
+ },
+ "trades": [
+  {
+   "pair": "BTCUSDT",
+   "symbol": "BTCUSDT_260327",
+   "reason": "expiry",
+   "basis_ann": 0.04159435122141581,
+   "ret_pct": -0.20057113745400582
+  },
+  {
+   "pair": "ETHUSDT",
+   "symbol": "ETHUSDT_260327",
+   "reason": "expiry",
+   "basis_ann": 0.03291434563712072,
+   "ret_pct": 0.08849711056957815
+  },
+  {
+   "pair": "BTCUSDT",
+   "symbol": "BTCUSDT_260626",
+   "reason": "expiry",
+   "basis_ann": 0.02173308925837432,
+   "ret_pct": 0.6122622453653075
+  },
+  {
+   "pair": "ETHUSDT",
+   "symbol": "ETHUSDT_260626",
+   "reason": "expiry",
+   "basis_ann": 0.014722002186321923,
+   "ret_pct": 0.10960825650821096
+  },
+  {
+   "pair": "ETHUSDT",
+   "symbol": "ETHUSDT_260925",
+   "reason": "margin_stop",
+   "basis_ann": 0.010668715645447706,
+   "ret_pct": -0.399440010998658
+  },
+  {
+   "pair": "BTCUSDT",
+   "symbol": "BTCUSDT_260925",
+   "reason": "expiry",
+   "basis_ann": 0.02764540884487702,
+   "ret_pct": 0.021329765854891186
+  },
+  {
+   "pair": "BTCUSDT",
+   "symbol": "BTCUSDT_261225",
+   "reason": "flush",
+   "basis_ann": 0.04864771963964502,
+   "ret_pct": -0.1405744322827405
+  },
+  {
+   "pair": "ETHUSDT",
+   "symbol": "ETHUSDT_261225",
+   "reason": "flush",
+   "basis_ann": 0.037318440264368924,
+   "ret_pct": -0.17170418398209172
+  }
+ ],
+ "conservation_ok": true,
+ "reference": {
+  "fc_passive_agg": {
+   "n_days": 294,
+   "excluded": 0,
+   "from": "2026-01-01",
+   "to": "2026-10-21",
+   "mean_pct": 0.0024,
+   "lo95": 0.0015,
+   "hi95": 0.0038,
+   "sd_pct": 0.0105,
+   "compound_pct": 0.7,
+   "max_dd_pct": -0.194,
+   "pos_share": 0.684,
+   "worst_pct": -0.1453
+  },
+  "paired_fc_passive": {
+   "n_days": 294,
+   "excluded": 0,
+   "from": "2026-01-01",
+   "to": "2026-10-21",
+   "mean_pct": -0.002,
+   "lo95": -0.0068,
+   "hi95": 0.0021,
+   "sd_pct": 0.0372,
+   "compound_pct": -0.588,
+   "max_dd_pct": -0.959,
+   "pos_share": 0.5,
+   "worst_pct": -0.3072
+  }
+ },
+ "utc": "2026-10-29T07:31:06.310386+00:00"
+}

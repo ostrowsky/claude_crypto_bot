@@ -1,0 +1,276 @@
+{
+ "winner": "all_candidates|ranker_final_score|q0.50|cap3",
+ "frac": 0.10296936598068646,
+ "halves": {
+  "train": {
+   "winner_R": -0.0287,
+   "winner_net_per_trade": -0.21,
+   "winner_trades": 173,
+   "control": [
+    {
+     "seed": 0,
+     "R": -0.1728,
+     "trades": 315,
+     "net_per_trade": -0.6682
+    },
+    {
+     "seed": 1,
+     "R": -0.1181,
+     "trades": 313,
+     "net_per_trade": -0.4138
+    },
+    {
+     "seed": 2,
+     "R": -0.1924,
+     "trades": 315,
+     "net_per_trade": -0.7396
+    },
+    {
+     "seed": 3,
+     "R": -0.1534,
+     "trades": 314,
+     "net_per_trade": -0.5839
+    },
+    {
+     "seed": 4,
+     "R": -0.1416,
+     "trades": 312,
+     "net_per_trade": -0.5516
+    },
+    {
+     "seed": 5,
+     "R": -0.155,
+     "trades": 321,
+     "net_per_trade": -0.5886
+    },
+    {
+     "seed": 6,
+     "R": -0.1637,
+     "trades": 322,
+     "net_per_trade": -0.5992
+    },
+    {
+     "seed": 7,
+     "R": -0.1363,
+     "trades": 316,
+     "net_per_trade": -0.5225
+    },
+    {
+     "seed": 8,
+     "R": -0.1863,
+     "trades": 312,
+     "net_per_trade": -0.7222
+    },
+    {
+     "seed": 9,
+     "R": -0.1161,
+     "trades": 317,
+     "net_per_trade": -0.4506
+    },
+    {
+     "seed": 10,
+     "R": -0.1458,
+     "trades": 320,
+     "net_per_trade": -0.5371
+    },
+    {
+     "seed": 11,
+     "R": -0.168,
+     "trades": 316,
+     "net_per_trade": -0.6498
+    },
+    {
+     "seed": 12,
+     "R": -0.2238,
+     "trades": 316,
+     "net_per_trade": -0.8509
+    },
+    {
+     "seed": 13,
+     "R": -0.1078,
+     "trades": 318,
+     "net_per_trade": -0.3957
+    },
+    {
+     "seed": 14,
+     "R": -0.1532,
+     "trades": 311,
+     "net_per_trade": -0.6039
+    },
+    {
+     "seed": 15,
+     "R": -0.1345,
+     "trades": 315,
+     "net_per_trade": -0.4726
+    },
+    {
+     "seed": 16,
+     "R": -0.116,
+     "trades": 314,
+     "net_per_trade": -0.458
+    },
+    {
+     "seed": 17,
+     "R": -0.105,
+     "trades": 315,
+     "net_per_trade": -0.4092
+    },
+    {
+     "seed": 18,
+     "R": -0.181,
+     "trades": 322,
+     "net_per_trade": -0.673
+    },
+    {
+     "seed": 19,
+     "R": -0.0803,
+     "trades": 316,
+     "net_per_trade": -0.3272
+    }
+   ],
+   "control_R_median": -0.1458,
+   "control_R_range": [
+    -0.2238,
+    -0.0803
+   ],
+   "control_net_median": -0.5516,
+   "winner_R_percentile": 1.0,
+   "winner_net_percentile": 1.0
+  },
+  "test": {
+   "winner_R": -0.1108,
+   "winner_net_per_trade": -0.4167,
+   "winner_trades": 268,
+   "control": [
+    {
+     "seed": 0,
+     "R": -0.127,
+     "trades": 279,
+     "net_per_trade": -0.4618
+    },
+    {
+     "seed": 1,
+     "R": -0.1261,
+     "trades": 277,
+     "net_per_trade": -0.4596
+    },
+    {
+     "seed": 2,
+     "R": -0.0732,
+     "trades": 281,
+     "net_per_trade": -0.2669
+    },
+    {
+     "seed": 3,
+     "R": -0.1509,
+     "trades": 277,
+     "net_per_trade": -0.5532
+    },
+    {
+     "seed": 4,
+     "R": -0.1843,
+     "trades": 280,
+     "net_per_trade": -0.6672
+    },
+    {
+     "seed": 5,
+     "R": -0.1888,
+     "trades": 281,
+     "net_per_trade": -0.6826
+    },
+    {
+     "seed": 6,
+     "R": -0.115,
+     "trades": 280,
+     "net_per_trade": -0.416
+    },
+    {
+     "seed": 7,
+     "R": -0.1243,
+     "trades": 280,
+     "net_per_trade": -0.4518
+    },
+    {
+     "seed": 8,
+     "R": -0.1289,
+     "trades": 277,
+     "net_per_trade": -0.471
+    },
+    {
+     "seed": 9,
+     "R": -0.077,
+     "trades": 278,
+     "net_per_trade": -0.2798
+    },
+    {
+     "seed": 10,
+     "R": -0.1744,
+     "trades": 280,
+     "net_per_trade": -0.6315
+    },
+    {
+     "seed": 11,
+     "R": -0.105,
+     "trades": 279,
+     "net_per_trade": -0.3802
+    },
+    {
+     "seed": 12,
+     "R": -0.1051,
+     "trades": 279,
+     "net_per_trade": -0.3811
+    },
+    {
+     "seed": 13,
+     "R": -0.162,
+     "trades": 280,
+     "net_per_trade": -0.5851
+    },
+    {
+     "seed": 14,
+     "R": -0.2026,
+     "trades": 280,
+     "net_per_trade": -0.7321
+    },
+    {
+     "seed": 15,
+     "R": -0.1232,
+     "trades": 280,
+     "net_per_trade": -0.4451
+    },
+    {
+     "seed": 16,
+     "R": -0.1464,
+     "trades": 274,
+     "net_per_trade": -0.5411
+    },
+    {
+     "seed": 17,
+     "R": -0.0813,
+     "trades": 278,
+     "net_per_trade": -0.2979
+    },
+    {
+     "seed": 18,
+     "R": -0.1635,
+     "trades": 277,
+     "net_per_trade": -0.5983
+    },
+    {
+     "seed": 19,
+     "R": -0.2127,
+     "trades": 278,
+     "net_per_trade": -0.773
+    }
+   ],
+   "control_R_median": -0.127,
+   "control_R_range": [
+    -0.2127,
+    -0.0732
+   ],
+   "control_net_median": -0.4618,
+   "winner_R_percentile": 0.75,
+   "winner_net_percentile": 0.7
+  }
+ }
+}

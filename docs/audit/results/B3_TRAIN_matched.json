@@ -1,0 +1,145 @@
+{
+ "window": [
+  "2023-01-01",
+  "2024-08-01"
+ ],
+ "exploratory": true,
+ "arms": {
+  "W93": {
+   "agg": {
+    "n_days": 578,
+    "excluded": 0,
+    "from": "2023-01-01",
+    "to": "2024-07-31",
+    "mean_pct": -0.4316,
+    "lo95": -0.7349,
+    "hi95": -0.147,
+    "sd_pct": 3.5852,
+    "compound_pct": -94.366,
+    "max_dd_pct": -95.968,
+    "pos_share": 0.46,
+    "worst_pct": -14.8615
+   },
+   "n_trades": 5879,
+   "decomposition": {
+    "n": 5879,
+    "net_mean_pct": -0.4234,
+    "gross_mean_pct": -0.0642,
+    "win_share": 0.402,
+    "avg_win": 4.634,
+    "avg_loss": -3.825,
+    "by_reason": {
+     "time": {
+      "n": 4619,
+      "mean": 0.624
+     },
+     "trail": {
+      "n": 1260,
+      "mean": -4.262
+     }
+    }
+   },
+   "n_trade_days": 577
+  },
+  "WALL": {
+   "agg": {
+    "n_days": 578,
+    "excluded": 0,
+    "from": "2023-01-01",
+    "to": "2024-07-31",
+    "mean_pct": -1.1001,
+    "lo95": -1.4203,
+    "hi95": -0.7806,
+    "sd_pct": 3.615,
+    "compound_pct": -99.887,
+    "max_dd_pct": -99.904,
+    "pos_share": 0.363,
+    "worst_pct": -16.9444
+   },
+   "n_trades": 6818,
+   "decomposition": {
+    "n": 6818,
+    "net_mean_pct": -0.9478,
+    "gross_mean_pct": -0.5905,
+    "win_share": 0.357,
+    "avg_win": 4.864,
+    "avg_loss": -4.172,
+    "by_reason": {
+     "time": {
+      "n": 4683,
+      "mean": 0.177
+     },
+     "trail": {
+      "n": 2135,
+      "mean": -3.415
+     }
+    }
+   },
+   "n_trade_days": 577
+  },
+  "WNEW": {
+   "agg": {
+    "n_days": 578,
+    "excluded": 0,
+    "from": "2023-01-01",
+    "to": "2024-07-31",
+    "mean_pct": -1.0231,
+    "lo95": -1.3539,
+    "hi95": -0.6783,
+    "sd_pct": 3.7868,
+    "compound_pct": -99.828,
+    "max_dd_pct": -99.85,
+    "pos_share": 0.36,
+    "worst_pct": -20.0284
+   },
+   "n_trades": 6868,
+   "decomposition": {
+    "n": 6868,
+    "net_mean_pct": -0.8787,
+    "gross_mean_pct": -0.5211,
+    "win_share": 0.354,
+    "avg_win": 5.146,
+    "avg_loss": -4.184,
+    "by_reason": {
+     "time": {
+      "n": 4649,
+      "mean": 0.185
+     },
+     "trail": {
+      "n": 2219,
+      "mean": -3.107
+     }
+    }
+   },
+   "n_trade_days": 577
+  }
+ },
+ "paired_WALL_minus_W93": {
+  "n_days": 578,
+  "excluded": 0,
+  "from": "2023-01-01",
+  "to": "2024-07-31",
+  "mean_pct": -0.6686,
+  "lo95": -0.877,
+  "hi95": -0.4555,
+  "sd_pct": 2.7357,
+  "compound_pct": -98.336,
+  "max_dd_pct": -98.343,
+  "pos_share": 0.369,
+  "worst_pct": -11.014
+ },
+ "paired_WNEW_minus_W93": {
+  "n_days": 578,
+  "excluded": 0,
+  "from": "2023-01-01",
+  "to": "2024-07-31",
+  "mean_pct": -0.5915,
+  "lo95": -0.8437,
+  "hi95": -0.3181,
+  "sd_pct": 3.2118,
+  "compound_pct": -97.596,
+  "max_dd_pct": -97.671,
+  "pos_share": 0.386,
+  "worst_pct": -15.4476
+ }
+}

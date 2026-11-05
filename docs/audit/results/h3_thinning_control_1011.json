@@ -1,0 +1,136 @@
+{
+ "target_trades": 865,
+ "frac": 0.34375,
+ "x4_R": -0.2485,
+ "x4_net_per_trade": -0.2924,
+ "control": [
+  {
+   "seed": 0,
+   "R": -0.3995,
+   "trades": 869,
+   "net_per_trade": -0.4692
+  },
+  {
+   "seed": 1,
+   "R": -0.3259,
+   "trades": 802,
+   "net_per_trade": -0.4144
+  },
+  {
+   "seed": 2,
+   "R": -0.4121,
+   "trades": 847,
+   "net_per_trade": -0.4971
+  },
+  {
+   "seed": 3,
+   "R": -0.4737,
+   "trades": 821,
+   "net_per_trade": -0.5889
+  },
+  {
+   "seed": 4,
+   "R": -0.5196,
+   "trades": 810,
+   "net_per_trade": -0.6568
+  },
+  {
+   "seed": 5,
+   "R": -0.4579,
+   "trades": 840,
+   "net_per_trade": -0.5546
+  },
+  {
+   "seed": 6,
+   "R": -0.3615,
+   "trades": 801,
+   "net_per_trade": -0.4621
+  },
+  {
+   "seed": 7,
+   "R": -0.3892,
+   "trades": 827,
+   "net_per_trade": -0.4813
+  },
+  {
+   "seed": 8,
+   "R": -0.3159,
+   "trades": 831,
+   "net_per_trade": -0.3876
+  },
+  {
+   "seed": 9,
+   "R": -0.4814,
+   "trades": 840,
+   "net_per_trade": -0.5861
+  },
+  {
+   "seed": 10,
+   "R": -0.2539,
+   "trades": 845,
+   "net_per_trade": -0.3072
+  },
+  {
+   "seed": 11,
+   "R": -0.4248,
+   "trades": 852,
+   "net_per_trade": -0.5099
+  },
+  {
+   "seed": 12,
+   "R": -0.4004,
+   "trades": 830,
+   "net_per_trade": -0.4933
+  },
+  {
+   "seed": 13,
+   "R": -0.3787,
+   "trades": 793,
+   "net_per_trade": -0.4881
+  },
+  {
+   "seed": 14,
+   "R": -0.4408,
+   "trades": 848,
+   "net_per_trade": -0.5316
+  },
+  {
+   "seed": 15,
+   "R": -0.4109,
+   "trades": 821,
+   "net_per_trade": -0.5115
+  },
+  {
+   "seed": 16,
+   "R": -0.3943,
+   "trades": 804,
+   "net_per_trade": -0.5004
+  },
+  {
+   "seed": 17,
+   "R": -0.3914,
+   "trades": 794,
+   "net_per_trade": -0.5033
+  },
+  {
+   "seed": 18,
+   "R": -0.2918,
+   "trades": 853,
+   "net_per_trade": -0.3478
+  },
+  {
+   "seed": 19,
+   "R": -0.2796,
+   "trades": 812,
+   "net_per_trade": -0.3501
+  }
+ ],
+ "R_median": -0.3943,
+ "R_range": [
+  -0.5196,
+  -0.2539
+ ],
+ "net_median": -0.4933,
+ "x4_R_percentile": 1.0,
+ "x4_net_percentile": 1.0
+}

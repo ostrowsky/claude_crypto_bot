@@ -1,0 +1,679 @@
+{
+ "window": [
+  "2026-10-21",
+  "2026-10-28"
+ ],
+ "perps": [
+  "1INCHUSDT",
+  "AAVEUSDT",
+  "ACHUSDT",
+  "ADAUSDT",
+  "AEVOUSDT",
+  "ALGOUSDT",
+  "APEUSDT",
+  "APTUSDT",
+  "ARBUSDT",
+  "ARUSDT",
+  "ATOMUSDT",
+  "AVAXUSDT",
+  "AXLUSDT",
+  "AXSUSDT",
+  "BATUSDT",
+  "BCHUSDT",
+  "BLURUSDT",
+  "BNBUSDT",
+  "BTCUSDT",
+  "C98USDT",
+  "CAKEUSDT",
+  "CELOUSDT",
+  "CELRUSDT",
+  "CFXUSDT",
+  "CHZUSDT"
+ ],
+ "per_perp": {
+  "1INCHUSDT": {
+   "pit2": {
+    "n_archive": 2304,
+    "n_matched": 2304,
+    "coverage": 1.0,
+    "exact_share": {
+     "oi": 1.0,
+     "top": 0.023003472222222224,
+     "glob": 0.004774305555555556
+    },
+    "ok": false
+   },
+   "pit2b": {
+    "n_archive": 2304,
+    "n_matched": 2304,
+    "coverage": 1.0,
+    "share": {
+     "oi": 1.0,
+     "top": 0.99609375,
+     "glob": 1.0
+    },
+    "ok": true
+   },
+   "ok": true
+  },
+  "AAVEUSDT": {
+   "pit2": {
+    "n_archive": 2304,
+    "n_matched": 2304,
+    "coverage": 1.0,
+    "exact_share": {
+     "oi": 1.0,
+     "top": 0.017795138888888888,
+     "glob": 0.005642361111111111
+    },
+    "ok": false
+   },
+   "pit2b": {
+    "n_archive": 2304,
+    "n_matched": 2304,
+    "coverage": 1.0,
+    "share": {
+     "oi": 1.0,
+     "top": 0.99609375,
+     "glob": 1.0
+    },
+    "ok": true
+   },
+   "ok": true
+  },
+  "ACHUSDT": {
+   "pit2": {
+    "n_archive": 2304,
+    "n_matched": 2304,
+    "coverage": 1.0,
+    "exact_share": {
+     "oi": 1.0,
+     "top": 0.017795138888888888,
+     "glob": 0.009114583333333334
+    },
+    "ok": false
+   },
+   "pit2b": {
+    "n_archive": 2304,
+    "n_matched": 2304,
+    "coverage": 1.0,
+    "share": {
+     "oi": 1.0,
+     "top": 0.9939236111111112,
+     "glob": 1.0
+    },
+    "ok": true
+   },
+   "ok": true
+  },
+  "ADAUSDT": {
+   "pit2": {
+    "n_archive": 2304,
+    "n_matched": 2304,
+    "coverage": 1.0,
+    "exact_share": {
+     "oi": 1.0,
+     "top": 0.022569444444444444,
+     "glob": 0.005208333333333333
+    },
+    "ok": false
+   },
+   "pit2b": {
+    "n_archive": 2304,
+    "n_matched": 2304,
+    "coverage": 1.0,
+    "share": {
+     "oi": 1.0,
+     "top": 0.9934895833333334,
+     "glob": 1.0
+    },
+    "ok": true
+   },
+   "ok": true
+  },
+  "AEVOUSDT": {
+   "pit2": {
+    "n_archive": 2304,
+    "n_matched": 2304,
+    "coverage": 1.0,
+    "exact_share": {
+     "oi": 1.0,
+     "top": 0.020833333333333332,
+     "glob": 0.0013020833333333333
+    },
+    "ok": false
+   },
+   "pit2b": {
+    "n_archive": 2304,
+    "n_matched": 2304,
+    "coverage": 1.0,
+    "share": {
+     "oi": 1.0,
+     "top": 0.99609375,
+     "glob": 1.0
+    },
+    "ok": true
+   },
+   "ok": true
+  },
+  "ALGOUSDT": {
+   "pit2": {
+    "n_archive": 2304,
+    "n_matched": 2304,
+    "coverage": 1.0,
+    "exact_share": {
+     "oi": 1.0,
+     "top": 0.024305555555555556,
+     "glob": 0.005642361111111111
+    },
+    "ok": false
+   },
+   "pit2b": {
+    "n_archive": 2304,
+    "n_matched": 2304,
+    "coverage": 1.0,
+    "share": {
+     "oi": 1.0,
+     "top": 0.9939236111111112,
+     "glob": 1.0
+    },
+    "ok": true
+   },
+   "ok": true
+  },
+  "APEUSDT": {
+   "pit2": {
+    "n_archive": 2304,
+    "n_matched": 2304,
+    "coverage": 1.0,
+    "exact_share": {
+     "oi": 1.0,
+     "top": 0.023871527777777776,
+     "glob": 0.006510416666666667
+    },
+    "ok": false
+   },
+   "pit2b": {
+    "n_archive": 2304,
+    "n_matched": 2304,
+    "coverage": 1.0,
+    "share": {
+     "oi": 1.0,
+     "top": 0.9943576388888888,
+     "glob": 1.0
+    },
+    "ok": true
+   },
+   "ok": true
+  },
+  "APTUSDT": {
+   "pit2": {
+    "n_archive": 2304,
+    "n_matched": 2304,
+    "coverage": 1.0,
+    "exact_share": {
+     "oi": 1.0,
+     "top": 0.014756944444444444,
+     "glob": 0.004340277777777778
+    },
+    "ok": false
+   },
+   "pit2b": {
+    "n_archive": 2304,
+    "n_matched": 2304,
+    "coverage": 1.0,
+    "share": {
+     "oi": 1.0,
+     "top": 0.9965277777777778,
+     "glob": 1.0
+    },
+    "ok": true
+   },
+   "ok": true
+  },
+  "ARBUSDT": {
+   "pit2": {
+    "n_archive": 2304,
+    "n_matched": 2304,
+    "coverage": 1.0,
+    "exact_share": {
+     "oi": 1.0,
+     "top": 0.017795138888888888,
+     "glob": 0.00390625
+    },
+    "ok": false
+   },
+   "pit2b": {
+    "n_archive": 2304,
+    "n_matched": 2304,
+    "coverage": 1.0,
+    "share": {
+     "oi": 1.0,
+     "top": 0.9943576388888888,
+     "glob": 1.0
+    },
+    "ok": true
+   },
+   "ok": true
+  },
+  "ARUSDT": {
+   "pit2": {
+    "n_archive": 2304,
+    "n_matched": 2304,
+    "coverage": 1.0,
+    "exact_share": {
+     "oi": 1.0,
+     "top": 0.018663194444444444,
+     "glob": 0.006944444444444444
+    },
+    "ok": false
+   },
+   "pit2b": {
+    "n_archive": 2304,
+    "n_matched": 2304,
+    "coverage": 1.0,
+    "share": {
+     "oi": 1.0,
+     "top": 0.9943576388888888,
+     "glob": 1.0
+    },
+    "ok": true
+   },
+   "ok": true
+  },
+  "ATOMUSDT": {
+   "pit2": {
+    "n_archive": 2304,
+    "n_matched": 2304,
+    "coverage": 1.0,
+    "exact_share": {
+     "oi": 1.0,
+     "top": 0.019965277777777776,
+     "glob": 0.005208333333333333
+    },
+    "ok": false
+   },
+   "pit2b": {
+    "n_archive": 2304,
+    "n_matched": 2304,
+    "coverage": 1.0,
+    "share": {
+     "oi": 1.0,
+     "top": 0.9982638888888888,
+     "glob": 1.0
+    },
+    "ok": true
+   },
+   "ok": true
+  },
+  "AVAXUSDT": {
+   "pit2": {
+    "n_archive": 2304,
+    "n_matched": 2304,
+    "coverage": 1.0,
+    "exact_share": {
+     "oi": 1.0,
+     "top": 0.01953125,
+     "glob": 0.00390625
+    },
+    "ok": false
+   },
+   "pit2b": {
+    "n_archive": 2304,
+    "n_matched": 2304,
+    "coverage": 1.0,
+    "share": {
+     "oi": 1.0,
+     "top": 0.9965277777777778,
+     "glob": 1.0
+    },
+    "ok": true
+   },
+   "ok": true
+  },
+  "AXLUSDT": {
+   "pit2": {
+    "n_archive": 2304,
+    "n_matched": 2304,
+    "coverage": 1.0,
+    "exact_share": {
+     "oi": 1.0,
+     "top": 0.0234375,
+     "glob": 0.004774305555555556
+    },
+    "ok": false
+   },
+   "pit2b": {
+    "n_archive": 2304,
+    "n_matched": 2304,
+    "coverage": 1.0,
+    "share": {
+     "oi": 1.0,
+     "top": 0.9926215277777778,
+     "glob": 1.0
+    },
+    "ok": true
+   },
+   "ok": true
+  },
+  "AXSUSDT": {
+   "pit2": {
+    "n_archive": 2304,
+    "n_matched": 2304,
+    "coverage": 1.0,
+    "exact_share": {
+     "oi": 1.0,
+     "top": 0.024305555555555556,
+     "glob": 0.006076388888888889
+    },
+    "ok": false
+   },
+   "pit2b": {
+    "n_archive": 2304,
+    "n_matched": 2304,
+    "coverage": 1.0,
+    "share": {
+     "oi": 1.0,
+     "top": 0.9908854166666666,
+     "glob": 1.0
+    },
+    "ok": true
+   },
+   "ok": true
+  },
+  "BATUSDT": {
+   "pit2": {
+    "n_archive": 2304,
+    "n_matched": 2304,
+    "coverage": 1.0,
+    "exact_share": {
+     "oi": 1.0,
+     "top": 0.020399305555555556,
+     "glob": 0.005642361111111111
+    },
+    "ok": false
+   },
+   "pit2b": {
+    "n_archive": 2304,
+    "n_matched": 2304,
+    "coverage": 1.0,
+    "share": {
+     "oi": 1.0,
+     "top": 0.9973958333333334,
+     "glob": 1.0
+    },
+    "ok": true
+   },
+   "ok": true
+  },
+  "BCHUSDT": {
+   "pit2": {
+    "n_archive": 2304,
+    "n_matched": 2304,
+    "coverage": 1.0,
+    "exact_share": {
+     "oi": 1.0,
+     "top": 0.025607638888888888,
+     "glob": 0.0030381944444444445
+    },
+    "ok": false
+   },
+   "pit2b": {
+    "n_archive": 2304,
+    "n_matched": 2304,
+    "coverage": 1.0,
+    "share": {
+     "oi": 1.0,
+     "top": 0.9952256944444444,
+     "glob": 1.0
+    },
+    "ok": true
+   },
+   "ok": true
+  },
+  "BLURUSDT": {
+   "pit2": {
+    "n_archive": 2304,
+    "n_matched": 2304,
+    "coverage": 1.0,
+    "exact_share": {
+     "oi": 1.0,
+     "top": 0.022135416666666668,
+     "glob": 0.004340277777777778
+    },
+    "ok": false
+   },
+   "pit2b": {
+    "n_archive": 2304,
+    "n_matched": 2304,
+    "coverage": 1.0,
+    "share": {
+     "oi": 1.0,
+     "top": 0.99609375,
+     "glob": 1.0
+    },
+    "ok": true
+   },
+   "ok": true
+  },
+  "BNBUSDT": {
+   "pit2": {
+    "n_archive": 2304,
+    "n_matched": 2304,
+    "coverage": 1.0,
+    "exact_share": {
+     "oi": 1.0,
+     "top": 0.021267361111111112,
+     "glob": 0.0013020833333333333
+    },
+    "ok": false
+   },
+   "pit2b": {
+    "n_archive": 2304,
+    "n_matched": 2304,
+    "coverage": 1.0,
+    "share": {
+     "oi": 1.0,
+     "top": 0.9930555555555556,
+     "glob": 1.0
+    },
+    "ok": true
+   },
+   "ok": true
+  },
+  "BTCUSDT": {
+   "pit2": {
+    "n_archive": 2304,
+    "n_matched": 2304,
+    "coverage": 1.0,
+    "exact_share": {
+     "oi": 1.0,
+     "top": 0.018663194444444444,
+     "glob": 0.00390625
+    },
+    "ok": false
+   },
+   "pit2b": {
+    "n_archive": 2304,
+    "n_matched": 2304,
+    "coverage": 1.0,
+    "share": {
+     "oi": 1.0,
+     "top": 0.9978298611111112,
+     "glob": 1.0
+    },
+    "ok": true
+   },
+   "ok": true
+  },
+  "C98USDT": {
+   "pit2": {
+    "n_archive": 2304,
+    "n_matched": 2304,
+    "coverage": 1.0,
+    "exact_share": {
+     "oi": 1.0,
+     "top": 0.017795138888888888,
+     "glob": 0.0030381944444444445
+    },
+    "ok": false
+   },
+   "pit2b": {
+    "n_archive": 2304,
+    "n_matched": 2304,
+    "coverage": 1.0,
+    "share": {
+     "oi": 1.0,
+     "top": 0.9956597222222222,
+     "glob": 1.0
+    },
+    "ok": true
+   },
+   "ok": true
+  },
+  "CAKEUSDT": {
+   "pit2": {
+    "n_archive": 2304,
+    "n_matched": 2304,
+    "coverage": 1.0,
+    "exact_share": {
+     "oi": 1.0,
+     "top": 0.010850694444444444,
+     "glob": 0.006944444444444444
+    },
+    "ok": false
+   },
+   "pit2b": {
+    "n_archive": 2304,
+    "n_matched": 2304,
+    "coverage": 1.0,
+    "share": {
+     "oi": 1.0,
+     "top": 0.9965277777777778,
+     "glob": 1.0
+    },
+    "ok": true
+   },
+   "ok": true
+  },
+  "CELOUSDT": {
+   "pit2": {
+    "n_archive": 2304,
+    "n_matched": 2304,
+    "coverage": 1.0,
+    "exact_share": {
+     "oi": 1.0,
+     "top": 0.024739583333333332,
+     "glob": 0.002170138888888889
+    },
+    "ok": false
+   },
+   "pit2b": {
+    "n_archive": 2304,
+    "n_matched": 2304,
+    "coverage": 1.0,
+    "share": {
+     "oi": 1.0,
+     "top": 0.9952256944444444,
+     "glob": 1.0
+    },
+    "ok": true
+   },
+   "ok": true
+  },
+  "CELRUSDT": {
+   "pit2": {
+    "n_archive": 2304,
+    "n_matched": 2304,
+    "coverage": 1.0,
+    "exact_share": {
+     "oi": 1.0,
+     "top": 0.016059027777777776,
+     "glob": 0.002170138888888889
+    },
+    "ok": false
+   },
+   "pit2b": {
+    "n_archive": 2304,
+    "n_matched": 2304,
+    "coverage": 1.0,
+    "share": {
+     "oi": 1.0,
+     "top": 0.9939236111111112,
+     "glob": 1.0
+    },
+    "ok": true
+   },
+   "ok": true
+  },
+  "CFXUSDT": {
+   "pit2": {
+    "n_archive": 2304,
+    "n_matched": 2304,
+    "coverage": 1.0,
+    "exact_share": {
+     "oi": 1.0,
+     "top": 0.01953125,
+     "glob": 0.008680555555555556
+    },
+    "ok": false
+   },
+   "pit2b": {
+    "n_archive": 2304,
+    "n_matched": 2304,
+    "coverage": 1.0,
+    "share": {
+     "oi": 1.0,
+     "top": 0.9939236111111112,
+     "glob": 1.0
+    },
+    "ok": true
+   },
+   "ok": true
+  },
+  "CHZUSDT": {
+   "pit2": {
+    "n_archive": 2304,
+    "n_matched": 2304,
+    "coverage": 1.0,
+    "exact_share": {
+     "oi": 1.0,
+     "top": 0.018229166666666668,
+     "glob": 0.00390625
+    },
+    "ok": false
+   },
+   "pit2b": {
+    "n_archive": 2304,
+    "n_matched": 2304,
+    "coverage": 1.0,
+    "share": {
+     "oi": 1.0,
+     "top": 0.9952256944444444,
+     "glob": 1.0
+    },
+    "ok": true
+   },
+   "ok": true
+  }
+ },
+ "aggregate": {
+  "n_archive": 57600,
+  "n_matched": 57600,
+  "coverage": 1.0,
+  "pit2_exact_share_min": {
+   "oi": 1.0,
+   "top": 0.010850694444444444,
+   "glob": 0.0013020833333333333
+  },
+  "pit2b_share_min": {
+   "oi": 1.0,
+   "top": 0.9908854166666666,
+   "glob": 1.0
+  },
+  "pit2_original_ok": false
+ },
+ "criterion": "PIT-2b",
+ "ok": true,
+ "utc": "2026-10-29T21:57:20.043484+00:00"
+}

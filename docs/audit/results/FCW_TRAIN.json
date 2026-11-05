@@ -1,0 +1,293 @@
+{
+ "spec": "fc-wide-carry-fcw-1104-spec.md",
+ "window": [
+  "2023-03-01",
+  "2026-01-01"
+ ],
+ "alpha": 0.016666666666666666,
+ "passive": {
+  "agg": {
+   "n_days": 1037,
+   "excluded": 0,
+   "from": "2023-03-01",
+   "to": "2025-12-31",
+   "mean_pct": 0.0111,
+   "lo95": 0.0091,
+   "hi95": 0.0135,
+   "sd_pct": 0.019,
+   "compound_pct": 12.198,
+   "max_dd_pct": -0.173,
+   "pos_share": 0.847,
+   "worst_pct": -0.1437
+  },
+  "liquidations": 0
+ },
+ "candidates": {
+  "FCW_N4": {
+   "config": {
+    "K": 4,
+    "lev": 1.0,
+    "margin_stop": 0.5
+   },
+   "window": [
+    "2023-03-01",
+    "2026-01-01"
+   ],
+   "agg": {
+    "n_days": 1037,
+    "excluded": 0,
+    "from": "2023-03-01",
+    "to": "2025-12-31",
+    "mean_pct": 0.0097,
+    "lo95": 0.0061,
+    "hi95": 0.0161,
+    "sd_pct": 0.0655,
+    "compound_pct": 10.522,
+    "max_dd_pct": -0.193,
+    "pos_share": 0.729,
+    "worst_pct": -0.145
+   },
+   "paired_passive": {
+    "n_days": 1037,
+    "excluded": 0,
+    "from": "2023-03-01",
+    "to": "2025-12-31",
+    "mean_pct": -0.0014,
+    "lo95": -0.0045,
+    "hi95": 0.0045,
+    "sd_pct": 0.0649,
+    "compound_pct": -1.495,
+    "max_dd_pct": -3.05,
+    "pos_share": 0.387,
+    "worst_pct": -0.097
+   },
+   "random_p95": 0.011144999999999988,
+   "liquidations": 1,
+   "margin_stops": 8,
+   "n_trades": 18,
+   "exit_reasons": {
+    "rotate": 5,
+    "liquidation": 1,
+    "margin_stop": 8,
+    "flush": 4
+   },
+   "funding_income": 99604.40466042093,
+   "turnover_per_day": 0.009195524512254903,
+   "exposure_share": 0.9990356798457087,
+   "conservation_ok": true,
+   "r_by_year": {
+    "2023": 0.013741666200788264,
+    "2024": 0.011602590570834972,
+    "2025": 0.004316347827410048
+   },
+   "pairs_held": [
+    "APTUSDT",
+    "ARBUSDT",
+    "BNBUSDT",
+    "BTCUSDT",
+    "DOGEUSDT",
+    "ETHUSDT",
+    "PEPEUSDT",
+    "SOLUSDT",
+    "XRPUSDT"
+   ],
+   "admitted": false,
+   "checks": {
+    "mean_lo_gt_0": true,
+    "no_liquidation": false,
+    "beats_passive": false,
+    "beats_random_p95": false,
+    "years_agree": true
+   }
+  },
+  "FCW_N6": {
+   "config": {
+    "K": 6,
+    "lev": 1.0,
+    "margin_stop": 0.5
+   },
+   "window": [
+    "2023-03-01",
+    "2026-01-01"
+   ],
+   "agg": {
+    "n_days": 1037,
+    "excluded": 0,
+    "from": "2023-03-01",
+    "to": "2025-12-31",
+    "mean_pct": 0.0075,
+    "lo95": 0.0033,
+    "hi95": 0.0127,
+    "sd_pct": 0.0581,
+    "compound_pct": 8.088,
+    "max_dd_pct": -1.188,
+    "pos_share": 0.714,
+    "worst_pct": -1.1602
+   },
+   "paired_passive": {
+    "n_days": 1037,
+    "excluded": 0,
+    "from": "2023-03-01",
+    "to": "2025-12-31",
+    "mean_pct": -0.0036,
+    "lo95": -0.0076,
+    "hi95": 0.0009,
+    "sd_pct": 0.0558,
+    "compound_pct": -3.664,
+    "max_dd_pct": -3.896,
+    "pos_share": 0.368,
+    "worst_pct": -1.1059
+   },
+   "random_p95": 0.008164999999999999,
+   "liquidations": 2,
+   "margin_stops": 14,
+   "n_trades": 29,
+   "exit_reasons": {
+    "rotate": 7,
+    "liquidation": 2,
+    "margin_stop": 14,
+    "flush": 6
+   },
+   "funding_income": 94953.58133364377,
+   "turnover_per_day": 0.009909598285534248,
+   "exposure_share": 0.9990356798457087,
+   "conservation_ok": true,
+   "r_by_year": {
+    "2023": 0.009256240149479721,
+    "2024": 0.009469189638832495,
+    "2025": 0.004102040492683862
+   },
+   "pairs_held": [
+    "APTUSDT",
+    "ARBUSDT",
+    "BNBUSDT",
+    "BTCUSDT",
+    "DOGEUSDT",
+    "ETHUSDT",
+    "LINKUSDT",
+    "ORDIUSDT",
+    "PEPEUSDT",
+    "SOLUSDT",
+    "XRPUSDT"
+   ],
+   "admitted": false,
+   "checks": {
+    "mean_lo_gt_0": true,
+    "no_liquidation": false,
+    "beats_passive": false,
+    "beats_random_p95": false,
+    "years_agree": true
+   }
+  },
+  "FCW_N10": {
+   "config": {
+    "K": 10,
+    "lev": 1.0,
+    "margin_stop": 0.5
+   },
+   "window": [
+    "2023-03-01",
+    "2026-01-01"
+   ],
+   "agg": {
+    "n_days": 1037,
+    "excluded": 0,
+    "from": "2023-03-01",
+    "to": "2025-12-31",
+    "mean_pct": 0.0042,
+    "lo95": -0.0024,
+    "hi95": 0.0098,
+    "sd_pct": 0.0545,
+    "compound_pct": 4.453,
+    "max_dd_pct": -4.089,
+    "pos_share": 0.655,
+    "worst_pct": -0.8489
+   },
+   "paired_passive": {
+    "n_days": 1037,
+    "excluded": 0,
+    "from": "2023-03-01",
+    "to": "2025-12-31",
+    "mean_pct": -0.0069,
+    "lo95": -0.013,
+    "hi95": -0.0021,
+    "sd_pct": 0.0526,
+    "compound_pct": -6.904,
+    "max_dd_pct": -6.907,
+    "pos_share": 0.343,
+    "worst_pct": -0.8601
+   },
+   "random_p95": 0.0068,
+   "liquidations": 1,
+   "margin_stops": 28,
+   "n_trades": 68,
+   "exit_reasons": {
+    "rotate": 29,
+    "liquidation": 1,
+    "margin_stop": 28,
+    "flush": 10
+   },
+   "funding_income": 56596.88654357273,
+   "turnover_per_day": 0.013115821201409132,
+   "exposure_share": 0.9990356798457087,
+   "conservation_ok": true,
+   "r_by_year": {
+    "2023": -0.004651507651949088,
+    "2024": 0.013814585410644252,
+    "2025": 0.0020269407661773443
+   },
+   "pairs_held": [
+    "1000SATSUSDT",
+    "ADAUSDT",
+    "APTUSDT",
+    "ARBUSDT",
+    "ASTERUSDT",
+    "AVAXUSDT",
+    "BCHUSDT",
+    "BLZUSDT",
+    "BNBUSDT",
+    "BOMEUSDT",
+    "BTCUSDT",
+    "CYBERUSDT",
+    "DOGEUSDT",
+    "DOGSUSDT",
+    "ENAUSDT",
+    "ETHUSDT",
+    "FTMUSDT",
+    "GASUSDT",
+    "LDOUSDT",
+    "LINKUSDT",
+    "LOOMUSDT",
+    "LTCUSDT",
+    "MANTAUSDT",
+    "NEIROUSDT",
+    "NOTUSDT",
+    "OPUSDT",
+    "ORDIUSDT",
+    "PEPEUSDT",
+    "PNUTUSDT",
+    "RUNEUSDT",
+    "SHIBUSDT",
+    "SOLUSDT",
+    "SUIUSDT",
+    "TIAUSDT",
+    "WIFUSDT",
+    "WLDUSDT",
+    "XRPUSDT",
+    "ZECUSDT"
+   ],
+   "admitted": false,
+   "checks": {
+    "mean_lo_gt_0": false,
+    "no_liquidation": false,
+    "beats_passive": false,
+    "beats_random_p95": false,
+    "years_agree": true
+   }
+  }
+ },
+ "winner": null,
+ "verdict": "STOP: no winner",
+ "minutes": 51.8,
+ "utc": "2026-11-04T11:49:54.513297+00:00"
+}

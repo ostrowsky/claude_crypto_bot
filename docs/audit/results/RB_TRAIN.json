@@ -1,0 +1,399 @@
+{
+ "spec": "rebalancing-rb-1029-spec.md",
+ "stage": "train",
+ "window": [
+  "2023-03-01",
+  "2026-01-01"
+ ],
+ "alpha": 0.008333333333333333,
+ "candidates": {
+  "RB_BE_d1": {
+   "config": {
+    "weights": {
+     "BTCUSDT": 0.5,
+     "ETHUSDT": 0.5
+    },
+    "period": 1
+   },
+   "R": {
+    "n_days": 1036,
+    "excluded": 0,
+    "from": "2023-03-01",
+    "to": "2025-12-30",
+    "mean_pct": 0.1337,
+    "lo95": -0.0277,
+    "hi95": 0.2877,
+    "sd_pct": 2.6803,
+    "compound_pct": 175.919,
+    "max_dd_pct": -47.773,
+    "pos_share": 0.527,
+    "worst_pct": -10.5607
+   },
+   "BH": {
+    "n_days": 1036,
+    "excluded": 0,
+    "from": "2023-03-01",
+    "to": "2025-12-30",
+    "mean_pct": 0.132,
+    "lo95": -0.0138,
+    "hi95": 0.2805,
+    "sd_pct": 2.5232,
+    "compound_pct": 182.707,
+    "max_dd_pct": -39.988,
+    "pos_share": 0.523,
+    "worst_pct": -9.3836
+   },
+   "paired": {
+    "n_days": 1036,
+    "excluded": 0,
+    "from": "2023-03-01",
+    "to": "2025-12-30",
+    "mean_pct": 0.0017,
+    "lo95": -0.0244,
+    "hi95": 0.0356,
+    "sd_pct": 0.3492,
+    "compound_pct": 1.122,
+    "max_dd_pct": -16.348,
+    "pos_share": 0.415,
+    "worst_pct": -1.5523
+   },
+   "paired_by_year": {
+    "2023": -0.00070786638623728,
+    "2024": -0.006848590212139336,
+    "2025": 0.012271408262025555
+   },
+   "fees_pct_of_start": 3.391389292813614,
+   "turnover_x": 18.85295092904341,
+   "n_rebalances": 1036,
+   "admitted": false,
+   "checks": {
+    "paired_lo_gt_0": false,
+    "years_agree": false
+   }
+  },
+  "RB_BE_d7": {
+   "config": {
+    "weights": {
+     "BTCUSDT": 0.5,
+     "ETHUSDT": 0.5
+    },
+    "period": 7
+   },
+   "R": {
+    "n_days": 1036,
+    "excluded": 0,
+    "from": "2023-03-01",
+    "to": "2025-12-30",
+    "mean_pct": 0.1353,
+    "lo95": -0.0267,
+    "hi95": 0.289,
+    "sd_pct": 2.6814,
+    "compound_pct": 180.419,
+    "max_dd_pct": -47.712,
+    "pos_share": 0.527,
+    "worst_pct": -10.4807
+   },
+   "BH": {
+    "n_days": 1036,
+    "excluded": 0,
+    "from": "2023-03-01",
+    "to": "2025-12-30",
+    "mean_pct": 0.132,
+    "lo95": -0.0138,
+    "hi95": 0.2805,
+    "sd_pct": 2.5232,
+    "compound_pct": 182.707,
+    "max_dd_pct": -39.988,
+    "pos_share": 0.523,
+    "worst_pct": -9.3836
+   },
+   "paired": {
+    "n_days": 1036,
+    "excluded": 0,
+    "from": "2023-03-01",
+    "to": "2025-12-30",
+    "mean_pct": 0.0033,
+    "lo95": -0.0241,
+    "hi95": 0.0392,
+    "sd_pct": 0.3572,
+    "compound_pct": 2.775,
+    "max_dd_pct": -16.329,
+    "pos_share": 0.42,
+    "worst_pct": -1.5792
+   },
+   "paired_by_year": {
+    "2023": -0.000721027272050099,
+    "2024": -0.0064449414464433155,
+    "2025": 0.01640972836686631
+   },
+   "fees_pct_of_start": 1.4273881039945002,
+   "turnover_x": 7.935045085199849,
+   "n_rebalances": 149,
+   "admitted": false,
+   "checks": {
+    "paired_lo_gt_0": false,
+    "years_agree": false
+   }
+  },
+  "RB_BU_d1": {
+   "config": {
+    "weights": {
+     "BTCUSDT": 0.5,
+     "USDT": 0.5
+    },
+    "period": 1
+   },
+   "R": {
+    "n_days": 1036,
+    "excluded": 0,
+    "from": "2023-03-01",
+    "to": "2025-12-30",
+    "mean_pct": 0.078,
+    "lo95": 0.0068,
+    "hi95": 0.1486,
+    "sd_pct": 1.193,
+    "compound_pct": 108.348,
+    "max_dd_pct": -17.115,
+    "pos_share": 0.514,
+    "worst_pct": -4.2425
+   },
+   "BH": {
+    "n_days": 1036,
+    "excluded": 0,
+    "from": "2023-03-01",
+    "to": "2025-12-30",
+    "mean_pct": 0.0991,
+    "lo95": 0.0001,
+    "hi95": 0.1983,
+    "sd_pct": 1.7018,
+    "compound_pct": 140.469,
+    "max_dd_pct": -26.748,
+    "pos_share": 0.514,
+    "worst_pct": -6.422
+   },
+   "paired": {
+    "n_days": 1036,
+    "excluded": 0,
+    "from": "2023-03-01",
+    "to": "2025-12-30",
+    "mean_pct": -0.0212,
+    "lo95": -0.0633,
+    "hi95": 0.0215,
+    "sd_pct": 0.5492,
+    "compound_pct": -20.951,
+    "max_dd_pct": -29.387,
+    "pos_share": 0.485,
+    "worst_pct": -2.5522
+   },
+   "paired_by_year": {
+    "2023": -0.010657788836472152,
+    "2024": -0.05157609977423025,
+    "2025": 0.0005296795522240152
+   },
+   "fees_pct_of_start": 1.4324570727122585,
+   "turnover_x": 7.963038397425935,
+   "n_rebalances": 1036,
+   "admitted": false,
+   "checks": {
+    "paired_lo_gt_0": false,
+    "years_agree": false
+   }
+  },
+  "RB_BU_d7": {
+   "config": {
+    "weights": {
+     "BTCUSDT": 0.5,
+     "USDT": 0.5
+    },
+    "period": 7
+   },
+   "R": {
+    "n_days": 1036,
+    "excluded": 0,
+    "from": "2023-03-01",
+    "to": "2025-12-30",
+    "mean_pct": 0.0786,
+    "lo95": 0.0073,
+    "hi95": 0.1496,
+    "sd_pct": 1.1964,
+    "compound_pct": 109.671,
+    "max_dd_pct": -17.025,
+    "pos_share": 0.514,
+    "worst_pct": -4.1347
+   },
+   "BH": {
+    "n_days": 1036,
+    "excluded": 0,
+    "from": "2023-03-01",
+    "to": "2025-12-30",
+    "mean_pct": 0.0991,
+    "lo95": 0.0001,
+    "hi95": 0.1983,
+    "sd_pct": 1.7018,
+    "compound_pct": 140.469,
+    "max_dd_pct": -26.748,
+    "pos_share": 0.514,
+    "worst_pct": -6.422
+   },
+   "paired": {
+    "n_days": 1036,
+    "excluded": 0,
+    "from": "2023-03-01",
+    "to": "2025-12-30",
+    "mean_pct": -0.0205,
+    "lo95": -0.063,
+    "hi95": 0.0222,
+    "sd_pct": 0.546,
+    "compound_pct": -20.401,
+    "max_dd_pct": -28.772,
+    "pos_share": 0.483,
+    "worst_pct": -2.6142
+   },
+   "paired_by_year": {
+    "2023": -0.010208220759148656,
+    "2024": -0.04922740697744736,
+    "2025": -0.0003554659878999668
+   },
+   "fees_pct_of_start": 0.6475643042065043,
+   "turnover_x": 3.599809036200444,
+   "n_rebalances": 149,
+   "admitted": false,
+   "checks": {
+    "paired_lo_gt_0": false,
+    "years_agree": false
+   }
+  },
+  "RB_EU_d1": {
+   "config": {
+    "weights": {
+     "ETHUSDT": 0.5,
+     "USDT": 0.5
+    },
+    "period": 1
+   },
+   "R": {
+    "n_days": 1036,
+    "excluded": 0,
+    "from": "2023-03-01",
+    "to": "2025-12-30",
+    "mean_pct": 0.0553,
+    "lo95": -0.0431,
+    "hi95": 0.1505,
+    "sd_pct": 1.6436,
+    "compound_pct": 54.249,
+    "max_dd_pct": -37.833,
+    "pos_share": 0.508,
+    "worst_pct": -6.5988
+   },
+   "BH": {
+    "n_days": 1036,
+    "excluded": 0,
+    "from": "2023-03-01",
+    "to": "2025-12-30",
+    "mean_pct": 0.055,
+    "lo95": -0.0675,
+    "hi95": 0.1747,
+    "sd_pct": 2.0556,
+    "compound_pct": 42.238,
+    "max_dd_pct": -45.72,
+    "pos_share": 0.509,
+    "worst_pct": -8.3058
+   },
+   "paired": {
+    "n_days": 1036,
+    "excluded": 0,
+    "from": "2023-03-01",
+    "to": "2025-12-30",
+    "mean_pct": 0.0003,
+    "lo95": -0.0356,
+    "hi95": 0.0385,
+    "sd_pct": 0.4597,
+    "compound_pct": -0.829,
+    "max_dd_pct": -12.727,
+    "pos_share": 0.499,
+    "worst_pct": -3.1265
+   },
+   "paired_by_year": {
+    "2023": -4.320415781205103e-05,
+    "2024": -0.01060575656078596,
+    "2025": 0.01141968412275246
+   },
+   "fees_pct_of_start": 1.5427411811021168,
+   "turnover_x": 8.57615713501709,
+   "n_rebalances": 1036,
+   "admitted": false,
+   "checks": {
+    "paired_lo_gt_0": false,
+    "years_agree": false
+   }
+  },
+  "RB_EU_d7": {
+   "config": {
+    "weights": {
+     "ETHUSDT": 0.5,
+     "USDT": 0.5
+    },
+    "period": 7
+   },
+   "R": {
+    "n_days": 1036,
+    "excluded": 0,
+    "from": "2023-03-01",
+    "to": "2025-12-30",
+    "mean_pct": 0.058,
+    "lo95": -0.0425,
+    "hi95": 0.1546,
+    "sd_pct": 1.6488,
+    "compound_pct": 58.5,
+    "max_dd_pct": -38.145,
+    "pos_share": 0.508,
+    "worst_pct": -6.7014
+   },
+   "BH": {
+    "n_days": 1036,
+    "excluded": 0,
+    "from": "2023-03-01",
+    "to": "2025-12-30",
+    "mean_pct": 0.055,
+    "lo95": -0.0675,
+    "hi95": 0.1747,
+    "sd_pct": 2.0556,
+    "compound_pct": 42.238,
+    "max_dd_pct": -45.72,
+    "pos_share": 0.509,
+    "worst_pct": -8.3058
+   },
+   "paired": {
+    "n_days": 1036,
+    "excluded": 0,
+    "from": "2023-03-01",
+    "to": "2025-12-30",
+    "mean_pct": 0.003,
+    "lo95": -0.0315,
+    "hi95": 0.0413,
+    "sd_pct": 0.457,
+    "compound_pct": 2.004,
+    "max_dd_pct": -11.408,
+    "pos_share": 0.495,
+    "worst_pct": -2.9226
+   },
+   "paired_by_year": {
+    "2023": -0.0016218812802351163,
+    "2024": -0.004574185679315088,
+    "2025": 0.014384679442554093
+   },
+   "fees_pct_of_start": 0.715494202481099,
+   "turnover_x": 3.977477615207617,
+   "n_rebalances": 149,
+   "admitted": false,
+   "checks": {
+    "paired_lo_gt_0": false,
+    "years_agree": false
+   }
+  }
+ },
+ "pbo": 0.5714285714285714,
+ "winner": null,
+ "verdict": "STOP: no winner, test not opened",
+ "utc": "2026-10-29T23:00:43.763808+00:00"
+}
