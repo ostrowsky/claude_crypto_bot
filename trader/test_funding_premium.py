@@ -138,5 +138,43 @@ class TestG2(unittest.TestCase):
         self.assertEqual(t[0]["entry_close_ms"], int(T0 + 7 * BAR))
 
 
+class TestG2V2(unittest.TestCase):
+    """Data-quality filters and the zero-latency ceiling (spec entry G2-v2)."""
+
+    def test_entry_lag_zero_enters_on_the_signal_bar(self):
+        import funding_premium as F
+        spot = [100.0] * 20
+        perp = [100.0] * 20
+        perp[5] = 101.0                                  # the premium is gone by bar 6
+        lag1 = F.g2_trades(bars(perp), bars(spot), 1.0, lambda t: 0.004, None, lambda t: 0.0, 0)
+        lag0 = F.g2_trades(bars(perp), bars(spot), 1.0, lambda t: 0.004, None, lambda t: 0.0, 0, entry_lag=0)
+        self.assertEqual(lag0[0]["entry_close_ms"], int(T0 + 6 * BAR))
+        self.assertEqual(lag1[0]["entry_close_ms"], int(T0 + 7 * BAR))
+        self.assertAlmostEqual(lag0[0]["price_pct"], 1.0 / 101.0 * 100, places=6)
+        self.assertAlmostEqual(lag1[0]["price_pct"], 0.0)
+
+    def test_tick_filter(self):
+        import funding_premium as F
+        spot = [100.0] * 20
+        perp = [100.0] * 20
+        perp[5] = 101.0
+        kw = dict(thr_of_bar=lambda t: 0.004, funding=None, cost_of_bar=lambda t: 0.0)
+        self.assertEqual(F.g2_trades(bars(perp), bars(spot), 1.0, spot_tick=0.2, **kw), [])         # 0.2% > 0.4 / 4
+        self.assertEqual(len(F.g2_trades(bars(perp), bars(spot), 1.0, spot_tick=0.05, **kw)), 1)    # 0.05% is fine
+
+    def test_estimate_tick(self):
+        import funding_premium as F
+        self.assertAlmostEqual(F.estimate_tick(np.array([1.20e-6, 1.21e-6, 1.23e-6, 1.21e-6])), 1e-8, places=12)
+        self.assertEqual(F.estimate_tick(np.array([5.0, 5.0])), 0.0)
+
+    def test_pair_ok(self):
+        import funding_premium as F
+        spot = bars([100.0] * 30)
+        self.assertTrue(F.pair_ok(bars([100.1] * 30), spot, 1.0))
+        self.assertFalse(F.pair_ok(bars([101.0] * 30), spot, 1.0))        # a constant +1%: not the same asset
+        self.assertFalse(F.pair_ok(bars([15.0] * 30), spot, 1.0))         # -85%, RAY-like
+        self.assertTrue(F.pair_ok(bars([100.0] * 30), bars([0.1] * 30), 0.001))   # a 1000 contract
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

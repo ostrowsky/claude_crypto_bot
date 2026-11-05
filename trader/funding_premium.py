@@ -7,7 +7,7 @@
              after it falls below a third of it, or after 32 bars; funding over the hold; one position per coin
   thr_of_bar / cost_of_bar take a bar's open time in ms
 
-  (from trader/) ../pyembed/python.exe -u funding_premium.py run
+  (from trader/) ../pyembed/python.exe -u funding_premium.py run | g2v2
 """
 from __future__ import annotations
 
@@ -34,6 +34,7 @@ ALPHA = 0.05 / 3
 G2_HOLD_BARS, G2_MIN_SIGNAL = 32, 0.004
 G2_THR_TOP20, G2_THR_TOP100 = 0.004, 0.008
 G2_LISTING_DAYS = 7
+G2_PAIR_MAX_ABS, G2_TICK_DIV = 0.005, 4
 SPOT_BNB_TAKER = 0.00075
 PERP_TAKER = 0.0005
 PERP_MAKER = 0.0002
@@ -65,7 +66,27 @@ def g1_trade(bars: dict, t_fund: int, rate: float, cost_side: float, prev_rate=N
 
 
 # ------------------------------------------------------------------ G2
-def g2_trades(perp: dict, spot: dict, mult: float, thr_of_bar, funding, cost_of_bar, excluded_until_ms: int = 0) -> list:
+def estimate_tick(closes) -> float:
+    """The smallest positive difference between distinct closes: the price step, as far as the bars show it."""
+    u = np.unique(np.round(np.asarray(closes, dtype=float), 12))
+    d = np.diff(u[np.isfinite(u)])
+    d = d[d > 0]
+    return float(d.min()) if len(d) else 0.0
+
+
+def pair_ok(perp: dict, spot: dict, mult: float, max_abs: float = G2_PAIR_MAX_ABS) -> bool:
+    """A median premium beyond max_abs means the two series are not the same asset (a rename, a redenomination)."""
+    t, ip, iq = np.intersect1d(perp["t"], spot["t"], return_indices=True)
+    if not len(t):
+        return False
+    with np.errstate(divide="ignore", invalid="ignore"):
+        prem = np.asarray(perp["c"], dtype=float)[ip] * float(mult) / np.asarray(spot["c"], dtype=float)[iq] - 1
+    m = np.nanmedian(prem)
+    return bool(np.isfinite(m) and abs(m) <= max_abs)
+
+
+def g2_trades(perp: dict, spot: dict, mult: float, thr_of_bar, funding, cost_of_bar, excluded_until_ms: int = 0,
+              entry_lag: int = 1, spot_tick: float = 0.0) -> list:
     tp, ts = np.asarray(perp["t"], dtype=np.int64), np.asarray(spot["t"], dtype=np.int64)
     t, ip, isp = np.intersect1d(tp, ts, return_indices=True)
     if not len(t):
@@ -83,12 +104,14 @@ def g2_trades(perp: dict, spot: dict, mult: float, thr_of_bar, funding, cost_of_
     while k < len(cands):
         i = int(cands[k])
         k += 1
-        if int(t[i]) < excluded_until_ms or i + 1 >= n:
+        if int(t[i]) < excluded_until_ms or i + entry_lag >= n:
             continue
         thr = thr_of_bar(int(t[i]))
         if thr is None or not prem[i] > thr:
             continue
-        e = i + 1
+        if spot_tick > 0 and spot_tick / cs[i] > thr / G2_TICK_DIV:   # the "premium" would be the spot's rounding
+            continue
+        e = i + entry_lag
         last = e + G2_HOLD_BARS
         x, reason = last, "time"
         below = np.flatnonzero(prem[e + 1:min(last, n)] < thr / 3)
@@ -268,11 +291,110 @@ def run() -> dict:
     return out
 
 
+def run_g2v2() -> dict:
+    """Spec entry G2-v2: data-quality filters, a causal row (lag 1) and a zero-latency ceiling (lag 0)."""
+    import cost_calibration as CC
+    import funding_store as FS
+    import history_store as HS
+    import hype_short as H
+    import provenance as PV
+    PV.require_clean()
+    t0 = time.time()
+    p = H.build_panel("recent", *H.EXPLORE)
+    table = json.loads(CC.OUT.read_text(encoding="utf-8"))["tables"]["live"]
+    slip = {k: (table[k]["buy"]["1000"]["median"] + table[k]["sell"]["1000"]["median"]) / 2 / 1e4 for k in table}
+    rank_cache = {}
+
+    def ranks(i):
+        if i not in rank_cache:
+            turn = np.nansum(p.qvol[max(0, i - H.TURN_DAYS):i], axis=0)
+            order = np.argsort(-turn, kind="stable")
+            r = np.empty(len(order), dtype=np.int64)
+            r[order] = np.arange(1, len(order) + 1)
+            rank_cache[i] = r
+        return rank_cache[i]
+
+    day0 = p.days[0]
+    lo_ms, hi_ms = H._day(H.EXPLORE[0]) * DAY, H._day(H.EXPLORE[1]) * DAY
+    mapping = json.loads(FS.MAPPING.read_text(encoding="utf-8"))
+    rows = {1: [], 0: []}
+    dropped_pairs = []
+    for col, sym in enumerate(p.syms):
+        with np.load(FS.perp_path(sym)) as z:
+            bars = {"t": z["t"].astype(np.int64), "c": z["c"].astype(float)}
+        sp = HS.load(HS.path_of(sym))
+        if sp is None or not len(sp["t"]):
+            continue
+        spot = {"t": np.asarray(sp["t"], dtype=np.int64), "c": np.asarray(sp["c"], dtype=float)}
+        w = (bars["t"] >= lo_ms) & (bars["t"] < hi_ms)
+        ws = (spot["t"] >= lo_ms) & (spot["t"] < hi_ms)
+        if not w.any() or not ws.any():
+            continue
+        win = {"t": bars["t"][w], "c": bars["c"][w]}
+        spot_win = {"t": spot["t"][ws], "c": spot["c"][ws]}
+        m = 1 / float((mapping.get(sym) or {}).get("mult") or 1)
+        if not pair_ok(win, spot_win, m):
+            dropped_pairs.append(sym)
+            continue
+        tick = estimate_tick(spot_win["c"])
+        f = FS.load_funding(FS.funding_path(sym))
+        excl = max(int(bars["t"][0]), int(spot["t"][0])) + G2_LISTING_DAYS * DAY
+
+        def thr_of(tb, col=col):
+            i = tb // DAY - day0
+            if not (0 <= i < len(p.days)):
+                return None
+            r = int(ranks(i)[col])
+            return G2_THR_TOP20 if r <= 20 else (G2_THR_TOP100 if r <= H.TOP_N else None)
+
+        def cost_of(tb, col=col, sym=sym):
+            i = tb // DAY - day0
+            return 2 * (SPOT_BNB_TAKER + PERP_TAKER) + 4 * slip[CC.bucket(sym, int(ranks(i)[col]))]
+
+        for lag in rows:
+            for x in g2_trades(win, spot_win, m, thr_of, f, cost_of, excl, entry_lag=lag, spot_tick=tick):
+                i = min(x["entry_close_ms"] // DAY - day0, len(p.days) - 1)
+                x["bucket"] = CC.bucket(sym, int(ranks(i)[col]))
+                x["sym"] = sym
+                rows[lag].append(x)
+    out = {"spec": SPEC, "stage": "G2-v2, exploration", "window": H.EXPLORE, "alpha": ALPHA, "dropped_pairs": dropped_pairs, "rows": {}}
+    for lag, rr in rows.items():
+        s = _stats(rr)
+        by_sym = {}
+        for x in rr:
+            by_sym[x["sym"]] = by_sym.get(x["sym"], 0) + 1
+        s["top_syms"] = sorted(by_sym.items(), key=lambda v: -v[1])[:8]
+        s["median_prem_entry"] = float(np.median([x["prem_entry"] for x in rr])) if rr else None
+        s["median_price_pct"] = float(np.median([x["price_pct"] for x in rr])) if rr else None
+        reasons = {}
+        for x in rr:
+            reasons[x["reason"]] = reasons.get(x["reason"], 0) + 1
+        s["reasons"] = reasons
+        out["rows"][f"lag{lag}"] = s
+        print(f"G2-v2 lag{lag}: n {s.get('n')} mean {s.get('mean'):+.3f} [{s.get('lo'):+.3f}, {s.get('hi'):+.3f}] median trade "
+              f"{s.get('median'):+.3f} | price {s.get('mean_price_pct'):+.3f} (median {s['median_price_pct']:+.3f}) funding "
+              f"{s.get('mean_funding_pct'):+.3f} cost {s.get('mean_cost_pct'):.3f} | prem {s.get('mean_prem_entry'):+.3f} (median "
+              f"{s['median_prem_entry']:+.3f}) -> {s.get('mean_prem_exit'):+.3f} | bars {s.get('mean_bars'):.1f} | sd {s.get('sd'):.2f} | "
+              f"{json.dumps(s.get('by_bucket'))} | {json.dumps(s.get('by_year'))} | {reasons} | {s['top_syms'][:5]} | "
+              f"{'PASS' if s['passes'] else '-'}", flush=True)
+    a, b = out["rows"]["lag0"], out["rows"]["lag1"]
+    out["decision"] = ("closed: the zero-latency ceiling is <= 0" if a["mean"] <= 0 else
+                       "propose a 1m download with a new pre-registration")
+    out["lag1_passes"], out["lag0_passes"] = b["passes"], a["passes"]
+    print("dropped pairs", dropped_pairs, "|", out["decision"], flush=True)
+    out["provenance"] = PV.block()
+    out["minutes"] = round((time.time() - t0) / 60, 1)
+    (TC.RUNTIME / "experiments" / "G2_V2.json").write_text(json.dumps(out, ensure_ascii=False, indent=1, default=str), encoding="utf-8")
+    return out
+
+
 def main(argv=None) -> int:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     argv = sys.argv[1:] if argv is None else argv
     if argv[:1] == ["run"]:
         run()
+    elif argv[:1] == ["g2v2"]:
+        run_g2v2()
     else:
         print(__doc__)
     return 0
