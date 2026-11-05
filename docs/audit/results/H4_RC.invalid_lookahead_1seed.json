@@ -1,0 +1,79 @@
+{
+ "spec": "bot-beta-h4-1105-spec.md",
+ "entry": "2026-11-05 control RC",
+ "seeds": 1,
+ "windows": {
+  "main": {
+   "window": [
+    "2026-03-01",
+    "2026-07-01"
+   ],
+   "actual_R": -0.4167,
+   "actual_trades": 926,
+   "actual_gross_per_trade": -0.1856,
+   "rand_R": [
+    0.6617
+   ],
+   "rand_gross_per_trade": [
+    1.1968
+   ],
+   "rand_trades": [
+    995
+   ],
+   "rand_p5": 0.6617,
+   "rand_p50": 0.6617,
+   "rand_p95": 0.6617,
+   "actual_rank": 0,
+   "reading": "anti-skill: the bot's entry timing is worse than a random bar of the same coin and day"
+  },
+  "h3_test": {
+   "window": [
+    "2026-07-01",
+    "2026-10-11"
+   ],
+   "actual_R": -0.1569,
+   "actual_trades": 869,
+   "actual_gross_per_trade": 0.1963,
+   "rand_R": [
+    0.8199
+   ],
+   "rand_gross_per_trade": [
+    1.3108
+   ],
+   "rand_trades": [
+    903
+   ],
+   "rand_p5": 0.8199,
+   "rand_p50": 0.8199,
+   "rand_p95": 0.8199,
+   "actual_rank": 0,
+   "reading": "anti-skill: the bot's entry timing is worse than a random bar of the same coin and day"
+  }
+ },
+ "provenance": {
+  "code": {
+   "head": "48caeb01026ae42d3a16f56516590e6969be28f2",
+   "dirty": true,
+   "bot": {
+    "files": {
+     "files/config.py": "07d7b02153a89b3b",
+     "files/exit_validator.py": "0979bfc8008e9043",
+     "files/_backtest_trend_start_detector.py": "5b56efa89f8e3a8c",
+     "files/_compute_early_capture.py": "f21dd6307c55e8d6",
+     ".runtime/release/runtime_overrides.json": "6f78825c315421e6",
+     "files/watchlist.json": "061e69c119e4cea1"
+    },
+    "dirty": true
+   }
+  },
+  "utc": "2026-11-05T15:39:54.127208+00:00",
+  "events": {
+   "sha": "7366a6948ef5f7ec",
+   "n": 517114,
+   "until": "2026-11-05T03:45"
+  },
+  "grid": "21dec80cf41719cd",
+  "grid_last_bar": "2026-11-05 03:45:00+00:00"
+ },
+ "minutes": 2.3
+}

@@ -858,7 +858,7 @@ LA (2026-10-28) — exchange announcements as information that comes before the 
   - Do not re-test longs on these announcement types (`docs/specs/features/listing-announcements-la-1028-spec.md` §8).
 Phase C (2026-10-13): `trader/executor.py` executes the E7 book X4 at `TRADING_SCALE` 0.02 with a
 catastrophe stop 3% below the policy stop on the exchange; task `CryptoBot_TraderExecutor` (every 5 min,
-IgnoreNew) keeps it running. **C2 ON since 2026-10-20** (`TRADING_ENABLED = True`, `TRADING_MODE = "demo"`, operator): real orders on the DEMO account only; gate C after 7 days (>= 10-27). **PAUSE 2026-10-29..11-03** (operator); **X4 entries resumed 2026-11-03 12:00 UTC** (operator). A kill switch had also tripped on 10-30 09:26: the long-running executor was still on pre-fix code (b72810d) when FC-DEMO bought its spot legs. **After any executor code change, restart the executor process.** Rollback: `TRADING_ENABLED = False`. Control by files in
+IgnoreNew) keeps it running. **C2 ON since 2026-10-20** (`TRADING_ENABLED = True`, `TRADING_MODE = "demo"`, operator): real orders on the DEMO account only; gate C after 7 days (>= 10-27). **PAUSE 2026-10-29..11-03** (operator); **X4 entries resumed 2026-11-03 12:00 UTC** (operator). **X4 entries PAUSED again 2026-11-05 15:25 UTC** after H4 (no edge in the bot's entries); exits are still managed. A kill switch had also tripped on 10-30 09:26: the long-running executor was still on pre-fix code (b72810d) when FC-DEMO bought its spot legs. **After any executor code change, restart the executor process.** Rollback: `TRADING_ENABLED = False`. Control by files in
 `trader/runtime/executor/control/` (PAUSE, FLATTEN, RESET_NOTED). C0 smoke and C2 demo need the operator
 (`docs/specs/features/demo-execution-c-1013-spec.md`).
 
@@ -991,14 +991,17 @@ only; the 2026 window was not opened for any of them:
   - Every held-out look is listed in `docs/audit/alpha_ledger.json`. There are 17; only FC_PASSIVE survives 0.05/17.
   The H3 test half rerun (-0.157 vs -0.2485 %/day recorded) is only partly explained by the grid edge, and the rest
   is unknown.
-- **H4, beta of the X4 book (2026-11-05, diagnostic, `bot-beta-h4-1105-spec.md`): the loss is NOT market beta.**
-  - Model: R_d = a + b_alt * ALT + b_btc * BTC (91-coin equal-weight alt index).
-  - Main window Mar–Jun: a = −0.32 %/day [−0.59, −0.02], b_alt +0.95, exposure 0.71. This is the pre-registered
-    reading "anti-skill".
-  - Jul–Oct: a −0.55 [−0.92, −0.28] while alts rose +0.50 %/day. E7: −0.87.
-  - a is net of ~0.3 %/day costs. Gross it is ≈ 0 on Mar–Jun and negative after.
-  - A beta hedge leaves the book at −0.56 / −0.96.
-  - Spec §3 says close "trade the bot's signals". Stopping the demo X4 executor is the operator's call.
+- **H4, the X4 book on the bot's entries (2026-11-05, `bot-beta-h4-1105-spec.md`): NO SKILL, and the loss is not beta.**
+  - Beta regression: R_d = a + b_alt * ALT + b_btc * BTC, Mar–Jun: a = −0.32 %/day [−0.59, −0.02], b_alt +0.95.
+    a is net of ~0.3 %/day costs against a cost-free index, so it cannot tell no skill from anti-skill. The first
+    "anti-skill" wording was withdrawn after the second review.
+  - Control RC3, pre-registered (same coin and time of day, entry 1–7 days after the signal, 50 seeds), main window
+    Mar–Jun: the bot ranks 40 of 50, gross per trade −0.186 vs −0.186. Verdict: no skill.
+  - Two earlier controls looked ahead and were withdrawn: RC (same day) and RC2 (±7 days).
+  - Reference Jul–Oct, a window used many times: the bot ranks 1 of 50 (gross +0.20 vs +0.49 entering later). This
+    is an observation only.
+  - Close "trade the bot's signals": the entries have no edge to pay their costs. X4 demo entries are PAUSED since
+    2026-11-05 15:25 UTC (`runtime/executor/control/PAUSE`); exits are still managed.
 - **H1 step 0, shorting after perp-listing announcements (2026-11-05, `la-short-feasibility-1105-spec.md`): all three types OUT.**
   No returns were computed: the test only asks whether a Binance USD-M perp was trading at t_pub. The pre-registered
   bound is 30% of events unshortable.

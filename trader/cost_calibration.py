@@ -227,7 +227,7 @@ def run() -> dict:
            "tables": tab, "drift": {**dr, "excluded": excl, "used_bps": drift_used},
            "cost_1000": cost1000,
            "fc_b1_5000": {"buy": live.get("B1", {}).get("buy", {}).get(5000), "sell": live.get("B1", {}).get("sell", {}).get(5000)},
-           "cap_top100_delta_pp": cap_delta, "cap_top100_pairs": len(top100)}
+           "cap_top100_delta_pp": cap_delta, "cap_top100_pairs": len(top100), "ranks": ranks}
     print(json.dumps({k: out[k] for k in ("snapshots", "pairs_ranked", "drift", "cost_1000", "cap_top100_delta_pp")},
                      default=str), flush=True)
     import provenance as PV
@@ -241,11 +241,24 @@ def run() -> dict:
     return out
 
 
+def patch_ranks(path=OUT, data_dir: Path = DATA, window=WINDOW) -> dict:
+    """Add the volume ranks (the buckets' basis) to an existing COST_CAL.json without re-running the replay."""
+    _, vol, _, _ = collect(data_dir, window)
+    med = {s: float(np.median(v)) for s, v in vol.items() if v}
+    ranks = {s: i + 1 for i, (s, _) in enumerate(sorted(med.items(), key=lambda x: -x[1]))}
+    d = json.loads(Path(path).read_text(encoding="utf-8"))
+    d["ranks"] = ranks
+    Path(path).write_text(json.dumps(d, ensure_ascii=False, indent=1, default=str), encoding="utf-8")
+    return ranks
+
+
 def main(argv=None) -> int:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     argv = sys.argv[1:] if argv is None else argv
     if argv[:1] == ["run"]:
         run()
+    elif argv[:1] == ["ranks"]:
+        print(len(patch_ranks()), "ranks written")
     else:
         print(__doc__)
     return 0

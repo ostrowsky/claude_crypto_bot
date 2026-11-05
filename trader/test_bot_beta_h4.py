@@ -80,5 +80,63 @@ class TestHedgeAndExposure(unittest.TestCase):
         self.assertAlmostEqual(e, 0.05)              # half a day at 10% on each of two days
 
 
+class TestShiftDays(unittest.TestCase):
+    """Control RC2 (spec entry of 2026-11-05): the same coin and time of day, a random day within +-7 days.
+    (RC, a random bar of the same day, was withdrawn: it looked ahead.)"""
+
+    def grid(self):
+        return TER.FakeGrid(np.arange(1, 96 * 30 + 1, dtype=float))
+
+    def test_shift_is_whole_days_within_a_week(self):
+        import bot_beta as BB
+        g = self.grid()
+        c15 = TER.cand(96 * 15 + 40, float(96 * 15 + 41))
+        c1h = TER.cand(96 * 16 + 51, float(96 * 16 + 52), tf="1h")
+        out = BB.shift_days([c15, c1h], g, seed=3)
+        self.assertEqual(len(out), 2)
+        self.assertEqual([c["ts"] for c in out], sorted(c["ts"] for c in out))
+        for orig in (c15, c1h):
+            new = [c for c in out if c["tf"] == orig["tf"]][0]
+            d = new["ie"] - orig["ie"]
+            self.assertEqual(d % 96, 0)
+            self.assertTrue(1 <= abs(d) // 96 <= 7)
+            self.assertEqual(new["sym"], orig["sym"])
+            self.assertEqual(new["price"], g.C[new["ie"], 0])
+        self.assertEqual((out[[c["tf"] for c in out].index("1h")]["ie"] + 1) % 4, 0)
+
+    def test_seeded_and_consistent_with_attach_grid(self):
+        import bot_beta as BB
+        import execution_replay as R
+        g = self.grid()
+        cs = [TER.cand(96 * 10 + 7, 1.0), TER.cand(96 * 20 + 70, 1.0)]
+        a, b = BB.shift_days(cs, g, seed=11), BB.shift_days(cs, g, seed=11)
+        self.assertEqual([c["ie"] for c in a], [c["ie"] for c in b])
+        c = dict(a[0])
+        R.attach_grid([c], g)
+        self.assertEqual(c["ie"], a[0]["ie"])
+
+    def test_edges_pick_another_shift(self):
+        import bot_beta as BB
+        g = self.grid()
+        near_end = TER.cand(96 * 29 + 5, 1.0)                 # only negative shifts fit
+        for sd in range(20):
+            out = BB.shift_days([near_end], g, seed=sd)
+            self.assertLess(out[0]["ie"], near_end["ie"])
+
+
+class TestForwardOnly(unittest.TestCase):
+    """Control RC3: shifts after the signal only (k in 1..7)."""
+
+    def test_forward_only(self):
+        import bot_beta as BB
+        g = TER.FakeGrid(np.arange(1, 96 * 30 + 1, dtype=float))
+        cs = [TER.cand(96 * d + 33, 1.0) for d in (3, 9, 15)]
+        for sd in range(25):
+            out = BB.shift_days(cs, g, seed=sd, forward_only=True)
+            for orig, new in zip(cs, out):
+                k = (new["ie"] - orig["ie"]) // 96
+                self.assertTrue(1 <= k <= 7, k)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

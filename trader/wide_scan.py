@@ -756,6 +756,18 @@ def report(day: str | None = None, root: Path = ROOT) -> dict:
             if (Path(root) / "bars").exists() else 0.0}
 
 
+def adjusted_paired(days, wide: dict, e7: dict, wide_dir: Path, e7_dir: Path, cost_cal=None) -> dict:
+    """x4_wide - x4_floor8 on per-bucket mainnet costs (wide-scan-shadow-w1-1028-spec.md, entry of 2026-11-05)."""
+    import cost_adjust as CA
+    import daily_revenue as DR
+    table, ranks = CA.load(cost_cal) if cost_cal else CA.load()
+    wa = dict(CA.adjusted_series(sorted(wide.items()), CA.book_exits(Path(wide_dir) / "ledger.jsonl", "x4_wide"),
+                                 CA.day_start_equity(Path(wide_dir) / "state.json", "x4_wide"), table, ranks))
+    ea = dict(CA.adjusted_series(sorted(e7.items()), CA.book_exits(Path(e7_dir) / "ledger.jsonl", "x4_floor8"),
+                                 CA.day_start_equity(Path(e7_dir) / "state.json", "x4_floor8"), table, ranks))
+    return DR.paired([(d, wa[d]) for d in days], [(d, ea[d]) for d in days])
+
+
 def readout(root: Path = ROOT, today: str | None = None) -> dict:
     import daily_revenue as DR
     today = today or datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -771,7 +783,18 @@ def readout(root: Path = ROOT, today: str | None = None) -> dict:
     if today < READOUT_NOT_BEFORE or len(days) < READOUT_MIN_DAYS:
         out["verdict"] = "COLLECTING"
     else:
-        pr = DR.paired([(d, wide[d]) for d in days], [(d, e7[d]) for d in days])
+        flat = DR.paired([(d, wide[d]) for d in days], [(d, e7[d]) for d in days])
+        out["paired_flat_8bp"] = flat
+        try:                                        # spec entry of 2026-11-05: the decision uses per-bucket costs
+            pr = adjusted_paired(days, wide, e7, Path(root) / "shadow", TC.RUNTIME / "shadow")
+            out["cost_model"] = "per-bucket mainnet costs (COST_CAL.json)"
+        except Exception as e:                      # noqa: BLE001 -- never decide on the flat model silently
+            out["paired"], out["verdict"] = None, "ANOMALY_COST_ADJUSTMENT"
+            out["cost_model"] = f"cost adjustment failed: {e!r}"
+            (Path(root)).mkdir(parents=True, exist_ok=True)
+            (Path(root) / "READOUT_W1.json").write_text(json.dumps(out, ensure_ascii=False, indent=1, default=str),
+                                                        encoding="utf-8")
+            return out
         out["paired"] = pr
         out["verdict"] = ("FOR_OPERATOR_BUILD_B4" if pr["lo95"] > 0 else
                           "B3_CONFIRMED_LIVE" if pr["hi95"] < 0 else "INCONCLUSIVE")

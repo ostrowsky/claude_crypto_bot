@@ -5,7 +5,11 @@
   windows   main 2026-03-01..06-30; reference 07-01..10-10 (H3 test half, already used) and 10-13..11-05 (E7)
   hedged    reference only: R - b_alt(main) * ALT - b_btc(main) * BTC on the reference windows, hedge costs not counted
 
-  (from trader/) ../pyembed/python.exe -u bot_beta.py run
+  rc        control RC2: 50 books with each entry moved to the same time of a random day within +-7 days
+
+  rc3       control RC3: the same with forward shifts only (+1..+7 days after the signal)
+
+  (from trader/) ../pyembed/python.exe -u bot_beta.py run | rc [seeds] | rc3 [seeds]
 """
 from __future__ import annotations
 
@@ -98,6 +102,32 @@ def exposure(trades, series, start_equity: float) -> float:
     return float(np.mean([held[d] / e_day[d] for d in days])) if days else 0.0
 
 
+def shift_days(cands, grid, seed: int, max_days: int = 7, forward_only: bool = False) -> list:
+    """Control RC2 (spec entry of 2026-11-05): each candidate keeps its coin, time of day, tf, mode and trail_k; its
+    day moves by k in {-max_days..-1, 1..max_days}, drawn uniformly, so the choice of day knows nothing of the coin's
+    future. Shifts off the grid, below bar 100 or onto a NaN close are skipped for another k. Price = the new close.
+    (RC -- a random bar of the same day -- was withdrawn: the day itself was chosen by the bot's later signal.)"""
+    rnd = random.Random(seed)
+    step = timedelta(minutes=15)
+    ks = [k for k in range(-max_days, max_days + 1) if k and (k > 0 or not forward_only)]   # RC3: k >= 1
+    out = []
+    for c in cands:
+        j, ie = c.get("j"), c.get("ie")
+        if j is None or ie is None:
+            continue
+        order = ks[:]
+        rnd.shuffle(order)
+        for k in order:
+            q = ie + k * BARS_PER_DAY
+            if 100 <= q < grid.N and np.isfinite(grid.C[q, j]):
+                out.append(dict(c, ie=q, price=float(grid.C[q, j]),
+                                ts=grid.t0 + (q + 1) * step + timedelta(minutes=1), ix=None, exit_ts=None,
+                                exit_price=None))
+                break
+    out.sort(key=lambda c: c["ts"])
+    return out
+
+
 def _fit(series, factors) -> dict:
     rows = [(r, factors[d][0], factors[d][1]) for d, r in series if d in factors]
     y = [r[0] for r in rows]
@@ -165,11 +195,70 @@ def run() -> dict:
     return out
 
 
+RC_OUT = TC.RUNTIME / "experiments" / "H4_RC2.json"
+RC3_OUT = TC.RUNTIME / "experiments" / "H4_RC3.json"
+RC_SEEDS = 50
+
+
+def rc_reading(actual: float, rand: list) -> str:
+    p5, p95 = float(np.percentile(rand, 5)), float(np.percentile(rand, 95))
+    if actual < p5:
+        return "anti-skill: the bot's entries are worse than the same coin at the same time on a random nearby day"
+    if actual > p95:
+        return "skill: better than the same coin on a random nearby day (the book may still lose)"
+    return "no skill: the bot's choice of day and moment adds nothing over a random nearby day"
+
+
+def run_rc(seeds: int = RC_SEEDS, forward_only: bool = False) -> dict:
+    import execution_replay as ER
+    import fill_model as FM
+    import provenance as PV
+    import _audit_k1_replay_windows as K
+    t0 = time.time()
+    trades, _ = ER.load_events()
+    grid = ER._grid()
+    ER.attach_grid(trades, grid)
+    pol, fm, floor = K.x4_policy(), FM.model("taker", 1), ER._floor()
+    out = {"spec": SPEC, "entry": ("2026-11-05 control RC3 (random day +1..+7 after the signal)" if forward_only else
+                                   "2026-11-05 control RC2 (random day +-7, same coin and time of day)"),
+           "seeds": seeds, "forward_only": forward_only, "windows": {},
+           "provenance": PV.block(events=PV.events_digest(ER.EVENTS, grid.last_bar.strftime("%Y-%m-%dT%H:%M")),
+                                  grid=PV.grid_digest(grid, 0, grid.N), grid_last_bar=str(grid.last_bar))}
+    for name, lo, hi in (MAIN, REFERENCE[0]):
+        base = ER.run(pol, fm, grid, trades, floor_of=floor, day_from=lo, day_to=hi)
+        bd = ER.decompose(base["trades"])
+        rand, rand_gross, rand_n = [], [], []
+        for sd in range(seeds):
+            rc = shift_days(trades, grid, sd, forward_only=forward_only)
+            r = ER.run(pol, fm, grid, rc, floor_of=floor, day_from=lo, day_to=hi)
+            dc = ER.decompose(r["trades"])
+            rand.append(r["agg"]["mean_pct"])
+            rand_gross.append(dc.get("gross_mean_pct"))
+            rand_n.append(dc.get("n"))
+            print(f"  {name} seed {sd}: R {r['agg']['mean_pct']} trades {dc.get('n')} gross {dc.get('gross_mean_pct')} "
+                  f"| {(time.time() - t0) / 60:.1f} min", flush=True)
+        w = {"window": [lo, hi], "actual_R": base["agg"]["mean_pct"], "actual_trades": bd.get("n"),
+             "actual_gross_per_trade": bd.get("gross_mean_pct"), "rand_R": rand, "rand_gross_per_trade": rand_gross,
+             "rand_trades": rand_n, "rand_p5": float(np.percentile(rand, 5)), "rand_p50": float(np.median(rand)),
+             "rand_p95": float(np.percentile(rand, 95)),
+             "actual_rank": int(sum(1 for x in rand if x < base["agg"]["mean_pct"])),
+             "reading": rc_reading(base["agg"]["mean_pct"], rand)}
+        out["windows"][name] = w
+        print(f"{name}: actual R {w['actual_R']} vs random p5/p50/p95 {w['rand_p5']:.3f}/{w['rand_p50']:.3f}/"
+              f"{w['rand_p95']:.3f}, rank {w['actual_rank']} of {seeds} -> {w['reading']}", flush=True)
+    out["minutes"] = round((time.time() - t0) / 60, 1)
+    (RC3_OUT if forward_only else RC_OUT).write_text(json.dumps(out, ensure_ascii=False, indent=1, default=str),
+                                                   encoding="utf-8")
+    return out
+
+
 def main(argv=None) -> int:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     argv = sys.argv[1:] if argv is None else argv
     if argv[:1] == ["run"]:
         run()
+    elif argv[:1] in (["rc"], ["rc3"]):
+        run_rc(int(argv[1]) if len(argv) > 1 else RC_SEEDS, forward_only=argv[0] == "rc3")
     else:
         print(__doc__)
     return 0
