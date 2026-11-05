@@ -334,12 +334,55 @@ def run_test(train_path=TRAIN_OUT, out_path=TEST_OUT, marker=TEST_MARKER, n_rand
     return res
 
 
+# ------------------------------------------------------------------ CI vs block length (entry of 2026-11-05)
+BLOCK_WINDOWS = {"train": (TRAIN_FROM, TEST_FROM, 0.05), "test": (TEST_FROM, "2026-10-22", 0.05),
+                 "bh19": ("2020-02-01", "2023-01-01", 0.01)}
+BLOCK_OUT = TC.RUNTIME / "experiments" / "FC_BLOCKS.json"
+
+
+def block_sensitivity(series, alpha: float, blocks=(5, 20, 60)) -> dict:
+    """The decision's own alpha, block bootstrap at 5 / 20 / 60 days: is lo > 0 robust to persistent regimes?
+    A measurement on windows already opened for FC_PASSIVE, not a new look."""
+    import daily_revenue as DR
+    out = {}
+    for b in blocks:
+        a = DR.aggregate(series, alpha=alpha, block=b)
+        out[b] = {"mean": a.get("mean_pct"), "lo": a.get("lo95"), "hi": a.get("hi95"), "ci_level": a.get("ci_level"),
+                  "ci_method": a.get("ci_method"), "lo_gt_0": bool(a.get("lo95") is not None and a["lo95"] > 0)}
+    return out
+
+
+def run_blocks() -> dict:
+    import archive_bh as A
+    import provenance as PV
+    fm = C.fees(1)
+    res = {"spec": SPEC, "entry": "2026-11-05 block sensitivity", "windows": {}}
+    markets = {"train": load_market, "test": load_market, "bh19": A.load_market}
+    cache = {}
+    for name, (lo, hi, alpha) in BLOCK_WINDOWS.items():
+        key = markets[name]
+        if key not in cache:
+            cache[key] = key()
+        e = evaluate(cache[key], passive_config(), fm, lo, hi, 0, alpha=alpha)
+        res["windows"][name] = {"window": [lo, hi], "alpha": alpha, "n_days": e["agg"].get("n_days"),
+                                "liquidations": e["liquidations"], "blocks": block_sensitivity(e["_series"], alpha)}
+        print(name, json.dumps(res["windows"][name], default=str), flush=True)
+    res["robust"] = all(v["lo_gt_0"] for w in res["windows"].values() for v in w["blocks"].values())
+    res["provenance"] = PV.block()
+    BLOCK_OUT.write_text(json.dumps(res, ensure_ascii=False, indent=1, default=str), encoding="utf-8")
+    print("robust to block length:", res["robust"])
+    return res
+
+
 def main(argv=None) -> int:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     argv = sys.argv[1:] if argv is None else argv
     cmd = argv[0] if argv else ""
     if cmd == "panel":
         print(json.dumps(build_market(), indent=1, default=str))
+        return 0
+    if cmd == "blocks":
+        run_blocks()
         return 0
     if cmd == "train":
         r = run_train()

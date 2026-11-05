@@ -928,6 +928,9 @@ only; the 2026 window was not opened for any of them:
   418 spot pairs downloaded, stablecoins and fiat excluded as in the live universe.
   - **FC_PASSIVE CONFIRMED** on 2020-02..2022-12: +0.0247 %/day, 99% CI [+0.0187, +0.0318] (the [+0.0196, +0.0303] quoted until 11-05 was the 95% interval), 0 liquidations, max DD −0.36 %.
     It is now positive on three separate periods, but shrinking: 2022 +0.002, 2026 +0.0024.
+    **Not robust to the block length (2026-11-05):** on the 2026 test the 95% CI is [+0.0008, +0.0043] at 20-day
+    blocks and [−0.0001, +0.0048] at 60-day blocks (only ~5 blocks). Train and BH19 stay > 0 at any block. The
+    acceptance is not revoked automatically; that is the operator's call (`FC_BLOCKS.json`).
   - **DIR_1d, TM, N8, RV NOT confirmed. Their verdict is final: REJECTED, do not re-test.** Each has R > 0 in the
     2019–2021 market, none beats its benchmark:
     - TM vs constant exposure: +0.071 [−0.053, +0.181];

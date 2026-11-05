@@ -49,6 +49,17 @@ class TestProvenance(unittest.TestCase):
         self.assertNotEqual(PV.grid_digest(g, 0, 40), a)
 
 
+class TestBotState(unittest.TestCase):
+    def test_bot_state_covers_config_overrides_and_imports(self):
+        import provenance as PV
+        b = PV.bot_state()
+        for k in ("files/config.py", "files/exit_validator.py", "files/_backtest_trend_start_detector.py",
+                  "files/_compute_early_capture.py", ".runtime/release/runtime_overrides.json", "files/watchlist.json"):
+            self.assertIn(k, b["files"])
+        self.assertIn("dirty", b)
+        self.assertIn("bot", PV.block()["code"])
+
+
 class TestCensored(unittest.TestCase):
     def test_edge_cut_trade_is_flagged(self):
         import execution_replay as R
@@ -137,7 +148,7 @@ class TestCapBook(unittest.TestCase):
 class TestAlphaLedger(unittest.TestCase):
     def test_every_opened_marker_is_in_the_ledger(self):
         exp = ROOT / "trader" / "runtime" / "experiments"
-        markers = sorted(p.name for p in exp.glob("*_OPENED.json")) if exp.exists() else []
+        markers = sorted(p.name for p in exp.glob("*_OPENED*")) if exp.exists() else []      # CAP_2026_OPENED has no .json
         if not markers:
             self.skipTest("no runtime markers in this checkout")
         ledger = json.loads((ROOT / "docs" / "audit" / "alpha_ledger.json").read_text(encoding="utf-8"))

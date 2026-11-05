@@ -1,0 +1,130 @@
+{
+ "spec": "carry-funding-money-1021-spec.md",
+ "entry": "2026-11-05 block sensitivity",
+ "windows": {
+  "train": {
+   "window": [
+    "2023-03-01",
+    "2026-01-01"
+   ],
+   "alpha": 0.05,
+   "n_days": 1037,
+   "liquidations": 0,
+   "blocks": {
+    "5": {
+     "mean": 0.0111,
+     "lo": 0.0095,
+     "hi": 0.0131,
+     "ci_level": 0.95,
+     "ci_method": "block_bootstrap_percentile",
+     "lo_gt_0": true
+    },
+    "20": {
+     "mean": 0.0111,
+     "lo": 0.0087,
+     "hi": 0.0143,
+     "ci_level": 0.95,
+     "ci_method": "block_bootstrap_percentile",
+     "lo_gt_0": true
+    },
+    "60": {
+     "mean": 0.0111,
+     "lo": 0.0082,
+     "hi": 0.0154,
+     "ci_level": 0.95,
+     "ci_method": "block_bootstrap_percentile",
+     "lo_gt_0": true
+    }
+   }
+  },
+  "test": {
+   "window": [
+    "2026-01-01",
+    "2026-10-22"
+   ],
+   "alpha": 0.05,
+   "n_days": 294,
+   "liquidations": 0,
+   "blocks": {
+    "5": {
+     "mean": 0.0024,
+     "lo": 0.0015,
+     "hi": 0.0038,
+     "ci_level": 0.95,
+     "ci_method": "block_bootstrap_percentile",
+     "lo_gt_0": true
+    },
+    "20": {
+     "mean": 0.0024,
+     "lo": 0.0008,
+     "hi": 0.0043,
+     "ci_level": 0.95,
+     "ci_method": "block_bootstrap_percentile",
+     "lo_gt_0": true
+    },
+    "60": {
+     "mean": 0.0024,
+     "lo": -0.0001,
+     "hi": 0.0048,
+     "ci_level": 0.95,
+     "ci_method": "block_bootstrap_percentile",
+     "lo_gt_0": false
+    }
+   }
+  },
+  "bh19": {
+   "window": [
+    "2020-02-01",
+    "2023-01-01"
+   ],
+   "alpha": 0.01,
+   "n_days": 1065,
+   "liquidations": 0,
+   "blocks": {
+    "5": {
+     "mean": 0.0247,
+     "lo": 0.0177,
+     "hi": 0.0318,
+     "ci_level": 0.99,
+     "ci_method": "normal_block_se",
+     "lo_gt_0": true
+    },
+    "20": {
+     "mean": 0.0247,
+     "lo": 0.0128,
+     "hi": 0.0366,
+     "ci_level": 0.99,
+     "ci_method": "normal_block_se",
+     "lo_gt_0": true
+    },
+    "60": {
+     "mean": 0.0247,
+     "lo": 0.0071,
+     "hi": 0.0424,
+     "ci_level": 0.99,
+     "ci_method": "normal_block_se",
+     "lo_gt_0": true
+    }
+   }
+  }
+ },
+ "robust": false,
+ "provenance": {
+  "code": {
+   "head": "0618c4454748318262442a95c996cb1a3d4a37bc",
+   "dirty": true,
+   "bot": {
+    "files": {
+     "files/config.py": "07d7b02153a89b3b",
+     "files/exit_validator.py": "0979bfc8008e9043",
+     "files/_backtest_trend_start_detector.py": "5b56efa89f8e3a8c",
+     "files/_compute_early_capture.py": "f21dd6307c55e8d6",
+     ".runtime/release/runtime_overrides.json": "6f78825c315421e6",
+     "files/watchlist.json": "061e69c119e4cea1"
+    },
+    "dirty": true
+   }
+  },
+  "utc": "2026-11-05T15:32:21.248396+00:00"
+ }
+}

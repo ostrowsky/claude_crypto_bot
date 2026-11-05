@@ -1,6 +1,9 @@
 """Where a result came from (protocol-fixes-1105-spec.md P1): code state and fingerprints of the inputs.
 
-  code_state     git HEAD and whether trader/ has uncommitted changes
+  code_state     git HEAD and whether trader/ has uncommitted changes, plus bot_state
+  bot_state      digests of the signal bot's files the replay imports or reads (config, overrides, exit_validator,
+                 grid builders, watchlist) and whether files/ has uncommitted changes -- the trader reads them although
+                 its brief says events, candles and .env only (a known deviation since E1)
   file_digest    sha256 of a file (first 16 hex)
   events_digest  sha256 + count of bot_events lines with ts < until: the file keeps growing, the past does not
   grid_digest    sha256 of the C/H/L/O arrays of a 15m grid on bars [i0, i1)
@@ -17,15 +20,26 @@ from pathlib import Path
 import numpy as np
 
 HERE = Path(__file__).resolve().parent
+ROOT = HERE.parent
+BOT_FILES = ("files/config.py", "files/exit_validator.py", "files/_backtest_trend_start_detector.py",
+             "files/_compute_early_capture.py", ".runtime/release/runtime_overrides.json", "files/watchlist.json")
+
+
+def _git(*a, cwd=HERE):
+    try:
+        return subprocess.run(["git", *a], cwd=cwd, capture_output=True, text=True, timeout=30).stdout.strip()
+    except Exception:                                       # noqa: BLE001
+        return None
+
+
+def bot_state() -> dict:
+    return {"files": {f: file_digest(ROOT / f) for f in BOT_FILES},
+            "dirty": bool(_git("status", "--porcelain", "--", "files", cwd=ROOT))}
 
 
 def code_state() -> dict:
-    def git(*a):
-        try:
-            return subprocess.run(["git", *a], cwd=HERE, capture_output=True, text=True, timeout=30).stdout.strip()
-        except Exception:                                   # noqa: BLE001
-            return None
-    return {"head": git("rev-parse", "HEAD"), "dirty": bool(git("status", "--porcelain", "--", "."))}
+    return {"head": _git("rev-parse", "HEAD"), "dirty": bool(_git("status", "--porcelain", "--", ".")),
+            "bot": bot_state()}
 
 
 def file_digest(path) -> str | None:
