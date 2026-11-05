@@ -196,7 +196,8 @@ def x4_sensitivity(bucket_cost, ranks, drift_bps: float) -> dict:
                      "net_per_trade_new": (dc.get("net_mean_pct") or 0) - (float(np.mean(d)) if d else 0),
                      "R": r["agg"].get("mean_pct"),
                      "R_shift_approx": -sum(d) * SLOT_SHARE / nd,
-                     "not_ranked": sum(1 for t in r["trades"] if t["sym"] not in ranks)}
+                     "not_ranked": sum(1 for t in r["trades"] if t["sym"] not in ranks),
+                     "n_censored": r.get("n_censored")}
     return res
 
 
@@ -229,6 +230,9 @@ def run() -> dict:
            "cap_top100_delta_pp": cap_delta, "cap_top100_pairs": len(top100)}
     print(json.dumps({k: out[k] for k in ("snapshots", "pairs_ranked", "drift", "cost_1000", "cap_top100_delta_pp")},
                      default=str), flush=True)
+    import provenance as PV
+    out["provenance"] = PV.block(data_files={f.name: PV.file_digest(f) for f in sorted(DATA.glob("2*.jsonl"))
+                                             if WINDOW[0] <= f.stem <= WINDOW[1]})
     out["x4"] = x4_sensitivity(cost1000, ranks, drift_used)
     out["minutes"] = round((time.time() - t0) / 60, 1)
     out["utc"] = datetime.now(timezone.utc).isoformat()

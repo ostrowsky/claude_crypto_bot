@@ -12,12 +12,15 @@ import json
 import math
 import random
 import sys
+from statistics import NormalDist
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 BLOCK = 5
 BOOT = 2000
 MIN_DAYS_DIRECTION = 2 * BLOCK     # fewer days: the block bootstrap degenerates (1 day -> CI [x, x])
+MIN_TAIL_DRAWS = 20                # fewer bootstrap draws beyond a bound: normal bound with the block-bootstrap SE
+                                   # (protocol-fixes-1105-spec.md P3)
 
 
 def _block_boot_means(x: list, rnd: random.Random, block: int = BLOCK, boot: int = BOOT) -> list:
@@ -41,33 +44,49 @@ def _block_boot_means(x: list, rnd: random.Random, block: int = BLOCK, boot: int
     return out
 
 
-def aggregate(series, seed: int = 29, excluded: int = 0, alpha: float = 0.05) -> dict:
-    """lo95/hi95 hold the (1 - alpha) interval; alpha = 0.05/k for a Bonferroni-corrected family."""
+def _interval(x: list, m: float, alpha: float, seed: int, block: int):
+    """(lo, hi, method) at 1 - alpha. Percentile of the block bootstrap while >= MIN_TAIL_DRAWS draws lie beyond
+    each bound; otherwise mean -/+ z * SE of the bootstrap means (protocol-fixes-1105-spec.md P3, P7)."""
+    if len(x) < MIN_DAYS_DIRECTION:
+        return None, None, "too_few"
+    bs = _block_boot_means(x, random.Random(seed), block=block)
+    if int(alpha / 2 * len(bs)) >= MIN_TAIL_DRAWS:
+        return bs[int(alpha / 2 * len(bs))], bs[min(len(bs) - 1, int((1 - alpha / 2) * len(bs)))],             "block_bootstrap_percentile"
+    mb = sum(bs) / len(bs)
+    se = math.sqrt(sum((b - mb) ** 2 for b in bs) / (len(bs) - 1))
+    z = NormalDist().inv_cdf(1 - alpha / 2)
+    return m - z * se, m + z * se, "normal_block_se"
+
+
+def aggregate(series, seed: int = 29, excluded: int = 0, alpha: float = 0.05, block: int = BLOCK) -> dict:
+    """lo95/hi95 hold the (1 - alpha) interval -- its level is ci_level, its method ci_method; alpha = 0.05/k for a
+    Bonferroni-corrected family. Fewer than MIN_DAYS_DIRECTION days: no interval (protocol-fixes-1105-spec.md)."""
     series = sorted(series)
     x = [float(r) for _, r in series]
     n = len(x)
     if n == 0:
         return {"n_days": 0, "excluded": excluded}
     m = sum(x) / n
-    bs = _block_boot_means(x, random.Random(seed))
+    lo, hi, method = _interval(x, m, alpha, seed, block)
     eq, peak, mdd = 1.0, 1.0, 0.0
     for v in x:
         eq *= 1 + v / 100
         peak = max(peak, eq)
         mdd = min(mdd, eq / peak - 1)
     return {"n_days": n, "excluded": excluded, "from": series[0][0], "to": series[-1][0],
-            "mean_pct": round(m, 4), "lo95": round(bs[int(alpha / 2 * len(bs))], 4),
-            "hi95": round(bs[min(len(bs) - 1, int((1 - alpha / 2) * len(bs)))], 4),
+            "mean_pct": round(m, 4), "lo95": None if lo is None else round(lo, 4),
+            "hi95": None if hi is None else round(hi, 4), "ci_level": 1 - alpha, "ci_method": method,
+            "block": block,
             "sd_pct": round(math.sqrt(sum((v - m) ** 2 for v in x) / (n - 1)), 4) if n > 1 else None,
             "compound_pct": round((eq - 1) * 100, 3), "max_dd_pct": round(mdd * 100, 3),
             "pos_share": round(sum(1 for v in x if v > 0) / n, 3), "worst_pct": round(min(x), 4)}
 
 
-def paired(a, b, seed: int = 29, alpha: float = 0.05) -> dict:
+def paired(a, b, seed: int = 29, alpha: float = 0.05, block: int = BLOCK) -> dict:
     """a - b on the days both have."""
     da, db = dict(a), dict(b)
     common = sorted(set(da) & set(db))
-    return aggregate([(d, da[d] - db[d]) for d in common], seed, alpha=alpha)
+    return aggregate([(d, da[d] - db[d]) for d in common], seed, alpha=alpha, block=block)
 
 
 def month_means(series) -> dict:

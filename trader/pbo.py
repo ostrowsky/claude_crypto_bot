@@ -2,7 +2,8 @@
 
 cscv_pbo        probability of backtest overfitting by combinatorially symmetric cross-validation
                 (Bailey, Borwein, Lopez de Prado, Zhu 2015): share of IS/OOS splits where the IS-best strategy
-                ranks at or below the OOS median.
+                ranks below the OOS median; a tie at the median counts one half.
+applicable      whether PBO may act as a veto: >= 6 distinct (corr < 0.98) candidates.
 deflated_sharpe probability that the true Sharpe exceeds the expected maximum of n_trials null Sharpes
                 (Bailey & Lopez de Prado 2014). Sharpe per observation, not annualised.
 """
@@ -40,7 +41,29 @@ def cscv_pbo(R, n_splits: int = 8) -> float:
         rank = 1 + int(np.sum(oos < oos[best])) + 0.5 * int(np.sum(oos == oos[best]) - 1)   # 1..N
         w = rank / (N + 1)
         lam.append(math.log(w / (1 - w)))
-    return float(np.mean(np.array(lam) <= 0))
+    lam = np.array(lam)
+    return float(np.mean(lam < 0) + 0.5 * np.mean(lam == 0))      # a tie is half an overfit (protocol-fixes P4)
+
+
+def applicable(R, min_n: int = 6, dup_corr: float = 0.98):
+    """(PBO may veto?, distinct candidates): candidates whose daily series correlate >= dup_corr count as one;
+    PBO is a veto only with >= min_n distinct candidates (protocol-fixes-1105-spec.md P4)."""
+    R = np.asarray(R, dtype=float)
+    keep = []
+    for k in range(R.shape[1]):
+        x = R[:, k]
+        dup = False
+        for j in keep:
+            y = R[:, j]
+            if x.std() == 0 or y.std() == 0:
+                dup = bool(np.allclose(x, y))
+            else:
+                dup = float(np.corrcoef(x, y)[0, 1]) >= dup_corr
+            if dup:
+                break
+        if not dup:
+            keep.append(k)
+    return len(keep) >= min_n, len(keep)
 
 
 def deflated_sharpe(sr: float, n_trials: int, n_obs: int, skew: float = 0.0, kurt: float = 3.0,

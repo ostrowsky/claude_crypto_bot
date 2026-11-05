@@ -976,6 +976,18 @@ only; the 2026 window was not opened for any of them:
   medians equal live ones within 0.3 bp. No verdict changes sign: X4 −0.009 pp per trade, FC_PASSIVE 2026
   +0.0026 vs +0.0024, CAP_W4_X50_H24 −0.09 pp per event. A per-bucket `fill_model` is an operator decision. Results
   sized above 1 000 USDT per position are not valid without a size term.
+- **Protocol fixes after the external review (2026-11-05, `protocol-fixes-1105-spec.md`).** Changes:
+  - Results carry `provenance` (git state, events digest, grid digest).
+  - The E1 replay flags trades cut by the grid end (`censored`, `n_censored`): the grid stops at the last full
+    UTC day, so results near the data edge depend on the run date.
+  - `daily_revenue.aggregate` reports `ci_level` / `ci_method`. It uses a normal bound with a block-bootstrap SE
+    when fewer than 20 draws lie beyond a bound, gives no interval below 10 days, and takes `block` (>= 20 for
+    carry).
+  - PBO counts a tie as half and vetoes only with >= 6 distinct candidates (`pbo.applicable`).
+  - CAP also writes a marked book.
+  - Every held-out look is listed in `docs/audit/alpha_ledger.json`. There are 17; only FC_PASSIVE survives 0.05/17.
+  The H3 test half rerun (-0.157 vs -0.2485 %/day recorded) is only partly explained by the grid edge, and the rest
+  is unknown.
 - **TM: BTC/ETH spot timing (trend, vol-managed, funding overheat) is REJECTED, 0 of 20.** None beats a circular-shift
   random timing of the same schedule, none beats buy-and-hold. Best vs constant exposure: T_sma_56 +0.027 [−0.039, +0.093]
   (`btc-eth-timing-tm-1028-spec.md`).

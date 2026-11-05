@@ -29,7 +29,8 @@ def run_windows(run, decompose, windows=WINDOWS) -> list:
         g, dc = r["agg"], decompose(r["trades"])
         out.append({"name": name, "from": lo, "to": hi, "n_days": g.get("n_days"), "mean_pct": g.get("mean_pct"),
                     "lo95": g.get("lo95"), "hi95": g.get("hi95"), "trades": dc.get("n"),
-                    "net_per_trade": dc.get("net_mean_pct"), "gross_per_trade": dc.get("gross_mean_pct")})
+                    "net_per_trade": dc.get("net_mean_pct"), "gross_per_trade": dc.get("gross_mean_pct"),
+                    "n_censored": r.get("n_censored")})
     return out
 
 
@@ -44,7 +45,8 @@ def main() -> int:
                        ER.decompose)
     for w in rows:
         print(f"{w['name']} {w['from']}..{w['to']}: days {w['n_days']} R {w['mean_pct']} [{w['lo95']}, {w['hi95']}] "
-              f"trades {w['trades']} net/trade {w['net_per_trade']} gross/trade {w['gross_per_trade']}", flush=True)
+              f"trades {w['trades']} net/trade {w['net_per_trade']} gross/trade {w['gross_per_trade']} "
+              f"censored {w['n_censored']}", flush=True)
     return 0
 
 

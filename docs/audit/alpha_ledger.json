@@ -1,0 +1,24 @@
+{
+ "spec": "protocol-fixes-1105-spec.md P6",
+ "rule": "Every look at a held-out window (2026-01-01.. for the trader; 2018-2022 for BH19; the July-October 2026 half of the bot's entries) is listed here with its alpha before or with its result. A test (trader/test_protocol_fixes.py) checks that every trader/runtime/experiments/*_OPENED.json marker is listed. Program-wide reading: with N looks, a single accept is credible at alpha 0.05/N.",
+ "updated": "2026-11-05",
+ "looks": [
+  {"id": "E1-P1", "window": "bot entries 2026-07-01..2026-10-10", "date": "2026-10-10", "alpha": 0.05, "marker": null, "outcome": "not shown: paired +0.556 [-0.021, +1.217]"},
+  {"id": "H2", "window": "bot entries 2026-07-01..2026-10-10", "date": "2026-10-10", "alpha": 0.05, "marker": null, "outcome": "rejected"},
+  {"id": "H3-X4", "window": "bot entries 2026-07-01..2026-10-10 (not fresh: used by E1-P1, H2)", "date": "2026-10-11", "alpha": 0.05, "marker": null, "outcome": "improves (paired +0.908 [+0.288, +1.611], z ~2.7), not profitable; does not survive 0.05/N"},
+  {"id": "B3", "window": "2026-01-01..2026-10-14", "date": "2026-10-15", "alpha": 0.05, "marker": "B3_TEST_OPENED.json", "outcome": "rejected (wider universe worse)"},
+  {"id": "SIG-RSI-HOLD", "window": "bot trades 2026-07..2026-10 (signal bot replay; grid partly informed by the full table)", "date": "2026-10-05", "alpha": 0.05, "marker": null, "outcome": "accepted offline -> SHADOW, readout WEAK-HOLD-SHADOW"},
+  {"id": "E8", "window": "bot entries 2026-09-26..2026-10-19", "date": "2026-10-20", "alpha": 0.05, "marker": null, "outcome": "rejected"},
+  {"id": "F2", "window": "bot entries 2026-07-01..2026-10-20", "date": "2026-10-20", "alpha": 0.05, "marker": "F2_TEST_OPENED.json", "outcome": "rejected"},
+  {"id": "FC_PASSIVE", "window": "2026-01-01..2026-10-21", "date": "2026-10-22", "alpha": 0.05, "marker": "FC_TEST_OPENED.json", "outcome": "accepted: +0.0024 [+0.0015, +0.0038]; survives 0.05/N (z ~4)"},
+  {"id": "N8", "window": "2026-01-01..2026-10-21", "date": "2026-10-28", "alpha": 0.05, "marker": "N8_TEST_OPENED.json", "outcome": "rejected"},
+  {"id": "QB_T0", "window": "2026-01-01..2026-10-21", "date": "2026-10-29", "alpha": 0.05, "marker": "QB_TEST_OPENED.json", "outcome": "rejected"},
+  {"id": "RV_mom_56", "window": "2026-01-01..2026-10-21", "date": "2026-10-29", "alpha": 0.05, "marker": "RV_TEST_OPENED.json", "outcome": "rejected"},
+  {"id": "BH19-DIR_1d", "window": "2019-03..2022-12", "date": "2026-10-30", "alpha": 0.01, "marker": null, "outcome": "not confirmed"},
+  {"id": "BH19-TM", "window": "2018..2022", "date": "2026-10-30", "alpha": 0.01, "marker": null, "outcome": "not confirmed"},
+  {"id": "BH19-N8", "window": "2019-03..2022-12", "date": "2026-10-30", "alpha": 0.01, "marker": null, "outcome": "not confirmed"},
+  {"id": "BH19-RV", "window": "2018..2022", "date": "2026-10-30", "alpha": 0.01, "marker": null, "outcome": "not confirmed"},
+  {"id": "BH19-FC_PASSIVE", "window": "2020-02..2022-12", "date": "2026-10-30", "alpha": 0.01, "marker": null, "outcome": "confirmed: 99% CI [+0.0187, +0.0318]"},
+  {"id": "CAP_W4_X50_H24", "window": "2026-01-01..2026-11-03", "date": "2026-11-04", "alpha": 0.05, "marker": null, "outcome": "TOO_FEW (2 events)"}
+ ]
+}

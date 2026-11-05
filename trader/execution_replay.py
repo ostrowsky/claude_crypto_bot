@@ -148,6 +148,12 @@ def run(policy: TP.TradingPolicy, fm: FM.FillModel, grid, cands: list, start_equ
         regime_flags: dict | None = None) -> dict:
     """Event-driven equity replay. Candidates must be time-sorted and attached to the grid.
     regime_flags: {name: bool array per grid bar} (regime.flags); the entry decision sees the flags of bar ie."""
+    def _censored(p) -> bool:
+        """A time exit forced by the end of the grid before max_bars (protocol-fixes-1105-spec.md P2): its result
+        depends on the day the replay was run."""
+        return (p["reason"] == "time" and p.get("exit_ix") is not None and p.get("ie") is not None
+                and p["exit_ix"] >= grid.N - 1 and p["exit_ix"] < p["ie"] + policy.exits.max_bars)
+
     if day_from or day_to:                 # the half's days only: the series must not span the other half
         cands = [c for c in cands if (not day_from or c["ts"].strftime("%Y-%m-%d") >= day_from)
                  and (not day_to or c["ts"].strftime("%Y-%m-%d") < day_to)]
@@ -195,7 +201,7 @@ def run(policy: TP.TradingPolicy, fm: FM.FillModel, grid, cands: list, start_equ
             closed.append({"sym": p["sym"], "mode": p["mode"], "tf": p["tf"], "entry_ts": p["entry_ts"],
                            "exit_time": p["exit_time"], "reason": p["reason"], "cost": p["cost"], "pnl": pnl,
                            "ret_pct": pnl / p["cost"] * 100, "gross_ret_pct": (p["exit_raw"] / p["entry_raw"] - 1) * 100,
-                           "kind": p["kind"]})
+                           "kind": p["kind"], "censored": _censored(p)})
             if p["j"] is not None and p.get("exit_ix") is not None:
                 cooldown[p["sym"]] = p["exit_ix"] + policy.risk.cooldown_bars
 
@@ -272,6 +278,7 @@ def run(policy: TP.TradingPolicy, fm: FM.FillModel, grid, cands: list, start_equ
         positions.append({"sym": c["sym"], "mode": c.get("mode"), "tf": c.get("tf"), "kind": c["kind"], "j": j,
                           "qty": qty, "cost": notional, "entry_raw": c["price"], "entry_ts": c["ts"],
                           "exit_time": exit_time, "exit_raw": exit_raw, "exit_ix": exit_ix, "reason": reason,
+                          "ie": c.get("ie"),
                           "qv_exit": qv_exit if (qv_exit is not None and math.isfinite(qv_exit)) else None,
                           "last_px": fill})
         day_count[dkey] += 1
@@ -288,7 +295,8 @@ def run(policy: TP.TradingPolicy, fm: FM.FillModel, grid, cands: list, start_equ
     pnl_sum = sum(t["pnl"] for t in closed)
     v3 = abs((final - eq0) - pnl_sum) < 1e-6 * max(1.0, eq0) and not positions
     return {"series": series, "agg": DR.aggregate(series), "trades": closed, "final_equity": final,
-            "v3_conservation_ok": v3, "unmarked_marks": unmarked}
+            "v3_conservation_ok": v3, "unmarked_marks": unmarked,
+            "n_censored": sum(1 for t in closed if t["censored"])}
 
 
 def decompose(trades: list) -> dict:
@@ -401,16 +409,21 @@ def main(argv=None) -> int:
     grid = _grid()
     attach_grid(trades, grid)
     pol, fm = POLICIES[a.policy], FM.model(a.fees, a.slip)
-    out = {"policy": asdict(pol), "epoch": pol.epoch(), "fees": a.fees, "slip": a.slip, "split": a.split}
+    import provenance as PV
+    out = {"policy": asdict(pol), "epoch": pol.epoch(), "fees": a.fees, "slip": a.slip, "split": a.split,
+           "provenance": PV.block(events=PV.events_digest(EVENTS, grid.last_bar.strftime("%Y-%m-%dT%H:%M")),
+                                  grid=PV.grid_digest(grid, 0, grid.N), grid_last_bar=str(grid.last_bar),
+                                  grid_n=grid.N)}
     for name, lo, hi in (("all", None, None), ("train", None, a.split), ("test", a.split, None)):
         r = run(pol, fm, grid, trades, floor_of=_floor(), day_from=lo, day_to=hi)
         out[name] = {"agg": r["agg"], "decomposition": decompose(r["trades"]), "v3": r["v3_conservation_ok"],
-                     "series": r["series"]}
+                     "series": r["series"], "n_censored": r["n_censored"]}
         g = r["agg"]
         print(f"[{name}] days {g.get('n_days')} mean {g.get('mean_pct')}%/day [{g.get('lo95')}, {g.get('hi95')}] "
               f"compound {g.get('compound_pct')}% maxDD {g.get('max_dd_pct')}% pos {g.get('pos_share')} | "
               f"trades {out[name]['decomposition'].get('n')} net/trade {out[name]['decomposition'].get('net_mean_pct')}% "
-              f"gross {out[name]['decomposition'].get('gross_mean_pct')}% -> {DR.verdict_text(g)}")
+              f"gross {out[name]['decomposition'].get('gross_mean_pct')}% censored {r['n_censored']} -> "
+              f"{DR.verdict_text(g)}")
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     p = OUT_DIR / f"{a.policy}_{a.fees}_slip{a.slip}_{out['epoch']}.json"
     p.write_text(json.dumps(out, ensure_ascii=False, indent=1, default=str), encoding="utf-8")

@@ -197,7 +197,8 @@ def evaluate(kind, lo, hi, fm, n_random=N_RANDOM, log=print) -> dict:
              "n_by_period": {p: len(v) for p, v in sorted(by_p.items())},
              "mean_pairs_in_basket": float(np.mean([b["n_pairs"] for b in bs])) if bs else None,
              "days_in_market_share": round(len(bs) * c["H"] / 96 / max(1, len(days)), 4),
-             "book_R": book, "worst_event_pct": min(rets) if rets else None, "best_event_pct": max(rets) if rets else None}
+             "book_R": book, "worst_event_pct": min(rets) if rets else None, "best_event_pct": max(rets) if rets else None,
+             "book_marked_agg": DR.aggregate(cap.book_marked(bs, days), alpha=ALPHA)}      # protocol-fixes P5
         ok, checks = admit(r)
         r["admitted"], r["checks"] = ok, checks
         res[name], monthly[name] = r, by_m
@@ -283,7 +284,8 @@ def run_2026() -> dict:
            "events": [{"entry": datetime.fromtimestamp(b["entry_close_ms"] / 1000, timezone.utc).isoformat(),
                        "ret_pct": round(b["ret_pct"], 3), "n_pairs": b["n_pairs"]} for b in bs],
            "agg": agg, "rand_p95": p95, "rand_mean": float(np.mean(rmeans)) if rmeans else None,
-           "book_R": DR.aggregate([(d, daily.get(d, 0.0)) for d in days]), "verdict": verdict_2026(agg, p95),
+           "book_R": DR.aggregate([(d, daily.get(d, 0.0)) for d in days]),
+           "book_marked_agg": DR.aggregate(cap.book_marked(bs, days)), "verdict": verdict_2026(agg, p95),
            "minutes": round((time.time() - t0) / 60, 1), "utc": datetime.now(timezone.utc).isoformat()}
     OUT_2026.write_text(json.dumps(out, ensure_ascii=False, indent=1, default=str), encoding="utf-8")
     print(json.dumps({k: out[k] for k in ("window", "agg", "rand_p95", "verdict")}, default=str))
