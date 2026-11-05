@@ -73,5 +73,13 @@ class TestSelectStats(unittest.TestCase):
         self.assertLess(L.power(0.2, 1.0, 30), L.power(0.2, 1.0, 300))
 
 
+class TestEntryBar(unittest.TestCase):
+    def test_gap_at_the_entry_bar_gives_none(self):
+        import la_short_train as L
+        b = bars([100.0] * 40)
+        gap = {k: np.delete(v, [2, 3, 4]) for k, v in b.items()}     # the first bar after t_pub is missing
+        self.assertIsNone(L.short_trade(gap, T0 + BAR + 30_000, 4, None))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

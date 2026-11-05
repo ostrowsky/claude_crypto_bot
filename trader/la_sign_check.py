@@ -35,9 +35,12 @@ BOOT, SEED = 4000, 29
 
 def _leg(b, t_pub: int, hold: int):
     t, c = b["t"], b["c"]
-    e = int(np.searchsorted(t, t_pub + 60_000))
+    first = -(-(t_pub + 60_000) // BAR) * BAR               # the exact entry bar: a market not trading yet is skipped
+    e = int(np.searchsorted(t, first))
     x = e + int(hold)
-    if x >= len(t) or int(t[x]) != int(t[e]) + hold * BAR or not (np.isfinite(c[e]) and np.isfinite(c[x])) or c[e] <= 0:
+    if x >= len(t) or int(t[e]) != first or int(t[x]) != first + hold * BAR:
+        return None
+    if not (np.isfinite(c[e]) and np.isfinite(c[x])) or c[e] <= 0:
         return None
     return float(c[e]), float(c[x]), int(t[e])
 

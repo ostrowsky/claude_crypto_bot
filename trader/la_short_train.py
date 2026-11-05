@@ -46,9 +46,12 @@ BOOT, SEED, N_RANDOM = 4000, 29, 50
 
 def short_trade(bars: dict, t_pub: int, hold_bars: int, funding):
     t, c, h = bars["t"], bars["c"], bars["h"]
-    e = int(np.searchsorted(t, t_pub + 60_000))
+    first = -(-(t_pub + 60_000) // BAR) * BAR               # the exact entry bar, no silent later entry
+    e = int(np.searchsorted(t, first))
     x = e + int(hold_bars)
-    if x >= len(t) or int(t[x]) != int(t[e]) + hold_bars * BAR or not (np.isfinite(c[e]) and np.isfinite(c[x])):
+    if x >= len(t) or int(t[e]) != first or int(t[x]) != first + hold_bars * BAR:
+        return None
+    if not (np.isfinite(c[e]) and np.isfinite(c[x])):
         return None
     entry, ex = float(c[e]), float(c[x])
     entry_close, exit_close = int(t[e]) + BAR, int(t[x]) + BAR

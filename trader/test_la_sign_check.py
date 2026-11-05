@@ -65,5 +65,22 @@ class TestSplit(unittest.TestCase):
         self.assertFalse(L.claim_holds(d))
 
 
+class TestSameBar(unittest.TestCase):
+    """Reproduces the defect of 2026-11-05: a market not yet trading at t_pub silently entered at a later bar
+    (TRUMPUSDT 2025-01-19: spot at 53.67 against perp at 32.81)."""
+
+    def test_market_without_the_entry_bar_gives_none(self):
+        import la_sign_check as L
+        perp = bars([100.0] * 40)
+        late = {"t": perp["t"][20:], "c": perp["c"][20:]}          # spot starts 5 hours after the announcement
+        self.assertIsNone(L.gross_pair(late, perp, T0 + BAR + 30_000, 4))
+        self.assertIsNone(L.gross_pair(perp, late, T0 + BAR + 30_000, 4))
+
+    def test_both_entries_are_the_same_bar(self):
+        import la_sign_check as L
+        a = bars([100.0] * 40)
+        self.assertIsNotNone(L.gross_pair(a, a, T0 + BAR + 30_000, 4))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
