@@ -1,0 +1,79 @@
+{
+ "spec": "fourth-review-1105-spec.md",
+ "stage": "exploration",
+ "window": [
+  "2023-03-01",
+  "2026-01-01"
+ ],
+ "runs": {
+  "HA_L1": {
+   "mean_pct": -0.009868794535158746,
+   "fund_long_pct_day": -0.0013648157627892978,
+   "fund_short_pct_day": -0.01565017176208538,
+   "funding_pct_day": -0.017014987524874996,
+   "costs_pct_day": 0.010714963856364864,
+   "conservation_ok": true
+  },
+  "HA_L7": {
+   "mean_pct": -0.018595500834711745,
+   "fund_long_pct_day": -0.0024309690914442617,
+   "fund_short_pct_day": -0.023714899922405674,
+   "funding_pct_day": -0.026145869013849472,
+   "costs_pct_day": 0.009388956478997606,
+   "conservation_ok": true
+  },
+  "HB": {
+   "mean_pct": 0.08412953195855483,
+   "fund_long_pct_day": -0.011895420373352294,
+   "fund_short_pct_day": -0.029549974315469994,
+   "funding_pct_day": -0.041445394688822246,
+   "costs_pct_day": 0.003782989612927093,
+   "conservation_ok": true
+  }
+ },
+ "hb_mean_short_share": 0.3367371915459849,
+ "hb_entries": 191,
+ "hb_paired_vs_control": {
+  "agg": {
+   "n_days": 1037,
+   "excluded": 0,
+   "from": "2023-03-01",
+   "to": "2025-12-31",
+   "mean_pct": 0.0477,
+   "lo95": -0.0498,
+   "hi95": 0.1479,
+   "ci_level": 0.95,
+   "ci_method": "block_bootstrap_percentile",
+   "block": 20,
+   "sd_pct": 1.8015,
+   "compound_pct": 38.318,
+   "max_dd_pct": -41.004,
+   "pos_share": 0.589,
+   "worst_pct": -16.8482
+  },
+  "sd_daily": 1.801548311266016,
+  "se_scale_per_sqrt_day": 1.6240895819327972,
+  "days_for_80pct_power": 9099.037614720886,
+  "power_180d": 0.058679451936082594,
+  "power_309d": 0.0744092674968681
+ },
+ "provenance": {
+  "code": {
+   "head": "6a289ad4aac353b102cb173304b311c6b20bc2ac",
+   "dirty": false,
+   "bot": {
+    "files": {
+     "files/config.py": "07d7b02153a89b3b",
+     "files/exit_validator.py": "0979bfc8008e9043",
+     "files/_backtest_trend_start_detector.py": "5b56efa89f8e3a8c",
+     "files/_compute_early_capture.py": "f21dd6307c55e8d6",
+     ".runtime/release/runtime_overrides.json": "6f78825c315421e6",
+     "files/watchlist.json": "061e69c119e4cea1"
+    },
+    "dirty": true
+   }
+  },
+  "utc": "2026-11-05T19:38:30.128277+00:00"
+ },
+ "minutes": 4.3
+}

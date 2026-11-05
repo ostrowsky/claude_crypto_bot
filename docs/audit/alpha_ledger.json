@@ -1,7 +1,7 @@
 {
  "spec": "protocol-fixes-1105-spec.md P6",
  "rule": "Every look at a held-out window (2026-01-01.. for the trader; 2018-2022 for BH19; the July-October 2026 half of the bot's entries) is listed here with its alpha before or with its result. A test (trader/test_protocol_fixes.py) checks that every trader/runtime/experiments/*_OPENED* marker is listed. Program-wide reading: with N looks, a single accept is credible at alpha 0.05/N.",
- "updated": "2026-11-05 (second review: CAP marker, EX-RL1, GAP, B2, H4 reference windows added)",
+ "updated": "2026-11-05 (fourth review: planned forward looks HB-F, HC-F)",
  "looks": [
   {
    "id": "E1-P1",
@@ -178,6 +178,22 @@
    "alpha": 0.05,
    "marker": null,
    "outcome": "reference: alpha net of costs -0.87, CI includes 0"
+  },
+  {
+   "id": "HB-F (planned)",
+   "window": "2026-11-06..not before 2027-05-05, forward, computed once from the archive",
+   "date": "planned",
+   "alpha": 0.05,
+   "marker": null,
+   "outcome": "not looked at"
+  },
+  {
+   "id": "HC-F (planned)",
+   "window": "2026-11-06..not before 2027-11-05, forward, computed once from the archive",
+   "date": "planned",
+   "alpha": 0.05,
+   "marker": null,
+   "outcome": "not looked at"
   }
  ]
 }

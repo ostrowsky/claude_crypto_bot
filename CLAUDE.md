@@ -1014,14 +1014,24 @@ only; the 2026 window was not opened for any of them:
   whose coin already had a live Binance perp (133 train events; funding and liquidation counted).
   - Mean short trades: OKX 4 h −2.39 [−6.71, +2.79], 24 h −3.65, with 2 liquidations; BYBIT −0.76..+0.60. None beats
     its control.
-  - The post-announcement fall the LA long saw came from coins without a Binance perp, which could not be shorted.
+  - Whether the post-announcement fall came from coins without a Binance perp: it holds on OKX only (12 events), not on
+    Bybit (sign check, `fourth-review-1105-spec.md`).
   - 2026 has 20 + 2 such events, so a look has 1–8% power and the window stays closed. The announcement-short line is
     closed.
 - **Hype-short family H-A / H-B (2026-11-05, `hype-short-family-1105-spec.md`): exploration 2023–25 shows nothing worth the decisive window.**
   - H-A shorts the top-10 past-return perps against an equal-weight perp long. L=1: -0.010 %/day; L=7: -0.019. Random-name shorts give the same median, −0.010.
   - H-B shorts the 2–60 day new-perp cohort against a BTC hedge: +0.084 [-0.042, +0.212]. That is above random p95, but mostly from 2025, and the worst month is −29.6%, which breaks its own −25% bound.
   - Decisive power 2020–22: H-A MDE 0.07–0.10 against an estimate ≤ 0; H-B power ~20%.
-  - The 2020–22 window is NOT opened; that is the operator's call. RC3 was misread by the review as reversal evidence: it was continuation.
+  - The 2020–22 window is NOT opened; that is the operator's call.
+- **Fourth review (2026-11-05, `fourth-review-1105-spec.md`).** Corrections and checks:
+  - RC3 says nothing for or against shorting leaders: random +0.49 per trade is market drift (alts +0.503 %/day).
+  - Funding by leg, checked on the book and independently: pumped coins had NEGATIVE funding (next-day leaders −0.061..−0.088
+    %/day, universe −0.004), so shorts pay it.
+  - H-B vs its random cohort control, day by day: +0.048 [−0.050, +0.148], sd 1.80. Power is 6% at 180 days and 7% at 309;
+    80% needs ~9 100 days. H-B stays not shown and cannot be proven in a useful time.
+  - `provenance.require_clean` refuses a run on uncommitted trader code.
+  - Frozen forward rules, computed once from the archive, no live recorder: HB-F (not before 2027-05-05), HC-F (not before
+    2027-11-05). H-E is dropped. H-D still needs a mainnet read-only key.
 - **TM: BTC/ETH spot timing (trend, vol-managed, funding overheat) is REJECTED, 0 of 20.** None beats a circular-shift
   random timing of the same schedule, none beats buy-and-hold. Best vs constant exposure: T_sma_56 +0.027 [−0.039, +0.093]
   (`btc-eth-timing-tm-1028-spec.md`).

@@ -1,0 +1,151 @@
+{
+ "spec": "fourth-review-1105-spec.md",
+ "n_events": 248,
+ "alpha": 0.008333333333333333,
+ "cells": {
+  "OKX_PERP_NEW|h1": {
+   "n_pairs": 44,
+   "mirror": {
+    "long_mean": -0.8736418420553033,
+    "short_mean": 0.957758820740327,
+    "sum_mean": 0.08411697868502367,
+    "corr_long_vs_minus_short": 0.9818506334595309
+   },
+   "split": {
+    "n_live": 44,
+    "n_rest": 12,
+    "live": -0.8736418420553033,
+    "rest": -10.34228752044201,
+    "diff": -9.468645678386707,
+    "lo": -21.005252720599415,
+    "hi": -1.132625951783628,
+    "ci_level": 0.9916666666666667
+   },
+   "claim_holds": true
+  },
+  "OKX_PERP_NEW|h4": {
+   "n_pairs": 44,
+   "mirror": {
+    "long_mean": 1.614155627851966,
+    "short_mean": -1.5889419314120365,
+    "sum_mean": 0.025213696439929677,
+    "corr_long_vs_minus_short": 0.9942562587049417
+   },
+   "split": {
+    "n_live": 44,
+    "n_rest": 12,
+    "live": 1.614155627851966,
+    "rest": -12.121245821525378,
+    "diff": -13.735401449377344,
+    "lo": -29.49383352773996,
+    "hi": -0.620022253812132,
+    "ci_level": 0.9916666666666667
+   },
+   "claim_holds": true
+  },
+  "OKX_PERP_NEW|h24": {
+   "n_pairs": 44,
+   "mirror": {
+    "long_mean": -0.4643606612353317,
+    "short_mean": 0.4099749619268618,
+    "sum_mean": -0.05438569930846981,
+    "corr_long_vs_minus_short": 0.9990855861451343
+   },
+   "split": {
+    "n_live": 44,
+    "n_rest": 12,
+    "live": -0.4643606612353317,
+    "rest": -15.272043911111504,
+    "diff": -14.807683249876172,
+    "lo": -31.328274264734358,
+    "hi": -0.05354835861508622,
+    "ci_level": 0.9916666666666667
+   },
+   "claim_holds": true
+  },
+  "BYBIT_PERP_NEW|h1": {
+   "n_pairs": 79,
+   "mirror": {
+    "long_mean": -0.262007241212396,
+    "short_mean": -0.35676532517530396,
+    "sum_mean": -0.6187725663877001,
+    "corr_long_vs_minus_short": 0.9729606842824783
+   },
+   "split": {
+    "n_live": 79,
+    "n_rest": 68,
+    "live": -0.262007241212396,
+    "rest": -0.7151972556878666,
+    "diff": -0.45319001447547064,
+    "lo": -3.545882461406091,
+    "hi": 2.518307317865041,
+    "ci_level": 0.9916666666666667
+   },
+   "claim_holds": false
+  },
+  "BYBIT_PERP_NEW|h4": {
+   "n_pairs": 79,
+   "mirror": {
+    "long_mean": -1.6450445362657753,
+    "short_mean": 0.8147490383918811,
+    "sum_mean": -0.8302954978738939,
+    "corr_long_vs_minus_short": 0.9837321399912291
+   },
+   "split": {
+    "n_live": 79,
+    "n_rest": 68,
+    "live": -1.6450445362657753,
+    "rest": -2.597286334423826,
+    "diff": -0.9522417981580507,
+    "lo": -6.313699598210183,
+    "hi": 4.2288793636950786,
+    "ci_level": 0.9916666666666667
+   },
+   "claim_holds": false
+  },
+  "BYBIT_PERP_NEW|h24": {
+   "n_pairs": 79,
+   "mirror": {
+    "long_mean": -1.095917381206824,
+    "short_mean": 0.3267387312932406,
+    "sum_mean": -0.7691786499135841,
+    "corr_long_vs_minus_short": 0.9970214479655986
+   },
+   "split": {
+    "n_live": 79,
+    "n_rest": 68,
+    "live": -1.095917381206824,
+    "rest": -3.9543170601180844,
+    "diff": -2.8583996789112605,
+    "lo": -14.113647740043486,
+    "hi": 7.518180723210705,
+    "ci_level": 0.9916666666666667
+   },
+   "claim_holds": false
+  }
+ },
+ "claim_holds_anywhere": [
+  "OKX_PERP_NEW|h1",
+  "OKX_PERP_NEW|h4",
+  "OKX_PERP_NEW|h24"
+ ],
+ "provenance": {
+  "code": {
+   "head": "23c8226fb955a92a3299fb68ea75eb1bb8943268",
+   "dirty": false,
+   "bot": {
+    "files": {
+     "files/config.py": "07d7b02153a89b3b",
+     "files/exit_validator.py": "0979bfc8008e9043",
+     "files/_backtest_trend_start_detector.py": "5b56efa89f8e3a8c",
+     "files/_compute_early_capture.py": "f21dd6307c55e8d6",
+     ".runtime/release/runtime_overrides.json": "6f78825c315421e6",
+     "files/watchlist.json": "061e69c119e4cea1"
+    },
+    "dirty": true
+   }
+  },
+  "utc": "2026-11-05T19:30:05.759478+00:00"
+ },
+ "minutes": 0.4
+}
