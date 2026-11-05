@@ -1,0 +1,221 @@
+{
+ "spec": "bot-beta-h4-1105-spec.md",
+ "n_alt": 91,
+ "windows": {
+  "main": {
+   "window": [
+    "2026-03-01",
+    "2026-07-01"
+   ],
+   "fit": {
+    "coef": [
+     -0.31995983948498985,
+     0.9514057916179713,
+     -0.20612348077863163
+    ],
+    "lo": [
+     -0.5944518792750686,
+     0.7470479239802834,
+     -0.40846021496926105
+    ],
+    "hi": [
+     -0.023595417786220645,
+     1.1339488107169295,
+     0.042259756678530186
+    ],
+    "ci_level": 0.95,
+    "n_days": 120,
+    "block": 5,
+    "boot": 2000,
+    "names": [
+     "alpha_pct_per_day",
+     "b_alt",
+     "b_btc"
+    ],
+    "mean_R": -0.4166927450558801,
+    "mean_ALT": -0.1259975678208181,
+    "mean_BTC": -0.1122720715572803
+   },
+   "agg": {
+    "n_days": 120,
+    "excluded": 0,
+    "from": "2026-03-03",
+    "to": "2026-06-30",
+    "mean_pct": -0.4167,
+    "lo95": -0.9781,
+    "hi95": 0.1501,
+    "ci_level": 0.95,
+    "ci_method": "block_bootstrap_percentile",
+    "block": 5,
+    "sd_pct": 2.8352,
+    "compound_pct": -42.262,
+    "max_dd_pct": -44.729,
+    "pos_share": 0.367,
+    "worst_pct": -8.7967
+   },
+   "n_trades": 926,
+   "n_censored": 0,
+   "exposure": 0.7125764376506172,
+   "reading": "anti-skill: entries worse than their beta -> close bot-signal trading"
+  },
+  "h3_test": {
+   "window": [
+    "2026-07-01",
+    "2026-10-11"
+   ],
+   "fit": {
+    "coef": [
+     -0.5501632482171188,
+     1.0614652025262725,
+     -0.3917089182497703
+    ],
+    "lo": [
+     -0.9152246682642354,
+     0.7493595255566393,
+     -0.6041320713121249
+    ],
+    "hi": [
+     -0.2768414527106805,
+     1.1965438760560319,
+     -0.05819605763125986
+    ],
+    "ci_level": 0.95,
+    "n_days": 102,
+    "block": 5,
+    "boot": 2000,
+    "names": [
+     "alpha_pct_per_day",
+     "b_alt",
+     "b_btc"
+    ],
+    "mean_R": -0.15688860367122223,
+    "mean_ALT": 0.5034732944082728,
+    "mean_BTC": 0.3603306723278412
+   },
+   "agg": {
+    "n_days": 102,
+    "excluded": 0,
+    "from": "2026-07-01",
+    "to": "2026-10-10",
+    "mean_pct": -0.1569,
+    "lo95": -0.8507,
+    "hi95": 0.4358,
+    "ci_level": 0.95,
+    "ci_method": "block_bootstrap_percentile",
+    "block": 5,
+    "sd_pct": 2.9325,
+    "compound_pct": -18.358,
+    "max_dd_pct": -44.002,
+    "pos_share": 0.363,
+    "worst_pct": -7.5016
+   },
+   "n_trades": 869,
+   "n_censored": 0,
+   "exposure": 0.781978138666668,
+   "hedged_with_main_betas": {
+    "n_days": 102,
+    "excluded": 0,
+    "from": "2026-07-01",
+    "to": "2026-10-10",
+    "mean_pct": -0.5616,
+    "lo95": -0.9155,
+    "hi95": -0.2768,
+    "ci_level": 0.95,
+    "ci_method": "block_bootstrap_percentile",
+    "block": 5,
+    "sd_pct": 1.6686,
+    "compound_pct": -44.486,
+    "max_dd_pct": -48.54,
+    "pos_share": 0.245,
+    "worst_pct": -3.513
+   }
+  },
+  "e7_window": {
+   "window": [
+    "2026-10-13",
+    "2026-11-05"
+   ],
+   "fit": {
+    "coef": [
+     -0.8660521742045785,
+     1.0841695137995349,
+     -0.1701357369427372
+    ],
+    "lo": [
+     -1.3464744325148335,
+     0.5138847312321917,
+     -2.0910030798668697
+    ],
+    "hi": [
+     0.33486445053362013,
+     2.3112197931918272,
+     0.8644664708850197
+    ],
+    "ci_level": 0.95,
+    "n_days": 23,
+    "block": 5,
+    "boot": 2000,
+    "names": [
+     "alpha_pct_per_day",
+     "b_alt",
+     "b_btc"
+    ],
+    "mean_R": -1.6053394910914662,
+    "mean_ALT": -0.6910789584984223,
+    "mean_BTC": -0.05853809272762975
+   },
+   "agg": {
+    "n_days": 23,
+    "excluded": 0,
+    "from": "2026-10-13",
+    "to": "2026-11-04",
+    "mean_pct": -1.6053,
+    "lo95": -2.5199,
+    "hi95": -0.9327,
+    "ci_level": 0.95,
+    "ci_method": "block_bootstrap_percentile",
+    "block": 5,
+    "sd_pct": 3.4498,
+    "compound_pct": -32.017,
+    "max_dd_pct": -33.727,
+    "pos_share": 0.348,
+    "worst_pct": -9.7229
+   },
+   "n_trades": 211,
+   "n_censored": 10,
+   "exposure": 0.7366293156300826,
+   "hedged_with_main_betas": {
+    "n_days": 23,
+    "excluded": 0,
+    "from": "2026-10-13",
+    "to": "2026-11-04",
+    "mean_pct": -0.9599,
+    "lo95": -1.4211,
+    "hi95": -0.439,
+    "ci_level": 0.95,
+    "ci_method": "block_bootstrap_percentile",
+    "block": 5,
+    "sd_pct": 2.0948,
+    "compound_pct": -20.287,
+    "max_dd_pct": -21.5,
+    "pos_share": 0.348,
+    "worst_pct": -4.3587
+   }
+  }
+ },
+ "provenance": {
+  "code": {
+   "head": "6f5cef862ac214449d34f9fb7f2b2d2c48aefc46",
+   "dirty": true
+  },
+  "utc": "2026-11-05T15:07:30.738319+00:00",
+  "events": {
+   "sha": "7366a6948ef5f7ec",
+   "n": 517114,
+   "until": "2026-11-05T03:45"
+  },
+  "grid": "21dec80cf41719cd",
+  "grid_last_bar": "2026-11-05 03:45:00+00:00"
+ },
+ "minutes": 2.5
+}

@@ -988,6 +988,14 @@ only; the 2026 window was not opened for any of them:
   - Every held-out look is listed in `docs/audit/alpha_ledger.json`. There are 17; only FC_PASSIVE survives 0.05/17.
   The H3 test half rerun (-0.157 vs -0.2485 %/day recorded) is only partly explained by the grid edge, and the rest
   is unknown.
+- **H4, beta of the X4 book (2026-11-05, diagnostic, `bot-beta-h4-1105-spec.md`): the loss is NOT market beta.**
+  - Model: R_d = a + b_alt * ALT + b_btc * BTC (91-coin equal-weight alt index).
+  - Main window Mar–Jun: a = −0.32 %/day [−0.59, −0.02], b_alt +0.95, exposure 0.71. This is the pre-registered
+    reading "anti-skill".
+  - Jul–Oct: a −0.55 [−0.92, −0.28] while alts rose +0.50 %/day. E7: −0.87.
+  - a is net of ~0.3 %/day costs. Gross it is ≈ 0 on Mar–Jun and negative after.
+  - A beta hedge leaves the book at −0.56 / −0.96.
+  - Spec §3 says close "trade the bot's signals". Stopping the demo X4 executor is the operator's call.
 - **TM: BTC/ETH spot timing (trend, vol-managed, funding overheat) is REJECTED, 0 of 20.** None beats a circular-shift
   random timing of the same schedule, none beats buy-and-hold. Best vs constant exposure: T_sma_56 +0.027 [−0.039, +0.093]
   (`btc-eth-timing-tm-1028-spec.md`).
