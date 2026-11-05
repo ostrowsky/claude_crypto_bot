@@ -965,6 +965,17 @@ only; the 2026 window was not opened for any of them:
   - The reverse sign shows at 24 h (imb_5 −0.032 [−0.053, −0.006]), but it was not pre-registered. Its top-bottom
     quintile is at most −0.15 %, below the 0.36 % round trip.
   - The ±0.2 % level exists only from 2026-01-15. Do not re-test.
+- **Cost calibration on the MAIN market (2026-11-05, measurement, `cost-calibration-mainnet-1105-spec.md`).**
+  The recorder book (live, 10-10..11-04, 510 pairs) gives this cost per side for a 1 000 USDT market order, as the
+  median of pair medians:
+  - BTC/ETH 0.01 bp;
+  - ranks 3–20: 0.6 bp;
+  - ranks 21–100: 3.3 bp;
+  - ranks 101+: 11.4 bp (24 bp at 5 000 USDT).
+  The model's flat 8 bp is a B3/B4 mix. It overcharges BTC/ETH by ~8 bp and undercharges the tail. Demo book
+  medians equal live ones within 0.3 bp. No verdict changes sign: X4 −0.009 pp per trade, FC_PASSIVE 2026
+  +0.0026 vs +0.0024, CAP_W4_X50_H24 −0.09 pp per event. A per-bucket `fill_model` is an operator decision. Results
+  sized above 1 000 USDT per position are not valid without a size term.
 - **TM: BTC/ETH spot timing (trend, vol-managed, funding overheat) is REJECTED, 0 of 20.** None beats a circular-shift
   random timing of the same schedule, none beats buy-and-hold. Best vs constant exposure: T_sma_56 +0.027 [−0.039, +0.093]
   (`btc-eth-timing-tm-1028-spec.md`).
