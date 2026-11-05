@@ -1037,6 +1037,11 @@ only; the 2026 window was not opened for any of them:
   - G2, premium convergence: first run invalid (PEPE tick rounding, mismatched pairs like STRAX, RAY). G2-v2 causal 15m: −0.153 [−0.746, +0.618], ~75 signals a year. The zero-latency ceiling +1.62 is carried by single events (2025-10-10); below a 3% premium +0.30 at zero latency.
   - G3b, FC at L = 2: +0.0008 [−0.0007, +0.0021] over L = 1 on train, margin stops 11 vs 5.
   - G3a (COIN-M) and the 1m G2 refinement wait for a download decision. G4 needs a mainnet read-only key.
+- **G3a, COIN-M carry on BTC+ETH (2026-11-05, train 2023-03..2025-12, `coinm-carry-g3a-1105-spec.md`): passes its pre-registered criterion.**
+  - R +0.0216 %/day [+0.0172, +0.0287] vs FC_PASSIVE +0.0111; paired +0.0105 [+0.0080, +0.0148], 3 of 3 years, also at 60-day blocks. No margin stops.
+  - The gain is mechanical: COIN-M and USD-M rates are nearly equal (BTC −0.0007 [−0.0022, +0.0010]), and notional = capital instead of half.
+  - New risk: the position is effectively USD, not USDT. Basis reached +0.74% in the USDC crisis (2023-03), worst day −0.565%, max DD −1.3% (FC −0.17%); Sharpe 8.1 vs 11.2.
+  - Next by the rule: one 2026 look, the operator's call. Its power is ~10% (~181 days of archive funding). Expect ~1.8 %/yr at 2026 rates, not 7.9. The demo account's COIN-M access is unverified.
 - **TM: BTC/ETH spot timing (trend, vol-managed, funding overheat) is REJECTED, 0 of 20.** None beats a circular-shift
   random timing of the same schedule, none beats buy-and-hold. Best vs constant exposure: T_sma_56 +0.027 [−0.039, +0.093]
   (`btc-eth-timing-tm-1028-spec.md`).

@@ -1,0 +1,169 @@
+{
+ "spec": "coinm-carry-g3a-1105-spec.md",
+ "stage": "train",
+ "window": [
+  "2023-03-01",
+  "2026-01-01"
+ ],
+ "fees": {
+  "spot": 0.0018,
+  "perp": 0.0013
+ },
+ "pairs": {
+  "BTCUSD_PERP": {
+   "funding_usd": 0.12532397720624494,
+   "costs_usd": 0.003648603027590334,
+   "min_margin_ratio": 0.9970977582166671,
+   "rebalances": 43,
+   "n0": 0.498399301606742,
+   "n_marks": 1033,
+   "n_funding": 3032,
+   "first": "2023-03-01",
+   "last": "2025-12-31"
+  },
+  "ETHUSD_PERP": {
+   "funding_usd": 0.12815939965842232,
+   "costs_usd": 0.0036564578098839564,
+   "min_margin_ratio": 0.9964421009601603,
+   "rebalances": 43,
+   "n0": 0.49824932390430793,
+   "n_marks": 1033,
+   "n_funding": 3032,
+   "first": "2023-03-01",
+   "last": "2025-12-31"
+  }
+ },
+ "agg": {
+  "n_days": 1033,
+  "excluded": 0,
+  "from": "2023-03-01",
+  "to": "2025-12-31",
+  "mean_pct": 0.0216,
+  "lo95": 0.0172,
+  "hi95": 0.0287,
+  "ci_level": 0.95,
+  "ci_method": "block_bootstrap_percentile",
+  "block": 20,
+  "sd_pct": 0.0511,
+  "compound_pct": 25.021,
+  "max_dd_pct": -1.299,
+  "pos_share": 0.733,
+  "worst_pct": -0.565
+ },
+ "fc_passive": {
+  "n_days": 1037,
+  "excluded": 0,
+  "from": "2023-03-01",
+  "to": "2025-12-31",
+  "mean_pct": 0.0111,
+  "lo95": 0.0087,
+  "hi95": 0.0143,
+  "ci_level": 0.95,
+  "ci_method": "block_bootstrap_percentile",
+  "block": 20,
+  "sd_pct": 0.019,
+  "compound_pct": 12.198,
+  "max_dd_pct": -0.173,
+  "pos_share": 0.847,
+  "worst_pct": -0.1437
+ },
+ "paired_vs_fc": {
+  "n_days": 1033,
+  "excluded": 0,
+  "from": "2023-03-01",
+  "to": "2025-12-31",
+  "mean_pct": 0.0105,
+  "lo95": 0.008,
+  "hi95": 0.0148,
+  "ci_level": 0.95,
+  "ci_method": "block_bootstrap_percentile",
+  "block": 20,
+  "sd_pct": 0.0494,
+  "compound_pct": 11.443,
+  "max_dd_pct": -1.192,
+  "pos_share": 0.634,
+  "worst_pct": -0.5718
+ },
+ "paired_by_year": {
+  "2023": 0.006233307351271813,
+  "2024": 0.019039182815114224,
+  "2025": 0.005469517762259627
+ },
+ "r_by_year": {
+  "2023": 0.017614421695143094,
+  "2024": 0.03438648064221065,
+  "2025": 0.012169193765767071
+ },
+ "fc_by_year": {
+  "2023": 0.011272438973862967,
+  "2024": 0.01534729782709642,
+  "2025": 0.006699676003507444
+ },
+ "fc_margin_stops": 5,
+ "fc_liquidations": 0,
+ "rates": {
+  "BTCUSD_PERP": {
+   "cm_mean": 0.02188475851996105,
+   "um_mean": 0.02261317647058824,
+   "paired": {
+    "n_days": 1027,
+    "excluded": 0,
+    "from": "2023-03-01",
+    "to": "2025-12-31",
+    "mean_pct": -0.0007,
+    "lo95": -0.0022,
+    "hi95": 0.001,
+    "ci_level": 0.95,
+    "ci_method": "block_bootstrap_percentile",
+    "block": 20,
+    "sd_pct": 0.0182,
+    "compound_pct": -0.706,
+    "max_dd_pct": -0.88,
+    "pos_share": 0.46,
+    "worst_pct": -0.2064
+   }
+  },
+  "ETHUSD_PERP": {
+   "cm_mean": 0.02235389970788705,
+   "um_mean": 0.023637963355834138,
+   "paired": {
+    "n_days": 1027,
+    "excluded": 0,
+    "from": "2023-03-01",
+    "to": "2025-12-31",
+    "mean_pct": -0.0013,
+    "lo95": -0.0029,
+    "hi95": 0.0005,
+    "ci_level": 0.95,
+    "ci_method": "block_bootstrap_percentile",
+    "block": 20,
+    "sd_pct": 0.0208,
+    "compound_pct": -1.316,
+    "max_dd_pct": -1.612,
+    "pos_share": 0.467,
+    "worst_pct": -0.3198
+   }
+  }
+ },
+ "passes": true,
+ "verdict": "propose a single 2026 look to the operator",
+ "provenance": {
+  "code": {
+   "head": "45e54724dcef7ff0648d6d8f76a6cfd31bf6587b",
+   "dirty": false,
+   "bot": {
+    "files": {
+     "files/config.py": "07d7b02153a89b3b",
+     "files/exit_validator.py": "0979bfc8008e9043",
+     "files/_backtest_trend_start_detector.py": "5b56efa89f8e3a8c",
+     "files/_compute_early_capture.py": "f21dd6307c55e8d6",
+     ".runtime/release/runtime_overrides.json": "6f78825c315421e6",
+     "files/watchlist.json": "061e69c119e4cea1"
+    },
+    "dirty": true
+   }
+  },
+  "utc": "2026-11-05T20:20:26.439195+00:00"
+ },
+ "minutes": 0.2
+}
