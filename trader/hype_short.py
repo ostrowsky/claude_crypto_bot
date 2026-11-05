@@ -143,7 +143,7 @@ class _Book:
         return sum(abs(v[1]) * v[2] for k, v in self.pos.items() if pred(k, v))
 
     def conservation_ok(self):
-        return abs(self.equity - (self.eq0 + self.pnl + self.fund - self.cost)) < 1e-9 * max(1.0, self.eq0)
+        return bool(abs(self.equity - (self.eq0 + self.pnl + self.fund - self.cost)) < 1e-9 * max(1.0, self.eq0))
 
 
 # ------------------------------------------------------------------ H-A

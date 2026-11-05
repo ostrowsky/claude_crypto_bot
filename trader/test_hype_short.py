@@ -86,6 +86,7 @@ class TestBook(unittest.TestCase):
         r1 = H.run_ha(p, 7, lambda c, i: 0.001)
         self.assertLess(sum(v for _, v in r1["series"]), sum(v for _, v in r0["series"]))
         self.assertTrue(r1["conservation_ok"])
+        self.assertIs(type(r1["conservation_ok"]), bool)        # goes to JSON, not numpy.bool_
         self.assertGreater(r1["equity_min"], 0)
 
     def test_short_leg_profits_when_leaders_fall(self):
