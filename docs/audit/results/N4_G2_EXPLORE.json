@@ -1,0 +1,358 @@
+{
+ "spec": "n4-1106-spec.md",
+ "stage": "exploration",
+ "window": [
+  "2023-01-01",
+  "2025-12-31"
+ ],
+ "candidates": {
+  "USDT": {
+   "n": 614,
+   "ci": {
+    "mean": -30.756704862368924,
+    "ci_level": 0.9875,
+    "block": 1,
+    "boot": 20000,
+    "n": 614,
+    "n_clusters": 175,
+    "lo": -82.99781298921557,
+    "hi": 84.08438076233584,
+    "ci_method": "block_bootstrap_percentile"
+   },
+   "sigma_bp": 540.5607496510141,
+   "median_bp": -36.89232298832753,
+   "pos_share": 0.09120521172638436,
+   "n_days": 175,
+   "m_per_day": 3.5085714285714285,
+   "rho_day": -0.302800535679853,
+   "power": {
+    "delta_bp": 10.0,
+    "alpha": 0.0125,
+    "n": 32584.183163092286,
+    "n_eff": 32584.183163092286,
+    "available_decisive_upper_bound": 4075,
+    "window_opens": false
+   },
+   "by_year": {
+    "2023": {
+     "n": 411,
+     "mean": -69.41462657849426
+    },
+    "2024": {
+     "n": 121,
+     "mean": -32.24554467082159
+    },
+    "2025": {
+     "n": 82,
+     "mean": 165.20128833458577
+    }
+   },
+   "by_bucket": {
+    "B1": {
+     "n": 11,
+     "mean": -60.93416598814315
+    },
+    "B2": {
+     "n": 304,
+     "mean": -44.729541894777356
+    },
+    "B3": {
+     "n": 299,
+     "mean": -15.440000747868323
+    }
+   },
+   "without_5_best_days": -63.03167411313272,
+   "top_symbols": [
+    [
+     "'TUTUSDT'",
+     1,
+     11768.9
+    ],
+    [
+     "'THEUSDT'",
+     1,
+     3675.3
+    ],
+    [
+     "'HEMIUSDT'",
+     1,
+     1187.7
+    ],
+    [
+     "'ENAUSDT'",
+     2,
+     284.0
+    ],
+    [
+     "'BBUSDT'",
+     1,
+     223.5
+    ]
+   ],
+   "bottom_symbols": [
+    [
+     "'GALAUSDT'",
+     10,
+     -753.1
+    ],
+    [
+     "'OPUSDT'",
+     16,
+     -813.7
+    ],
+    [
+     "'AVAXUSDT'",
+     5,
+     -933.4
+    ],
+    [
+     "'WIFUSDT'",
+     48,
+     -1323.8
+    ],
+    [
+     "'ALPACAUSDT'",
+     11,
+     -2381.3
+    ]
+   ],
+   "means": {
+    "price_bp": 9.21307380212619,
+    "funding_bp": -2.353492019543974,
+    "cost_bp": 37.616286644951145,
+    "bars": 1.4706840390879479,
+    "prem_entry_bp": 176.95892149837132
+   },
+   "placebo": {
+    "n": 575,
+    "mean_net_bp": -49.70991896526628,
+    "mean_price_bp": 1.6117248608206642
+   },
+   "dropped": {
+    "listing": 99,
+    "no_entry_bar": 68,
+    "no_exit_bar": 1,
+    "out_of_universe": 50626
+   },
+   "skipped_symbols": {
+    "no_spot_pair": 127,
+    "pair_not_ok": 12,
+    "no_bars": 15,
+    "no_premium": 1
+   },
+   "reasons": {
+    "converged": {
+     "n": 614,
+     "mean": -30.756704862368924
+    }
+   },
+   "first_week_share": 0.013029315960912053,
+   "mean_excl_first_week": -30.799430823791397,
+   "sensitivity": {
+    "bnb": -24.756704862368927,
+    "slip_0": -23.140418217417782,
+    "slip_2.5": -42.18113482979564
+   },
+   "next_bar_entry": {
+    "n": 611,
+    "ci": {
+     "mean": -36.48636647575184,
+     "ci_level": 0.9875,
+     "block": 1,
+     "boot": 20000,
+     "n": 611,
+     "n_clusters": 175,
+     "lo": -46.102294516632384,
+     "hi": -27.986526319726885,
+     "ci_method": "block_bootstrap_percentile"
+    }
+   }
+  },
+  "USDC": {
+   "n": 55,
+   "ci": {
+    "mean": 20.03960907208501,
+    "ci_level": 0.9875,
+    "block": 1,
+    "boot": 20000,
+    "n": 55,
+    "n_clusters": 33,
+    "lo": -33.05423957408729,
+    "hi": 176.67217714379092,
+    "ci_method": "block_bootstrap_percentile"
+   },
+   "sigma_bp": 373.2994062430805,
+   "median_bp": -31.060677476818597,
+   "pos_share": 0.03636363636363636,
+   "n_days": 33,
+   "m_per_day": 1.6666666666666667,
+   "rho_day": -0.6850812148744168,
+   "power": {
+    "delta_bp": 10.0,
+    "alpha": 0.0125,
+    "n": 15539.33467331601,
+    "n_eff": 15539.33467331601
+   },
+   "by_year": {
+    "2024": {
+     "n": 50,
+     "mean": -30.858482263612654
+    },
+    "2025": {
+     "n": 5,
+     "mean": 529.0205224290617
+    }
+   },
+   "by_bucket": {
+    "B2": {
+     "n": 53,
+     "mean": -28.683388981216556
+    },
+    "B3": {
+     "n": 2,
+     "mean": 1311.1990574845765
+    }
+   },
+   "without_5_best_days": -31.5212313907594,
+   "top_symbols": [
+    [
+     "'FILUSDC'",
+     3,
+     2659.7
+    ],
+    [
+     "'BNBUSDC'",
+     1,
+     88.1
+    ],
+    [
+     "'SOLUSDC'",
+     2,
+     -42.2
+    ],
+    [
+     "'XRPUSDC'",
+     2,
+     -67.3
+    ],
+    [
+     "'BCHUSDC'",
+     1,
+     -111.5
+    ]
+   ],
+   "bottom_symbols": [
+    [
+     "'BCHUSDC'",
+     1,
+     -111.5
+    ],
+    [
+     "'DOGEUSDC'",
+     9,
+     -278.1
+    ],
+    [
+     "'ENAUSDC'",
+     8,
+     -285.3
+    ],
+    [
+     "'LINKUSDC'",
+     12,
+     -323.7
+    ],
+    [
+     "'SUIUSDC'",
+     17,
+     -537.5
+    ]
+   ],
+   "means": {
+    "price_bp": 51.796633779319556,
+    "funding_bp": 0.0,
+    "cost_bp": 30.792727272727284,
+    "bars": 1.709090909090909,
+    "prem_entry_bp": 61.52009818181819,
+    "fx_bp": -0.9642974345072715
+   },
+   "placebo": {
+    "n": 55,
+    "mean_net_bp": -32.98415569692868,
+    "mean_price_bp": 1.242333393980401
+   },
+   "dropped": {
+    "listing": 1,
+    "no_entry_bar": 0,
+    "no_exit_bar": 0,
+    "out_of_universe": 0
+   },
+   "skipped_symbols": {
+    "pair_not_ok": 1
+   },
+   "reasons": {
+    "converged": {
+     "n": 55,
+     "mean": 20.03960907208501
+    }
+   },
+   "first_week_share": 0.07272727272727272,
+   "mean_excl_first_week": 24.352870924981165,
+   "sensitivity": {
+    "bnb": 25.83960907208501,
+    "slip_0": 22.83233634481228,
+    "slip_2.5": 15.8505181629941
+   },
+   "window": [
+    "2024-01-01",
+    "2025-12-31"
+   ],
+   "decisive": "no USDC perp before 2024-01: not testable"
+  }
+ },
+ "universe": 530,
+ "fee_grid": "current grid on the whole window",
+ "not_modelled": [
+  "queue and impact above the calibrated 1 000 USDT",
+  "funding cap in the forecast",
+  "USDC/USDT over the 30 min hold of G1",
+  "spot and perp transfers",
+  "historic fee grid: the current grid is applied to every window"
+ ],
+ "verdict": null,
+ "traps_checked": [
+  1,
+  2,
+  3,
+  4,
+  5,
+  6,
+  7,
+  9,
+  10
+ ],
+ "traps_note": {
+  "5": "no PBO: 2 fixed candidates",
+  "3": "listing filter 72 h, first week share reported",
+  "9": "USDC version carries the USDC/USDT change"
+ },
+ "provenance": {
+  "code": {
+   "head": "b96a3f3ae21f977e1347f972c3f194450b545330",
+   "dirty": false,
+   "bot": {
+    "files": {
+     "files/config.py": "07d7b02153a89b3b",
+     "files/exit_validator.py": "0979bfc8008e9043",
+     "files/_backtest_trend_start_detector.py": "5b56efa89f8e3a8c",
+     "files/_compute_early_capture.py": "f21dd6307c55e8d6",
+     ".runtime/release/runtime_overrides.json": "6f78825c315421e6",
+     "files/watchlist.json": "061e69c119e4cea1"
+    },
+    "dirty": true
+   }
+  },
+  "utc": "2026-11-06T02:42:50.290085+00:00"
+ },
+ "minutes": 11.9
+}

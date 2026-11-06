@@ -1056,6 +1056,11 @@ only; the 2026 window was not opened for any of them:
   - Forward at δ = 0.003 needs 25 731 days: not testable. Multi-Assets on the demo would change the margin mode of FC-DEMO: operator's decision.
 - **N5, BVOL against realized volatility (2026-11-06, `n5-1106-spec.md`), descriptive, 2023-06..2025-12: the stop did not fire, which is not a return estimate.** IV − RV: BTC +6.72 vol points (SE 1.46), ETH +3.32 (SE 1.81); round trip ~1.7 points. ETH is within noise, and in 2025 it is below the cost.
   - Worst windows −20 and −32 points. The spread is known for 2023-05..10 only; no option fee, margin or liquidation is modelled, and the index starts after the 2022 crash. Options trading is a separate operator decision.
+- **N4, G1 funding harvest and G2 premium convergence (2026-11-06, `n4-1106-spec.md`), exploration 2023–25: not testable at the preset δ; the 2020–22 window stays closed and no α is spent.**
+  - G1, taker, c = 0.10%: −4.78 bp [−14.43, +4.78], n = 7 912; c = 0.30%: −0.15 [−23.86, +23.30], n = 2 218. Price takes 72–81% of the rate, costs the rest. Forecast sign match 91%. Needs n_eff 126 481 and 221 944 against 17 211 and 2 229 available.
+  - G2, USDT: −30.76 bp [−83.00, +84.08], n = 614, median −36.9, 9% positive; needs 32 584 against ≤ 4 075. The upper bound rests on the 2025-10-10 wicks. On USDC: 55 trades, no decisive window exists.
+  - Formula: the Binance page divides the whole rate by 8/N, which differs from the design for intervals other than 8 h; the page is used.
+  - Reference only, no interval: a maker entry on G1 gives +1.3 and +20.2 bp. Testing it needs its own spec.
 - **TM: BTC/ETH spot timing (trend, vol-managed, funding overheat) is REJECTED, 0 of 20.** None beats a circular-shift
   random timing of the same schedule, none beats buy-and-hold. Best vs constant exposure: T_sma_56 +0.027 [−0.039, +0.093]
   (`btc-eth-timing-tm-1028-spec.md`).

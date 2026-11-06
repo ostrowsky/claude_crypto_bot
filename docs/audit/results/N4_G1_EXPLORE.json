@@ -1,0 +1,674 @@
+{
+ "spec": "n4-1106-spec.md",
+ "stage": "exploration",
+ "window": [
+  "2023-01-01",
+  "2025-12-31"
+ ],
+ "candidates": {
+  "0.001": {
+   "n": 7912,
+   "ci": {
+    "mean": -4.776904343355185,
+    "ci_level": 0.9875,
+    "block": 1,
+    "boot": 20000,
+    "n": 7912,
+    "n_clusters": 870,
+    "lo": -14.430604958930886,
+    "hi": 4.7836072160273995,
+    "ci_method": "block_bootstrap_percentile"
+   },
+   "sigma_bp": 319.50320278715225,
+   "median_bp": -14.436588062505873,
+   "pos_share": 0.45374115267947424,
+   "n_days": 870,
+   "m_per_day": 9.094252873563219,
+   "rho_day": -0.04134492486031848,
+   "power": {
+    "delta_bp": 3.0,
+    "alpha": 0.0125,
+    "n": 126481.13219399648,
+    "n_eff": 126481.13219399648,
+    "available_decisive": 17211,
+    "window_opens": false
+   },
+   "by_year": {
+    "2023": {
+     "n": 1565,
+     "mean": -0.7948648673603719
+    },
+    "2024": {
+     "n": 1019,
+     "mean": -13.992908868849698
+    },
+    "2025": {
+     "n": 5328,
+     "mean": -4.1839582413381
+    }
+   },
+   "by_bucket": {
+    "B1": {
+     "n": 2,
+     "mean": -22.57936667021463
+    },
+    "B2": {
+     "n": 1928,
+     "mean": -6.988601003410693
+    },
+    "B3": {
+     "n": 5982,
+     "mean": -4.0581219820645265
+    }
+   },
+   "without_5_best_days": -8.684595716295801,
+   "top_symbols": [
+    [
+     "'AIAUSDT'",
+     115,
+     23303.0
+    ],
+    [
+     "'BEATUSDT'",
+     164,
+     9626.9
+    ],
+    [
+     "'TNSRUSDT'",
+     196,
+     7577.9
+    ],
+    [
+     "'LSKUSDT'",
+     115,
+     5858.9
+    ],
+    [
+     "'LIGHTUSDT'",
+     32,
+     4244.3
+    ]
+   ],
+   "bottom_symbols": [
+    [
+     "'1000PEPEUSDT'",
+     46,
+     -3907.2
+    ],
+    [
+     "'MYXUSDT'",
+     135,
+     -4018.3
+    ],
+    [
+     "'COAIUSDT'",
+     63,
+     -9252.8
+    ],
+    [
+     "'SOONUSDT'",
+     239,
+     -11126.9
+    ],
+    [
+     "'PIPPINUSDT'",
+     320,
+     -11661.9
+    ]
+   ],
+   "means": {
+    "price_bp": -26.899441931828388,
+    "funding_bp": 37.40499461577351,
+    "cost_bp": 15.2824570273003
+   },
+   "placebo": {
+    "n": 11341,
+    "mean_net_bp": -20.17267192341837,
+    "mean_price_bp": -4.718443901198108
+   },
+   "effect_of_accrual_bp": 15.395767580063186,
+   "maker_entry": {
+    "n": 7792,
+    "mean_net_bp": 1.2554285088719246
+   },
+   "sensitivity": {
+    "bnb": -3.776904343355184,
+    "slip_0": 0.5055526839451173,
+    "slip_2.5": -12.700589884305641
+   }
+  },
+  "0.003": {
+   "n": 2218,
+   "ci": {
+    "mean": -0.14794043985788008,
+    "ci_level": 0.9875,
+    "block": 1,
+    "boot": 20000,
+    "n": 2218,
+    "n_clusters": 512,
+    "lo": -23.859627148615914,
+    "hi": 23.3029529217971,
+    "ci_method": "block_bootstrap_percentile"
+   },
+   "sigma_bp": 399.0620812968498,
+   "median_bp": -13.467541562954272,
+   "pos_share": 0.4688908926961226,
+   "n_days": 512,
+   "m_per_day": 4.33203125,
+   "rho_day": 0.03746310152315853,
+   "power": {
+    "delta_bp": 3.0,
+    "alpha": 0.0125,
+    "n": 197313.2450231151,
+    "n_eff": 221943.50716776584,
+    "available_decisive": 2229,
+    "window_opens": false
+   },
+   "by_year": {
+    "2023": {
+     "n": 518,
+     "mean": 0.17271410409083163
+    },
+    "2024": {
+     "n": 161,
+     "mean": -16.76454726644178
+    },
+    "2025": {
+     "n": 1539,
+     "mean": 1.4824524420879128
+    }
+   },
+   "by_bucket": {
+    "B2": {
+     "n": 610,
+     "mean": -13.954865870929567
+    },
+    "B3": {
+     "n": 1608,
+     "mean": 5.089761371680504
+    }
+   },
+   "without_5_best_days": -10.165960620444482,
+   "top_symbols": [
+    [
+     "'AIAUSDT'",
+     46,
+     9208.1
+    ],
+    [
+     "'BEATUSDT'",
+     62,
+     6346.6
+    ],
+    [
+     "'0GUSDT'",
+     80,
+     5215.9
+    ],
+    [
+     "'PUMPBTCUSDT'",
+     5,
+     4522.6
+    ],
+    [
+     "'LSKUSDT'",
+     37,
+     3477.4
+    ]
+   ],
+   "bottom_symbols": [
+    [
+     "'COAIUSDT'",
+     19,
+     -3558.3
+    ],
+    [
+     "'BLZUSDT'",
+     65,
+     -3633.5
+    ],
+    [
+     "'VIDTUSDT'",
+     92,
+     -3845.5
+    ],
+    [
+     "'PIPPINUSDT'",
+     103,
+     -5280.8
+    ],
+    [
+     "'SOONUSDT'",
+     80,
+     -6027.9
+    ]
+   ],
+   "means": {
+    "price_bp": -62.706729709470146,
+    "funding_bp": 77.6736675383228,
+    "cost_bp": 15.114878268710552
+   },
+   "placebo": {
+    "n": 2628,
+    "mean_net_bp": -41.76762335504866,
+    "mean_price_bp": -26.55917586646419
+   },
+   "effect_of_accrual_bp": 41.61968291519078,
+   "maker_entry": {
+    "n": 2158,
+    "mean_net_bp": 20.152287131033468
+   },
+   "sensitivity": {
+    "bnb": 0.8520595601421195,
+    "slip_0": 4.966937828852672,
+    "slip_2.5": -7.820257842923705
+   }
+  }
+ },
+ "usdc_reference": {
+  "window": [
+   "2024-01-01",
+   "2025-12-31"
+  ],
+  "candidates": {
+   "0.001": {
+    "n": 46,
+    "ci": {
+     "mean": 25.19653813817028,
+     "ci_level": 0.9875,
+     "block": 1,
+     "boot": 20000,
+     "n": 46,
+     "n_clusters": 27,
+     "lo": -94.86162543201866,
+     "hi": 162.86450607955584,
+     "ci_method": "block_bootstrap_percentile"
+    },
+    "sigma_bp": 291.18333534220193,
+    "median_bp": -1.827550254747221,
+    "pos_share": 0.4782608695652174,
+    "n_days": 27,
+    "m_per_day": 1.7037037037037037,
+    "rho_day": 0.29113302466864266,
+    "power": {
+     "delta_bp": 3.0,
+     "alpha": 0.0125,
+     "n": 105052.97244836626,
+     "n_eff": 126575.32069900198
+    },
+    "by_year": {
+     "2024": {
+      "n": 31,
+      "mean": 5.879515093845573
+     },
+     "2025": {
+      "n": 15,
+      "mean": 65.11838576310802
+     }
+    },
+    "by_bucket": {
+     "B2": {
+      "n": 42,
+      "mean": -26.359203067436873
+     },
+     "B3": {
+      "n": 4,
+      "mean": 566.5318207970454
+     }
+    },
+    "without_5_best_days": -57.9046475919026,
+    "top_symbols": [
+     [
+      "'FILUSDC'",
+      3,
+      1965.8
+     ],
+     [
+      "'SOLUSDC'",
+      5,
+      346.9
+     ],
+     [
+      "'SUIUSDC'",
+      7,
+      345.0
+     ],
+     [
+      "'BNBUSDC'",
+      8,
+      168.8
+     ],
+     [
+      "'DOGEUSDC'",
+      1,
+      139.8
+     ]
+    ],
+    "bottom_symbols": [
+     [
+      "'XRPUSDC'",
+      1,
+      -235.4
+     ],
+     [
+      "'LTCUSDC'",
+      1,
+      -305.9
+     ],
+     [
+      "'LINKUSDC'",
+      3,
+      -325.1
+     ],
+     [
+      "'AVAXUSDC'",
+      1,
+      -344.5
+     ],
+     [
+      "'1000PEPEUSDC'",
+      6,
+      -710.8
+     ]
+    ],
+    "means": {
+     "price_bp": 16.05276857295289,
+     "funding_bp": 18.8133347826087,
+     "cost_bp": 9.669565217391307
+    },
+    "placebo": {
+     "n": 241,
+     "mean_net_bp": 12.16114057104787,
+     "mean_price_bp": 22.09060115196073
+    },
+    "effect_of_accrual_bp": 13.03539756712241,
+    "maker_entry": {
+     "n": 44,
+     "mean_net_bp": 63.71629492158323
+    },
+    "sensitivity": {
+     "bnb": 25.99653813817028,
+     "slip_0": 26.866103355561588,
+     "slip_2.5": 22.692190312083323
+    }
+   },
+   "0.003": {
+    "n": 7,
+    "ci": {
+     "mean": -29.643247924009724,
+     "ci_level": 0.9875,
+     "block": 1,
+     "boot": 20000,
+     "n": 7,
+     "n_clusters": 3,
+     "lo": null,
+     "hi": null,
+     "ci_method": "too_few"
+    },
+    "sigma_bp": 355.3330555153415,
+    "median_bp": -165.70304135188874,
+    "pos_share": 0.14285714285714285,
+    "n_days": 3,
+    "m_per_day": 2.3333333333333335,
+    "rho_day": 0.9317938825515839,
+    "power": {
+     "delta_bp": 3.0,
+     "alpha": 0.0125,
+     "n": 156439.54111051958,
+     "n_eff": 350798.7509717985
+    },
+    "by_year": {
+     "2024": {
+      "n": 1,
+      "mean": -1.6551376080042441
+     },
+     "2025": {
+      "n": 6,
+      "mean": -34.30793297667731
+     }
+    },
+    "by_bucket": {
+     "B2": {
+      "n": 6,
+      "mean": -155.67970004204975
+     },
+     "B3": {
+      "n": 1,
+      "mean": 726.5754647842305
+     }
+    },
+    "without_5_best_days": null,
+    "top_symbols": [
+     [
+      "'FILUSDC'",
+      1,
+      726.6
+     ],
+     [
+      "'ADAUSDC'",
+      1,
+      -2.0
+     ],
+     [
+      "'ENAUSDC'",
+      2,
+      -167.4
+     ],
+     [
+      "'SOLUSDC'",
+      1,
+      -183.9
+     ],
+     [
+      "'LINKUSDC'",
+      1,
+      -236.3
+     ]
+    ],
+    "bottom_symbols": [
+     [
+      "'ADAUSDC'",
+      1,
+      -2.0
+     ],
+     [
+      "'ENAUSDC'",
+      2,
+      -167.4
+     ],
+     [
+      "'SOLUSDC'",
+      1,
+      -183.9
+     ],
+     [
+      "'LINKUSDC'",
+      1,
+      -236.3
+     ],
+     [
+      "'AVAXUSDC'",
+      1,
+      -344.5
+     ]
+    ],
+    "means": {
+     "price_bp": -60.00396220972404,
+     "funding_bp": 40.332142857142856,
+     "cost_bp": 9.971428571428573
+    },
+    "placebo": {
+     "n": 9,
+     "mean_net_bp": 269.2918430392697,
+     "mean_price_bp": 280.2918430392697
+    },
+    "effect_of_accrual_bp": -298.9350909632794,
+    "maker_entry": {
+     "n": 7,
+     "mean_net_bp": 91.0876249486595
+    },
+    "sensitivity": {
+     "bnb": -28.843247924009738,
+     "slip_0": -27.671819352581174,
+     "slip_2.5": -32.600390781152605
+    }
+   }
+  },
+  "accuracy": {
+   "all": {
+    "n": 32312,
+    "corr": 0.910191212082046,
+    "sign_match": 0.8809730131220599,
+    "mean_abs_err_bp": 0.2946088516999577
+   },
+   "by_interval": {
+    "4": {
+     "n": 5454,
+     "corr": 0.9049315014738643,
+     "sign_match": 0.8852218555188852,
+     "mean_abs_err_bp": 0.4368999312431243
+    },
+    "8": {
+     "n": 26858,
+     "corr": 0.9331640381195967,
+     "sign_match": 0.880110209248641,
+     "mean_abs_err_bp": 0.2657140885817646
+    }
+   },
+   "by_year": {
+    "2024": {
+     "n": 14076,
+     "corr": 0.9208303993735094,
+     "sign_match": 0.8995453253765274,
+     "mean_abs_err_bp": 0.33173278829193753
+    },
+    "2025": {
+     "n": 18236,
+     "corr": 0.8957908832251393,
+     "sign_match": 0.8666374204869489,
+     "mean_abs_err_bp": 0.26595363501490027
+    }
+   },
+   "at_or_above_0.10pct": {
+    "n": 46,
+    "corr": 0.8995547263738084,
+    "sign_match": 1.0,
+    "mean_abs_err_bp": 5.366456859513792
+   }
+  }
+ },
+ "forecast_accuracy": {
+  "all": {
+   "n": 454912,
+   "corr": 0.7339401190715861,
+   "sign_match": 0.9141218521384356,
+   "mean_abs_err_bp": 0.6774488499959439
+  },
+  "by_interval": {
+   "1": {
+    "n": 29835,
+    "corr": 0.7230297712913858,
+    "sign_match": 0.8858722976370035,
+    "mean_abs_err_bp": 2.3808129777666047
+   },
+   "2": {
+    "n": 1152,
+    "corr": 0.5210618144939919,
+    "sign_match": 0.7769097222222222,
+    "mean_abs_err_bp": 12.118447550843253
+   },
+   "3": {
+    "n": 5,
+    "corr": null,
+    "sign_match": 1.0,
+    "mean_abs_err_bp": 0.125
+   },
+   "4": {
+    "n": 199118,
+    "corr": 0.8462569073223258,
+    "sign_match": 0.9099980915838849,
+    "mean_abs_err_bp": 0.6918492160603859
+   },
+   "8": {
+    "n": 224802,
+    "corr": 0.8020153087068281,
+    "sign_match": 0.9222248912376224,
+    "mean_abs_err_bp": 0.38001150913072335
+   }
+  },
+  "by_year": {
+   "2023": {
+    "n": 112968,
+    "corr": 0.7634967910343551,
+    "sign_match": 0.934530132426882,
+    "mean_abs_err_bp": 0.5477831401233644
+   },
+   "2024": {
+    "n": 148184,
+    "corr": 0.8149965384300983,
+    "sign_match": 0.9337377854559197,
+    "mean_abs_err_bp": 0.4298099172899654
+   },
+   "2025": {
+    "n": 193760,
+    "corr": 0.7795385347101365,
+    "sign_match": 0.8872213047068538,
+    "mean_abs_err_bp": 0.9424375138945209
+   }
+  },
+  "at_or_above_0.10pct": {
+   "n": 7968,
+   "corr": 0.6677184891709025,
+   "sign_match": 0.9809236947791165,
+   "mean_abs_err_bp": 13.324835699284273
+  }
+ },
+ "events_stats": {
+  "no_exact_bar": 70,
+  "fallback": 266,
+  "events": 454912,
+  "bad_interval": 3
+ },
+ "universe": 530,
+ "fee_grid": "current grid on the whole window",
+ "not_modelled": [
+  "queue and impact above the calibrated 1 000 USDT",
+  "funding cap in the forecast",
+  "USDC/USDT over the 30 min hold of G1",
+  "spot and perp transfers",
+  "historic fee grid: the current grid is applied to every window"
+ ],
+ "verdict": null,
+ "traps_checked": [
+  1,
+  2,
+  4,
+  5,
+  6,
+  7,
+  10
+ ],
+ "traps_note": {
+  "5": "no PBO: 2 fixed candidates",
+  "6": "kill rule is about the signal only"
+ },
+ "provenance": {
+  "code": {
+   "head": "b96a3f3ae21f977e1347f972c3f194450b545330",
+   "dirty": false,
+   "bot": {
+    "files": {
+     "files/config.py": "07d7b02153a89b3b",
+     "files/exit_validator.py": "0979bfc8008e9043",
+     "files/_backtest_trend_start_detector.py": "5b56efa89f8e3a8c",
+     "files/_compute_early_capture.py": "f21dd6307c55e8d6",
+     ".runtime/release/runtime_overrides.json": "6f78825c315421e6",
+     "files/watchlist.json": "061e69c119e4cea1"
+    },
+    "dirty": true
+   }
+  },
+  "utc": "2026-11-06T02:38:55.036057+00:00"
+ },
+ "minutes": 7.9
+}
