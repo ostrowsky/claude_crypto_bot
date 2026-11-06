@@ -116,6 +116,26 @@ def ratio_ci(numer, denom, alpha: float = 0.05, block: int = 1, boot: int = BOOT
     return {**base, "lo": lo, "hi": hi, "ci_method": method}
 
 
+def icc(values, clusters) -> float:
+    """One-way ANOVA intraclass correlation of values by cluster."""
+    v = np.asarray(values, dtype=float)
+    order, idx = {}, []
+    for c in clusters:
+        idx.append(order.setdefault(c, len(order)))
+    idx = np.asarray(idx, dtype=np.int64)
+    k, n = len(order), len(v)
+    if k < 2 or n <= k:
+        return 0.0
+    cnt = np.bincount(idx, minlength=k).astype(float)
+    means = np.bincount(idx, weights=v, minlength=k) / cnt
+    grand = float(v.mean())
+    msb = float((cnt * (means - grand) ** 2).sum() / (k - 1))
+    msw = float(((v - means[idx]) ** 2).sum() / (n - k))
+    m0 = (n - float((cnt ** 2).sum()) / n) / (k - 1)
+    den = msb + (m0 - 1) * msw
+    return float((msb - msw) / den) if den > 0 else 0.0
+
+
 def required_n(sigma: float, delta: float, alpha: float, power: float = 0.80, m: float = 1.0, rho: float = 0.0):
     nd = NormalDist()
     n = ((nd.inv_cdf(1 - alpha / 2) + nd.inv_cdf(power)) * sigma / abs(delta)) ** 2

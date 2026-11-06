@@ -95,6 +95,23 @@ class TestRatioCI(unittest.TestCase):
         self.assertEqual(N.ratio_ci([1.0], [1.0])["ci_method"], "too_few")
 
 
+class TestICC(unittest.TestCase):
+    def test_identical_inside_clusters(self):
+        import n_common as N
+        self.assertAlmostEqual(N.icc([1.0, 1.0, 5.0, 5.0, 9.0, 9.0], [0, 0, 1, 1, 2, 2]), 1.0)
+
+    def test_independent_is_near_zero(self):
+        import n_common as N
+        rng = np.random.default_rng(4)
+        self.assertLess(abs(N.icc(list(rng.normal(size=4000)), list(np.repeat(np.arange(400), 10)))), 0.05)
+
+    def test_known_value(self):
+        import n_common as N
+        rng = np.random.default_rng(8)
+        v = np.repeat(rng.normal(size=2000), 5) + rng.normal(size=10000)
+        self.assertAlmostEqual(N.icc(list(v), list(np.repeat(np.arange(2000), 5))), 0.5, delta=0.05)
+
+
 class TestPower(unittest.TestCase):
     def test_formula(self):
         import n_common as N
