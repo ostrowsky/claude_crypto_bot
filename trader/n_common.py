@@ -99,6 +99,23 @@ def cluster_ci(values, clusters, alpha: float = 0.05, block: int = 1, boot: int 
     return {**base, "lo": lo, "hi": hi, "ci_method": method}
 
 
+def ratio_ci(numer, denom, alpha: float = 0.05, block: int = 1, boot: int = BOOT, seed: int = SEED, scale: float = 1.0) -> dict:
+    """Sum(numer) / Sum(denom) * scale; whole days are resampled."""
+    a, c = np.asarray(numer, dtype=float), np.asarray(denom, dtype=float)
+    n = len(a)
+    m = float(a.sum() / c.sum() * scale) if n and c.sum() else float("nan")
+    base = {"mean": m, "ci_level": round(1 - alpha, 6), "block": block, "boot": boot, "n": n}
+    if n < MIN_N or not c.sum():
+        return {**base, "lo": None, "hi": None, "ci_method": "too_few"}
+    b = max(1, min(block, n))
+    st, k, r = _starts(n, b, boot, seed)
+    den = _boot_sums(c, b, boot, st, k, r)
+    means = _boot_sums(a, b, boot, st, k, r) / np.where(den > 0, den, np.nan) * scale
+    means = means[np.isfinite(means)]
+    lo, hi, method = _tail_interval(means, m, alpha)
+    return {**base, "lo": lo, "hi": hi, "ci_method": method}
+
+
 def required_n(sigma: float, delta: float, alpha: float, power: float = 0.80, m: float = 1.0, rho: float = 0.0):
     nd = NormalDist()
     n = ((nd.inv_cdf(1 - alpha / 2) + nd.inv_cdf(power)) * sigma / abs(delta)) ** 2

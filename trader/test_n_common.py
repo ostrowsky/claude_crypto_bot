@@ -78,6 +78,23 @@ class TestClusterCI(unittest.TestCase):
         self.assertGreater(a["hi"] - a["lo"], 2 * (b["hi"] - b["lo"]))
 
 
+class TestRatioCI(unittest.TestCase):
+    def test_ratio_of_sums(self):
+        import n_common as N
+        r = N.ratio_ci([1.0, 3.0] * 10, [1.0, 1.0] * 10, block=1, boot=2000, scale=1e4)
+        self.assertAlmostEqual(r["mean"], 2e4)
+        self.assertEqual(r["ci_method"], "block_bootstrap_percentile")
+
+    def test_a_heavy_day_counts_by_its_denominator(self):
+        import n_common as N
+        r = N.ratio_ci([10.0] + [0.0] * 19, [10.0] + [1.0] * 19, block=1, boot=500)
+        self.assertAlmostEqual(r["mean"], 10 / 29)
+
+    def test_too_few(self):
+        import n_common as N
+        self.assertEqual(N.ratio_ci([1.0], [1.0])["ci_method"], "too_few")
+
+
 class TestPower(unittest.TestCase):
     def test_formula(self):
         import n_common as N
