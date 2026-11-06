@@ -233,6 +233,13 @@ class TestMoney(unittest.TestCase):
         self.assertAlmostEqual(r["fees"], q * 100 * 0.001)
 
 
+class TestConfigKey(unittest.TestCase):
+    def test_keys_of_the_design_grid(self):
+        import n2_quote as N
+        self.assertEqual(N.config_key(3e-4, 1000, 1000), "3|1000|1000")          # int(3e-4 * 1e4) is 2
+        self.assertEqual(N.config_key(1e-4, 250, 1000), "1|250|1000")
+
+
 class TestFxAndFunding(unittest.TestCase):
     def test_fx_has_no_lookahead(self):
         import n2_quote as N

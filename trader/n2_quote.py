@@ -113,6 +113,10 @@ def schedule(t_u, p_u, band: float = 0.5e-4, refresh: int = 1000, min_gap: int =
     return np.array(d, dtype=np.int64), np.array(F, dtype=float)
 
 
+def config_key(theta: float, l_q: int, l_h: int) -> str:
+    return f"{round(theta * 1e4)}|{l_q}|{l_h}"
+
+
 def _round(x, tick):
     return np.round(x, max(0, int(np.ceil(-np.log10(tick)))) + 3)
 
@@ -431,17 +435,17 @@ def run_window(window: str) -> dict:
                     pf = per_fill(r, usdt, cfg)
                     item = {k: r[k] for k in ("total", "spread", "fees", "slip", "funding", "fx", "unwind", "days")}
                     item.update({"n_fills": len(r["fills"]), "notional": float(sum(f["notional"] for f in r["fills"])), **pf, "theta_bp": theta * 1e4, "L_q": lq, "L_h": lh, "h_bp": h * 1e4})
-                    res.setdefault(key, {})[f"{int(theta * 1e4)}|{lq}|{lh}"] = item
+                    res.setdefault(key, {})[config_key(theta, lq, lh)] = item
                     if lq == 1000 and lh == 1000:
                         ceq = Cfg(theta=theta, l_q=lq, l_h=lh, h=h, tick=tick, slip=slip, strict=False)
                         re = simulate(usdc, usdt, ceq, fx=fx, funding_c=fc, funding_u=fu, sched=sched)
-                        res[key][f"{int(theta * 1e4)}|{lq}|{lh}"]["equal_price_sensitivity"] = {"n_fills": len(re["fills"]), "total": re["total"], "notional": float(sum(f["notional"] for f in re["fills"]))}
+                        res[key][config_key(theta, lq, lh)]["equal_price_sensitivity"] = {"n_fills": len(re["fills"]), "total": re["total"], "notional": float(sum(f["notional"] for f in re["fills"]))}
                     print(f"  {key} theta {theta * 1e4:.0f} L {lq}/{lh}: fills {len(r['fills'])} net {r['total']:.2f} spread {r['spread']:.2f} fees {r['fees']:.2f} fx {r['fx']:.2f} fund {r['funding']:.2f} unwind {r['unwind']:.2f} {round(time.time() - t0)}s", flush=True)
     pooled = {}
     for theta in THETAS:
         for lq in LAGS:
             for lh in LAGS:
-                c = f"{int(theta * 1e4)}|{lq}|{lh}"
+                c = config_key(theta, lq, lh)
                 days = sorted({d for k in res for d in res[k][c]["days"]})
                 num = [sum(res[k][c]["days"].get(d, {}).get("pnl", 0.0) for k in res) for d in days]
                 den = [sum(res[k][c]["days"].get(d, {}).get("notional", 0.0) for k in res) for d in days]
