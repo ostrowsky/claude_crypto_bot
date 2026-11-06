@@ -1,0 +1,75 @@
+{
+ "spec": "n3-1106-spec.md",
+ "stage": "exploration_control",
+ "window": [
+  "2023-01",
+  "2025-12"
+ ],
+ "draws": 40,
+ "control": "random signs on the same returns, same months, same symbols",
+ "horizons": {
+  "4": {
+   "observed": -0.04618164599306389,
+   "control_mean": 0.0010128188001085716,
+   "control_sd": 0.0037974463513908256,
+   "control_min": -0.006574096794466331,
+   "control_max": 0.01029288932877105,
+   "observed_minus_control": -0.04719446479317246,
+   "share_control_at_or_below_observed": 0.0
+  },
+  "8": {
+   "observed": -0.06773920650169307,
+   "control_mean": -0.0009671650581995738,
+   "control_sd": 0.0044929530013285025,
+   "control_min": -0.010032007249725564,
+   "control_max": 0.007490576988220726,
+   "observed_minus_control": -0.0667720414434935,
+   "share_control_at_or_below_observed": 0.0
+  },
+  "16": {
+   "observed": -0.08309348350869822,
+   "control_mean": 0.00013649568237921722,
+   "control_sd": 0.007931168850765051,
+   "control_min": -0.01110945413532503,
+   "control_max": 0.016690017778927372,
+   "observed_minus_control": -0.08322997919107744,
+   "share_control_at_or_below_observed": 0.0
+  },
+  "32": {
+   "observed": -0.09854937479181194,
+   "control_mean": 0.0009767307087280947,
+   "control_sd": 0.006698940713884088,
+   "control_min": -0.01407737857331063,
+   "control_max": 0.017764949527327014,
+   "observed_minus_control": -0.09952610550054004,
+   "share_control_at_or_below_observed": 0.0
+  },
+  "96": {
+   "observed": -0.1188004338832253,
+   "control_mean": 0.0013870943562934552,
+   "control_sd": 0.011787059072181999,
+   "control_min": -0.0245595424911323,
+   "control_max": 0.021176503028176395,
+   "observed_minus_control": -0.12018752823951875,
+   "share_control_at_or_below_observed": 0.0
+  }
+ },
+ "provenance": {
+  "code": {
+   "head": "10dd9cfc162715ae60da31e59ccef8a63ee0e365",
+   "dirty": false,
+   "bot": {
+    "files": {
+     "files/config.py": "07d7b02153a89b3b",
+     "files/exit_validator.py": "0979bfc8008e9043",
+     "files/_backtest_trend_start_detector.py": "5b56efa89f8e3a8c",
+     "files/_compute_early_capture.py": "f21dd6307c55e8d6",
+     ".runtime/release/runtime_overrides.json": "6f78825c315421e6",
+     "files/watchlist.json": "061e69c119e4cea1"
+    },
+    "dirty": true
+   }
+  },
+  "utc": "2026-11-06T01:25:04.918291+00:00"
+ }
+}

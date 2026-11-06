@@ -1042,6 +1042,14 @@ only; the 2026 window was not opened for any of them:
   - The gain is mechanical: COIN-M and USD-M rates are nearly equal (BTC −0.0007 [−0.0022, +0.0010]), and notional = capital instead of half.
   - New risk: the position is effectively USD, not USDT. Basis reached +0.74% in the USDC crisis (2023-03), worst day −0.565%, max DD −1.3% (FC −0.17%); Sharpe 8.1 vs 11.2.
   - Next by the rule: one 2026 look, the operator's call. Its power is ~10% (~181 days of archive funding). Expect ~1.8 %/yr at 2026 rates, not 7.9. The demo account's COIN-M access is unverified.
+- **N2, quoting a USDC perp at zero maker with a taker hedge on the USDT perp (2026-11-06, `n2-1106-spec.md`): REJECTED by the pilot stop.** 3 days of mainnet tape, 3 pairs (BTC, ETH, SOL), strictly-through fills.
+  - All 8 latency × width cells earn −6.2..−7.0 bp per fill, every pair negative; stop cell (θ = 3 bp, 250/250 ms) −6.31.
+  - The quote sits 6–8 bp from fair, but only 0–1 bp is captured at the fill, and the hedge costs 5 bp more. 88–99% of fills follow a > 2 bp move of the USDT perp in the previous second.
+  - No exploration or forward run, no download above 2 GB. A maker hedge or sub-250 ms reaction would be a new hypothesis.
+- **N3 stage 1, variance ratio of top-20 USDT perps (2026-11-06, `n3-1106-spec.md`): not testable at the preset δ; not refuted.** Exploration 2023–25: VR − 1 is −0.046 [−0.078, −0.020] at 1 h to −0.119 [−0.189, −0.054] at 24 h, weakening each year, far from a random-sign control (≈ 0).
+  - Power at δ = 0.02, α = 0.01 needs 151–822 months; the 2020–22 window has 30. By the design it stays closed, and the grid book (stage 2) is not run.
+  - A larger δ would be the operator's decision, since the agent has seen the effect.
+- **N1-A/B/C, USDC perps (2026-11-06, `n1-1106-spec.md`), descriptive.** USDC − USDT funding %/day: pool +0.0027 [−0.0005, +0.0051], BTC +0.0001 [−0.0017, +0.0018], ETH −0.0019 [−0.0042, −0.00004]; moving carry is not forbidden. 15 coins pass the 20 M USDC/day bar. USDC/USDT median deviation 3 bp, max 950 bp (2023-03).
 - **TM: BTC/ETH spot timing (trend, vol-managed, funding overheat) is REJECTED, 0 of 20.** None beats a circular-shift
   random timing of the same schedule, none beats buy-and-hold. Best vs constant exposure: T_sma_56 +0.027 [−0.039, +0.093]
   (`btc-eth-timing-tm-1028-spec.md`).
