@@ -1050,6 +1050,12 @@ only; the 2026 window was not opened for any of them:
   - Power at δ = 0.02, α = 0.01 needs 151–822 months; the 2020–22 window has 30. By the design it stays closed, and the grid book (stage 2) is not run.
   - A larger δ would be the operator's decision, since the agent has seen the effect.
 - **N1-A/B/C, USDC perps (2026-11-06, `n1-1106-spec.md`), descriptive.** USDC − USDT funding %/day: pool +0.0027 [−0.0005, +0.0051], BTC +0.0001 [−0.0017, +0.0018], ETH −0.0019 [−0.0042, −0.00004]; moving carry is not forbidden. 15 coins pass the 20 M USDC/day bar. USDC/USDT median deviation 3 bp, max 950 bp (2023-03).
+- **N1-D, carry with the coin as USD-M collateral, G3b (2026-11-06, `n1d-1106-spec.md`), history only: its criterion passes, but 71% of the gain is the price rise.** Costs equal to FC_PASSIVE.
+  - G3b-USDT: R +0.0415 %/day, paired vs FC +0.0304 [+0.0220, +0.0435]; G3b-USDC (from 2024-02): +0.0321, paired +0.0213 [+0.0154, +0.0311]. No auto-exchange, margin room ≥ 24×.
+  - The hedge by coin count grows the notional and the funding with price (BTC ×3.82 in the window). With the notional fixed at Q·P₀ the same engine gives R +0.0198, paired **+0.0087 [+0.0067, +0.0124]**: only this part is mechanical. The rest will not repeat on a flat or falling market.
+  - Forward at δ = 0.003 needs 25 731 days: not testable. Multi-Assets on the demo would change the margin mode of FC-DEMO: operator's decision.
+- **N5, BVOL against realized volatility (2026-11-06, `n5-1106-spec.md`), descriptive, 2023-06..2025-12: the stop did not fire, which is not a return estimate.** IV − RV: BTC +6.72 vol points (SE 1.46), ETH +3.32 (SE 1.81); round trip ~1.7 points. ETH is within noise, and in 2025 it is below the cost.
+  - Worst windows −20 and −32 points. The spread is known for 2023-05..10 only; no option fee, margin or liquidation is modelled, and the index starts after the 2022 crash. Options trading is a separate operator decision.
 - **TM: BTC/ETH spot timing (trend, vol-managed, funding overheat) is REJECTED, 0 of 20.** None beats a circular-shift
   random timing of the same schedule, none beats buy-and-hold. Best vs constant exposure: T_sma_56 +0.027 [−0.039, +0.093]
   (`btc-eth-timing-tm-1028-spec.md`).

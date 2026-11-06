@@ -1,0 +1,286 @@
+{
+ "spec": "n1d-1106-spec.md",
+ "stage": "exploration",
+ "window": {
+  "USDT": [
+   "2023-03-01",
+   "2026-01-01"
+  ],
+  "USDC": [
+   "2024-02-02",
+   "2026-01-01"
+  ]
+ },
+ "alpha_each": 0.025,
+ "delta": 0.003,
+ "candidates": {
+  "G3b-USDT": {
+   "name": "G3b-USDT",
+   "n_days": 1037,
+   "R": {
+    "mean": 0.04149458272373504,
+    "ci_level": 0.975,
+    "block": 20,
+    "boot": 20000,
+    "n": 1037,
+    "lo": 0.030912842391464312,
+    "hi": 0.05778362614076256,
+    "ci_method": "block_bootstrap_percentile"
+   },
+   "fc_on_same_days": 0.011101117716489466,
+   "paired": {
+    "5": {
+     "mean": 0.03039346500724557,
+     "ci_level": 0.975,
+     "block": 5,
+     "boot": 20000,
+     "n": 1037,
+     "lo": 0.025371525116669635,
+     "hi": 0.03745275004649815,
+     "ci_method": "block_bootstrap_percentile"
+    },
+    "20": {
+     "mean": 0.03039346500724557,
+     "ci_level": 0.975,
+     "block": 20,
+     "boot": 20000,
+     "n": 1037,
+     "lo": 0.02198700656895167,
+     "hi": 0.04347216947452825,
+     "ci_method": "block_bootstrap_percentile"
+    },
+    "60": {
+     "mean": 0.03039346500724557,
+     "ci_level": 0.975,
+     "block": 60,
+     "boot": 20000,
+     "n": 1037,
+     "lo": 0.019369316121372653,
+     "hi": 0.048707036072466535,
+     "ci_method": "block_bootstrap_percentile"
+    }
+   },
+   "paired_by_year": {
+    "2023": 0.013556331933052548,
+    "2024": 0.05265126355374529,
+    "2025": 0.02219020049405151
+   },
+   "r_by_year": {
+    "2023": 0.02482877090691551,
+    "2024": 0.0679985613808417,
+    "2025": 0.02888987649755895
+   },
+   "checks": {
+    "lo_positive": true,
+    "years_positive": true,
+    "no_exchange_above_1pct": true,
+    "margin_ge_3x": true
+   },
+   "passes": true,
+   "exchanges": 0,
+   "worst_exchange_share": 0.0,
+   "min_margin_ratio": 24.440231272879434,
+   "sd_day": 0.062151776607936506,
+   "sharpe_yr": 12.755112292712386,
+   "worst_day": -0.5237160075963976,
+   "max_dd_pct": -0.5237160075963976,
+   "pairs": {
+    "BTCUSDT": {
+     "skipped_days": 0,
+     "funding_events": 3108,
+     "funding_without_bar": 0,
+     "funding_usd": 0.3308472533413408,
+     "costs_usd": 0.007302914696395797,
+     "min_margin_ratio": 24.440231272879434,
+     "n_coin": 2.111916669797076e-05,
+     "n_short": 2.111916669797076e-05
+    },
+    "ETHUSDT": {
+     "skipped_days": 0,
+     "funding_events": 3108,
+     "funding_without_bar": 0,
+     "funding_usd": 0.21716686361593332,
+     "costs_usd": 0.0043191982420409305,
+     "min_margin_ratio": 40.87596081541797,
+     "n_coin": 0.0003047179391334143,
+     "n_short": 0.0003047179391334143
+    }
+   },
+   "power_forward": {
+    "delta": 0.003,
+    "alpha": 0.025,
+    "sd_paired_day": 0.05662484070373116,
+    "rho": 0.3472975487765907,
+    "n": 3386.2988040647965,
+    "n_eff": 25731.311011524078,
+    "m": 20
+   },
+   "slip_sensitivity": {
+    "0bp": 0.041895925971685476,
+    "20bp": 0.04089234062792716
+   }
+  },
+  "G3b-USDC": {
+   "name": "G3b-USDC",
+   "n_days": 699,
+   "R": {
+    "mean": 0.0321126066212009,
+    "ci_level": 0.975,
+    "block": 20,
+    "boot": 20000,
+    "n": 699,
+    "lo": 0.023082665991379415,
+    "hi": 0.045858538474082375,
+    "ci_method": "block_bootstrap_percentile"
+   },
+   "fc_on_same_days": 0.010796664627374811,
+   "paired": {
+    "5": {
+     "mean": 0.02131594199382609,
+     "ci_level": 0.975,
+     "block": 5,
+     "boot": 20000,
+     "n": 699,
+     "lo": 0.01739674426807439,
+     "hi": 0.027630917139527086,
+     "ci_method": "block_bootstrap_percentile"
+    },
+    "20": {
+     "mean": 0.02131594199382609,
+     "ci_level": 0.975,
+     "block": 20,
+     "boot": 20000,
+     "n": 699,
+     "lo": 0.015434596749919868,
+     "hi": 0.03109322576495937,
+     "ci_method": "block_bootstrap_percentile"
+    },
+    "60": {
+     "mean": 0.02131594199382609,
+     "ci_level": 0.975,
+     "block": 60,
+     "boot": 20000,
+     "n": 699,
+     "lo": 0.01338903672866684,
+     "hi": 0.03318734435569577,
+     "ci_method": "block_bootstrap_percentile"
+    }
+   },
+   "paired_by_year": {
+    "2024": 0.029846121862088956,
+    "2025": 0.013510243155470478
+   },
+   "r_by_year": {
+    "2024": 0.04512003453650445,
+    "2025": 0.020209919158977924
+   },
+   "checks": {
+    "lo_positive": true,
+    "years_positive": true,
+    "no_exchange_above_1pct": true,
+    "margin_ge_3x": true
+   },
+   "passes": true,
+   "exchanges": 0,
+   "worst_exchange_share": 0.0,
+   "min_margin_ratio": 38.827713798670025,
+   "sd_day": 0.05537412848208754,
+   "sharpe_yr": 11.07937054505783,
+   "worst_day": -0.37135228493487826,
+   "max_dd_pct": -0.37135228493487826,
+   "pairs": {
+    "BTCUSDT": {
+     "skipped_days": 0,
+     "funding_events": 2094,
+     "funding_without_bar": 0,
+     "funding_usd": 0.14787326143994683,
+     "costs_usd": 0.004472262601441194,
+     "min_margin_ratio": 38.827713798670025,
+     "n_coin": 1.133019098695744e-05,
+     "n_short": 1.133019098695744e-05
+    },
+    "ETHUSDT": {
+     "skipped_days": 0,
+     "funding_events": 2094,
+     "funding_without_bar": 0,
+     "funding_usd": 0.11042657254489845,
+     "costs_usd": 0.0033551383249550166,
+     "min_margin_ratio": 51.687154648536854,
+     "n_coin": 0.0002119917650883086,
+     "n_short": 0.0002119917650883086
+    }
+   },
+   "power_forward": {
+    "delta": 0.003,
+    "alpha": 0.025,
+    "sd_paired_day": 0.052507213398572214,
+    "rho": 0.08943710862748233,
+    "n": 2911.71746705184,
+    "n_eff": 7859.613703523649,
+    "m": 20
+   },
+   "fx_stress": {
+    "note": "loss on the whole book = notional share x |1 - rate|, no recovery assumed",
+    "by_year_p999": {
+     "2023": 5.445673800000396,
+     "2024": 0.23519999999999588,
+     "2025": 0.2057999999999991
+    },
+    "max_pct": 9.309999999999997
+   }
+  }
+ },
+ "fc_passive": {
+  "mean_pct": 0.0111,
+  "margin_stops": 5,
+  "liquidations": 0,
+  "r_by_year": {
+   "2023": 0.011272438973862967,
+   "2024": 0.015347297827096417,
+   "2025": 0.006699676003507444
+  }
+ },
+ "reference_g3a": {
+  "R": 0.0216,
+  "paired": 0.0105,
+  "note": "COIN-M, USD basis risk"
+ },
+ "costs": "carry.fees(1) on spot and USDT perp, exactly as the benchmark; USDC taker 0.04% + the same slip",
+ "not_modelled": [
+  "USDC collateral transfer",
+  "Binance auto-exchange terms beyond the design",
+  "haircut changes",
+  "margin mode switch on a live FC-DEMO",
+  "interest on USDT balance"
+ ],
+ "verdict": null,
+ "traps_checked": [
+  4,
+  5,
+  7,
+  9,
+  10
+ ],
+ "traps_note": {
+  "5": "no PBO: 2 fixed candidates"
+ },
+ "provenance": {
+  "code": {
+   "head": "a2c0cfe311ddba10b84cda05b4ed1ef71ef2de79",
+   "dirty": false,
+   "bot": {
+    "files": {
+     "files/config.py": "07d7b02153a89b3b",
+     "files/exit_validator.py": "0979bfc8008e9043",
+     "files/_backtest_trend_start_detector.py": "5b56efa89f8e3a8c",
+     "files/_compute_early_capture.py": "f21dd6307c55e8d6",
+     ".runtime/release/runtime_overrides.json": "6f78825c315421e6",
+     "files/watchlist.json": "061e69c119e4cea1"
+    },
+    "dirty": true
+   }
+  },
+  "utc": "2026-11-06T02:30:51.438980+00:00"
+ },
+ "minutes": 0.46
+}

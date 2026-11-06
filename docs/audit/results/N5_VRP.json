@@ -1,0 +1,232 @@
+{
+ "spec": "n5-1106-spec.md",
+ "stage": "descriptive",
+ "window": [
+  "2023-06-20",
+  "2025-12-01"
+ ],
+ "coins": {
+  "BTC": {
+   "coin": "BTC",
+   "n": 887,
+   "window": [
+    "2023-06-22",
+    "2025-12-01"
+   ],
+   "iv_mean": 53.141816347237885,
+   "rv_mean": 46.42630282392059,
+   "iv_rv_ratio": 1.1446488976041662,
+   "index_assumption_ok": true,
+   "corr": 0.5114979937321419,
+   "gap": {
+    "mean": 6.715513523317294,
+    "se": 1.4569754236234416,
+    "n": 887,
+    "lag": 30
+   },
+   "gap_median": 9.377745628605744,
+   "share_iv_above": 0.7474633596392334,
+   "gap_by_year": {
+    "2023": 6.38559360058951,
+    "2024": 8.089400567822022,
+    "2025": 5.423100037271922
+   },
+   "variance_gap": {
+    "mean": 638.5242281118394,
+    "se": 150.3178466486799,
+    "n": 887,
+    "lag": 30
+   },
+   "non_overlap": {
+    "n": 30,
+    "mean": 7.227833526357672,
+    "se": 1.6224915890334
+   },
+   "worst_windows": [
+    [
+     "2024-02-24",
+     -19.5664568917772
+    ],
+    [
+     "2023-08-13",
+     -18.94135605466238
+    ],
+    [
+     "2024-08-01",
+     -18.85679159710905
+    ],
+    [
+     "2023-08-14",
+     -18.415111277071453
+    ],
+    [
+     "2024-07-13",
+     -18.395667875237734
+    ]
+   ],
+   "max_rv_above_iv": 19.5664568917772,
+   "days_without_iv": [
+    "2023-06-20",
+    "2023-06-21",
+    "2023-09-25",
+    "2023-10-24",
+    "2024-06-11",
+    "2024-06-12",
+    "2024-06-25",
+    "2024-06-26",
+    "2024-06-30"
+   ],
+   "known_gaps_confirmed": [
+    "2023-09-25",
+    "2023-10-24",
+    "2024-06-11",
+    "2024-06-12",
+    "2024-06-30"
+   ],
+   "days_without_rv": 0,
+   "cost": {
+    "spread_median_points": 0.9609525006021138,
+    "spread_days": 58,
+    "spread_period": [
+     "2023-05-18",
+     "2023-10-23"
+    ],
+    "delta_hedge_leland_points": 0.7567894595872622,
+    "total_points": 1.717741960189376
+   },
+   "stop": false
+  },
+  "ETH": {
+   "coin": "ETH",
+   "n": 887,
+   "window": [
+    "2023-06-22",
+    "2025-12-01"
+   ],
+   "iv_mean": 66.31649673055243,
+   "rv_mean": 62.99591162725724,
+   "iv_rv_ratio": 1.0527111207302289,
+   "index_assumption_ok": true,
+   "corr": 0.5472195761491253,
+   "gap": {
+    "mean": 3.320585103295177,
+    "se": 1.8102339869924922,
+    "n": 887,
+    "lag": 30
+   },
+   "gap_median": 5.870603648558657,
+   "share_iv_above": 0.6505073280721533,
+   "gap_by_year": {
+    "2023": 2.6863193337842426,
+    "2024": 6.0823421982459625,
+    "2025": 0.7061088367260855
+   },
+   "variance_gap": {
+    "mean": 340.5714247543089,
+    "se": 243.71775565678988,
+    "n": 887,
+    "lag": 30
+   },
+   "non_overlap": {
+    "n": 30,
+    "mean": 3.3788919791913936,
+    "se": 2.142434073930107
+   },
+   "worst_windows": [
+    [
+     "2023-08-13",
+     -31.602122155174698
+    ],
+    [
+     "2023-08-16",
+     -31.202927484752628
+    ],
+    [
+     "2023-08-12",
+     -31.099478797149473
+    ],
+    [
+     "2024-08-01",
+     -31.037157867057957
+    ],
+    [
+     "2023-08-15",
+     -30.72067879216067
+    ]
+   ],
+   "max_rv_above_iv": 31.602122155174698,
+   "days_without_iv": [
+    "2023-06-20",
+    "2023-06-21",
+    "2023-09-25",
+    "2023-10-24",
+    "2024-06-11",
+    "2024-06-12",
+    "2024-06-25",
+    "2024-06-26",
+    "2024-06-30"
+   ],
+   "known_gaps_confirmed": [
+    "2023-09-25",
+    "2023-10-24",
+    "2024-06-11",
+    "2024-06-12",
+    "2024-06-30"
+   ],
+   "days_without_rv": 0,
+   "cost": {
+    "spread_median_points": 0.9949136705795734,
+    "spread_days": 54,
+    "spread_period": [
+     "2023-05-18",
+     "2023-10-23"
+    ],
+    "delta_hedge_leland_points": 0.757847910778843,
+    "total_points": 1.7527615813584163
+   },
+   "stop": false
+  }
+ },
+ "decision": {
+  "BTC": "report to the operator: options need a separate decision",
+  "ETH": "report to the operator: options need a separate decision"
+ },
+ "not_modelled": [
+  "option exchange fee",
+  "the spread measured on 2023-05..10 only, carried over the window",
+  "margin and liquidation of a short option",
+  "vega and gamma path, rehedging more often than daily",
+  "index formula details given as images on the page"
+ ],
+ "verdict": null,
+ "traps_checked": [
+  1,
+  4,
+  8,
+  10
+ ],
+ "traps_note": {
+  "1": "RV is strictly after IV",
+  "4": "descriptive, no power claim",
+  "8": "mainnet archive only"
+ },
+ "provenance": {
+  "code": {
+   "head": "a2c0cfe311ddba10b84cda05b4ed1ef71ef2de79",
+   "dirty": false,
+   "bot": {
+    "files": {
+     "files/config.py": "07d7b02153a89b3b",
+     "files/exit_validator.py": "0979bfc8008e9043",
+     "files/_backtest_trend_start_detector.py": "5b56efa89f8e3a8c",
+     "files/_compute_early_capture.py": "f21dd6307c55e8d6",
+     ".runtime/release/runtime_overrides.json": "6f78825c315421e6",
+     "files/watchlist.json": "061e69c119e4cea1"
+    },
+    "dirty": true
+   }
+  },
+  "utc": "2026-11-06T02:24:36.297830+00:00"
+ },
+ "minutes": 0.04
+}
