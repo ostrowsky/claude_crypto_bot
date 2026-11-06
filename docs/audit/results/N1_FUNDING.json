@@ -1,0 +1,1037 @@
+{
+ "spec": "n1-1106-spec.md",
+ "stage": "descriptive",
+ "window": [
+  "2024-02-02",
+  "2025-12-31"
+ ],
+ "metric": "daily funding USDC - USDT, %/day",
+ "delta": 0.002,
+ "pool": {
+  "mean": 0.002691933814356223,
+  "ci_level": 0.95,
+  "block": 20,
+  "boot": 20000,
+  "n": 699,
+  "lo": -0.00047612753037482193,
+  "hi": 0.005125178322195993,
+  "ci_method": "block_bootstrap_percentile"
+ },
+ "pool_blocks": {
+  "5": {
+   "mean": 0.002691933814356223,
+   "ci_level": 0.95,
+   "block": 5,
+   "boot": 20000,
+   "n": 699,
+   "lo": 0.0007685164145450626,
+   "hi": 0.004349768130868382,
+   "ci_method": "block_bootstrap_percentile"
+  },
+  "20": {
+   "mean": 0.002691933814356223,
+   "ci_level": 0.95,
+   "block": 20,
+   "boot": 20000,
+   "n": 699,
+   "lo": -0.00047612753037482193,
+   "hi": 0.005125178322195993,
+   "ci_method": "block_bootstrap_percentile"
+  },
+  "60": {
+   "mean": 0.002691933814356223,
+   "ci_level": 0.95,
+   "block": 60,
+   "boot": 20000,
+   "n": 699,
+   "lo": -8.160623771388165e-05,
+   "hi": 0.005839115161167379,
+   "ci_method": "block_bootstrap_percentile"
+  }
+ },
+ "pool_by_year": {
+  "2024": 0.0004414413183682637,
+  "2025": 0.00475128859150685
+ },
+ "pool_transfer_forbidden": false,
+ "per_symbol": {
+  "1000BONKUSDC": {
+   "launch": "2024-05-02",
+   "from": "2024-06-01",
+   "n_days": 579,
+   "usdc_mean": 0.017630911917098452,
+   "usdt_mean": 0.010394215889464594,
+   "diff": {
+    "mean": 0.007236696027633851,
+    "ci_level": 0.95,
+    "block": 20,
+    "boot": 20000,
+    "n": 579,
+    "lo": 0.0038393575129533723,
+    "hi": 0.011170993091537141,
+    "ci_method": "block_bootstrap_percentile"
+   },
+   "sigma": 0.022325802704389608,
+   "dropped_incomplete_days": {
+    "usdc": 0,
+    "usdt": 0
+   },
+   "transfer_forbidden": false
+  },
+  "1000PEPEUSDC": {
+   "launch": "2024-03-07",
+   "from": "2024-04-06",
+   "n_days": 635,
+   "usdc_mean": 0.021270685039370078,
+   "usdt_mean": 0.01828244881889764,
+   "diff": {
+    "mean": 0.0029882362204724407,
+    "ci_level": 0.95,
+    "block": 20,
+    "boot": 20000,
+    "n": 635,
+    "lo": -0.0010567968503936982,
+    "hi": 0.006733593700787401,
+    "ci_method": "block_bootstrap_percentile"
+   },
+   "sigma": 0.026349685015403673,
+   "dropped_incomplete_days": {
+    "usdc": 1,
+    "usdt": 0
+   },
+   "transfer_forbidden": false
+  },
+  "1000SHIBUSDC": {
+   "launch": "2024-03-28",
+   "from": "2024-04-27",
+   "n_days": 614,
+   "usdc_mean": 0.015586070032573292,
+   "usdt_mean": 0.008379584690553747,
+   "diff": {
+    "mean": 0.007206485342019545,
+    "ci_level": 0.95,
+    "block": 20,
+    "boot": 20000,
+    "n": 614,
+    "lo": 0.004204973941368059,
+    "hi": 0.009403885993485333,
+    "ci_method": "block_bootstrap_percentile"
+   },
+   "sigma": 0.022935914067673147,
+   "dropped_incomplete_days": {
+    "usdc": 1,
+    "usdt": 0
+   },
+   "transfer_forbidden": false
+  },
+  "AAVEUSDC": {
+   "launch": "2025-06-16",
+   "from": "2025-07-16",
+   "n_days": 169,
+   "usdc_mean": 0.02428171597633136,
+   "usdt_mean": 0.01369903550295858,
+   "diff": {
+    "mean": 0.010582680473372783,
+    "ci_level": 0.95,
+    "block": 20,
+    "boot": 20000,
+    "n": 169,
+    "lo": 0.007684360946745563,
+    "hi": 0.013144331360946747,
+    "ci_method": "block_bootstrap_percentile"
+   },
+   "sigma": 0.011359000788326402,
+   "dropped_incomplete_days": {
+    "usdc": 1,
+    "usdt": 0
+   },
+   "transfer_forbidden": false
+  },
+  "ADAUSDC": {
+   "launch": "2025-03-06",
+   "from": "2025-04-05",
+   "n_days": 271,
+   "usdc_mean": 0.016866092250922515,
+   "usdt_mean": 0.01335188929889299,
+   "diff": {
+    "mean": 0.003514202952029521,
+    "ci_level": 0.95,
+    "block": 20,
+    "boot": 20000,
+    "n": 271,
+    "lo": -0.0021068007380073833,
+    "hi": 0.008228726937269374,
+    "ci_method": "block_bootstrap_percentile"
+   },
+   "sigma": 0.03677281138890313,
+   "dropped_incomplete_days": {
+    "usdc": 1,
+    "usdt": 0
+   },
+   "transfer_forbidden": false
+  },
+  "ARBUSDC": {
+   "launch": "2024-04-18",
+   "from": "2024-05-18",
+   "n_days": 593,
+   "usdc_mean": 0.02394178246205734,
+   "usdt_mean": 0.01926261888701518,
+   "diff": {
+    "mean": 0.00467916357504216,
+    "ci_level": 0.95,
+    "block": 20,
+    "boot": 20000,
+    "n": 593,
+    "lo": 0.001328689713322092,
+    "hi": 0.007570713322091068,
+    "ci_method": "block_bootstrap_percentile"
+   },
+   "sigma": 0.018487019047027497,
+   "dropped_incomplete_days": {
+    "usdc": 1,
+    "usdt": 0
+   },
+   "transfer_forbidden": false
+  },
+  "AVAXUSDC": {
+   "launch": "2024-03-20",
+   "from": "2024-04-19",
+   "n_days": 622,
+   "usdc_mean": 0.012157122186495178,
+   "usdt_mean": 0.004403036977491962,
+   "diff": {
+    "mean": 0.007754085209003215,
+    "ci_level": 0.95,
+    "block": 20,
+    "boot": 20000,
+    "n": 622,
+    "lo": 0.004880590032154329,
+    "hi": 0.010000180064308676,
+    "ci_method": "block_bootstrap_percentile"
+   },
+   "sigma": 0.019317939412226003,
+   "dropped_incomplete_days": {
+    "usdc": 1,
+    "usdt": 0
+   },
+   "transfer_forbidden": false
+  },
+  "BCHUSDC": {
+   "launch": "2024-04-04",
+   "from": "2024-05-04",
+   "n_days": 607,
+   "usdc_mean": -0.003752571663920921,
+   "usdt_mean": -0.010118532125205932,
+   "diff": {
+    "mean": 0.006365960461285008,
+    "ci_level": 0.95,
+    "block": 20,
+    "boot": 20000,
+    "n": 607,
+    "lo": 0.0031336902800658947,
+    "hi": 0.00911038879736408,
+    "ci_method": "block_bootstrap_percentile"
+   },
+   "sigma": 0.01965308874904838,
+   "dropped_incomplete_days": {
+    "usdc": 1,
+    "usdt": 0
+   },
+   "transfer_forbidden": false
+  },
+  "BIOUSDC": {
+   "launch": "2025-08-25",
+   "from": "2025-09-24",
+   "n_days": 99,
+   "usdc_mean": -0.34940444444444446,
+   "usdt_mean": -0.38828605050505055,
+   "diff": {
+    "mean": 0.03888160606060608,
+    "ci_level": 0.95,
+    "block": 20,
+    "boot": 20000,
+    "n": 99,
+    "lo": 0.016466898989899,
+    "hi": 0.07046052525252532,
+    "ci_method": "block_bootstrap_percentile"
+   },
+   "sigma": 0.05876582211518738,
+   "dropped_incomplete_days": {
+    "usdc": 1,
+    "usdt": 1
+   },
+   "transfer_forbidden": false
+  },
+  "BNBUSDC": {
+   "launch": "2024-01-03",
+   "from": "2024-02-02",
+   "n_days": 699,
+   "usdc_mean": -0.006043028612303291,
+   "usdt_mean": -0.004598434907010014,
+   "diff": {
+    "mean": -0.0014445937052932761,
+    "ci_level": 0.95,
+    "block": 20,
+    "boot": 20000,
+    "n": 699,
+    "lo": -0.00539354077253219,
+    "hi": 0.0016815622317596537,
+    "ci_method": "block_bootstrap_percentile"
+   },
+   "sigma": 0.021799807575010096,
+   "dropped_incomplete_days": {
+    "usdc": 1,
+    "usdt": 0
+   },
+   "transfer_forbidden": false
+  },
+  "BOMEUSDC": {
+   "launch": "2024-04-25",
+   "from": "2024-05-25",
+   "n_days": 586,
+   "usdc_mean": 0.026312354948805464,
+   "usdt_mean": 0.022480066552901027,
+   "diff": {
+    "mean": 0.003832288395904437,
+    "ci_level": 0.95,
+    "block": 20,
+    "boot": 20000,
+    "n": 586,
+    "lo": -0.00043537372013651554,
+    "hi": 0.006599320819112632,
+    "ci_method": "block_bootstrap_percentile"
+   },
+   "sigma": 0.029454868703764445,
+   "dropped_incomplete_days": {
+    "usdc": 1,
+    "usdt": 0
+   },
+   "transfer_forbidden": false
+  },
+  "BTCUSDC": {
+   "launch": "2024-01-03",
+   "from": "2024-02-02",
+   "n_days": 699,
+   "usdc_mean": 0.022895998569384835,
+   "usdt_mean": 0.02279559799713877,
+   "diff": {
+    "mean": 0.00010040057224606611,
+    "ci_level": 0.95,
+    "block": 20,
+    "boot": 20000,
+    "n": 699,
+    "lo": -0.0016664749642346208,
+    "hi": 0.0017618884120171676,
+    "ci_method": "block_bootstrap_percentile"
+   },
+   "sigma": 0.011846599549213547,
+   "dropped_incomplete_days": {
+    "usdc": 1,
+    "usdt": 0
+   },
+   "transfer_forbidden": false
+  },
+  "CRVUSDC": {
+   "launch": "2024-07-04",
+   "from": "2024-08-03",
+   "n_days": 516,
+   "usdc_mean": 0.017160676356589154,
+   "usdt_mean": 0.01581008914728682,
+   "diff": {
+    "mean": 0.0013505872093023254,
+    "ci_level": 0.95,
+    "block": 20,
+    "boot": 20000,
+    "n": 516,
+    "lo": -0.0019083779069767428,
+    "hi": 0.005646406976744185,
+    "ci_method": "block_bootstrap_percentile"
+   },
+   "sigma": 0.02220392746799607,
+   "dropped_incomplete_days": {
+    "usdc": 1,
+    "usdt": 0
+   },
+   "transfer_forbidden": false
+  },
+  "DOGEUSDC": {
+   "launch": "2024-01-18",
+   "from": "2024-02-17",
+   "n_days": 684,
+   "usdc_mean": 0.025689447368421058,
+   "usdt_mean": 0.024234912280701754,
+   "diff": {
+    "mean": 0.0014545350877192985,
+    "ci_level": 0.95,
+    "block": 20,
+    "boot": 20000,
+    "n": 684,
+    "lo": -0.0015461476608187117,
+    "hi": 0.00440009941520468,
+    "ci_method": "block_bootstrap_percentile"
+   },
+   "sigma": 0.02089461909372778,
+   "dropped_incomplete_days": {
+    "usdc": 1,
+    "usdt": 0
+   },
+   "transfer_forbidden": false
+  },
+  "ENAUSDC": {
+   "launch": "2024-05-02",
+   "from": "2024-06-01",
+   "n_days": 579,
+   "usdc_mean": -0.042415526770293616,
+   "usdt_mean": -0.05164930224525043,
+   "diff": {
+    "mean": 0.009233775474956822,
+    "ci_level": 0.95,
+    "block": 20,
+    "boot": 20000,
+    "n": 579,
+    "lo": 0.0051177305699482,
+    "hi": 0.014596134715025907,
+    "ci_method": "block_bootstrap_percentile"
+   },
+   "sigma": 0.0356098417941372,
+   "dropped_incomplete_days": {
+    "usdc": 0,
+    "usdt": 1
+   },
+   "transfer_forbidden": false
+  },
+  "ETHFIUSDC": {
+   "launch": "2024-05-02",
+   "from": "2024-06-01",
+   "n_days": 579,
+   "usdc_mean": -0.009815561312607947,
+   "usdt_mean": -0.00041483937823834035,
+   "diff": {
+    "mean": -0.009400721934369603,
+    "ci_level": 0.95,
+    "block": 20,
+    "boot": 20000,
+    "n": 579,
+    "lo": -0.0264803713298791,
+    "hi": 0.0036019775474956817,
+    "ci_method": "block_bootstrap_percentile"
+   },
+   "sigma": 0.10037195865776581,
+   "dropped_incomplete_days": {
+    "usdc": 0,
+    "usdt": 1
+   },
+   "transfer_forbidden": false
+  },
+  "ETHUSDC": {
+   "launch": "2024-01-03",
+   "from": "2024-02-02",
+   "n_days": 699,
+   "usdc_mean": 0.02210153075822604,
+   "usdt_mean": 0.023955331902718167,
+   "diff": {
+    "mean": -0.0018538011444921311,
+    "ci_level": 0.95,
+    "block": 20,
+    "boot": 20000,
+    "n": 699,
+    "lo": -0.004227885550786841,
+    "hi": -4.449213161659445e-05,
+    "ci_method": "block_bootstrap_percentile"
+   },
+   "sigma": 0.013400223084966738,
+   "dropped_incomplete_days": {
+    "usdc": 1,
+    "usdt": 0
+   },
+   "transfer_forbidden": false
+  },
+  "FILUSDC": {
+   "launch": "2024-04-18",
+   "from": "2024-05-18",
+   "n_days": 593,
+   "usdc_mean": 0.01930336930860034,
+   "usdt_mean": 0.014986839797639125,
+   "diff": {
+    "mean": 0.0043165295109612156,
+    "ci_level": 0.95,
+    "block": 20,
+    "boot": 20000,
+    "n": 593,
+    "lo": 0.00134860033726813,
+    "hi": 0.007135418212478924,
+    "ci_method": "block_bootstrap_percentile"
+   },
+   "sigma": 0.023105374524303512,
+   "dropped_incomplete_days": {
+    "usdc": 1,
+    "usdt": 0
+   },
+   "transfer_forbidden": false
+  },
+  "HBARUSDC": {
+   "launch": "2025-03-07",
+   "from": "2025-04-06",
+   "n_days": 270,
+   "usdc_mean": 0.010473333333333336,
+   "usdt_mean": 0.007158596296296296,
+   "diff": {
+    "mean": 0.003314737037037038,
+    "ci_level": 0.95,
+    "block": 20,
+    "boot": 20000,
+    "n": 270,
+    "lo": -0.006827955555555558,
+    "hi": 0.011012122222222222,
+    "ci_method": "block_bootstrap_percentile"
+   },
+   "sigma": 0.04153407129747788,
+   "dropped_incomplete_days": {
+    "usdc": 1,
+    "usdt": 0
+   },
+   "transfer_forbidden": false
+  },
+  "IPUSDC": {
+   "launch": "2025-03-05",
+   "from": "2025-04-04",
+   "n_days": 272,
+   "usdc_mean": -0.14643223529411764,
+   "usdt_mean": -0.1556482279411765,
+   "diff": {
+    "mean": 0.009215992647058819,
+    "ci_level": 0.95,
+    "block": 20,
+    "boot": 20000,
+    "n": 272,
+    "lo": -0.007998974264705883,
+    "hi": 0.021903011029411754,
+    "ci_method": "block_bootstrap_percentile"
+   },
+   "sigma": 0.05582605845631119,
+   "dropped_incomplete_days": {
+    "usdc": 1,
+    "usdt": 1
+   },
+   "transfer_forbidden": false
+  },
+  "KAITOUSDC": {
+   "launch": "2025-03-05",
+   "from": "2025-04-04",
+   "n_days": 272,
+   "usdc_mean": -0.18814957720588238,
+   "usdt_mean": -0.19094470220588236,
+   "diff": {
+    "mean": 0.002795125000000001,
+    "ci_level": 0.95,
+    "block": 20,
+    "boot": 20000,
+    "n": 272,
+    "lo": -0.013058264705882354,
+    "hi": 0.013212224264705884,
+    "ci_method": "block_bootstrap_percentile"
+   },
+   "sigma": 0.04889163094849165,
+   "dropped_incomplete_days": {
+    "usdc": 1,
+    "usdt": 1
+   },
+   "transfer_forbidden": false
+  },
+  "LINKUSDC": {
+   "launch": "2024-02-16",
+   "from": "2024-03-17",
+   "n_days": 655,
+   "usdc_mean": 0.024255511450381684,
+   "usdt_mean": 0.020314499236641224,
+   "diff": {
+    "mean": 0.003941012213740458,
+    "ci_level": 0.95,
+    "block": 20,
+    "boot": 20000,
+    "n": 655,
+    "lo": 0.0011656427480916023,
+    "hi": 0.0063761618320610685,
+    "ci_method": "block_bootstrap_percentile"
+   },
+   "sigma": 0.02112360910673269,
+   "dropped_incomplete_days": {
+    "usdc": 0,
+    "usdt": 0
+   },
+   "transfer_forbidden": false
+  },
+  "LTCUSDC": {
+   "launch": "2024-04-11",
+   "from": "2024-05-11",
+   "n_days": 600,
+   "usdc_mean": 0.023876315000000002,
+   "usdt_mean": 0.020107076666666668,
+   "diff": {
+    "mean": 0.0037692383333333334,
+    "ci_level": 0.95,
+    "block": 20,
+    "boot": 20000,
+    "n": 600,
+    "lo": 0.0017869116666666678,
+    "hi": 0.005745523333333336,
+    "ci_method": "block_bootstrap_percentile"
+   },
+   "sigma": 0.013250418126197466,
+   "dropped_incomplete_days": {
+    "usdc": 1,
+    "usdt": 0
+   },
+   "transfer_forbidden": false
+  },
+  "MATICUSDC": {
+   "launch": "2024-04-24",
+   "from": "2024-05-24",
+   "n_days": 587,
+   "usdc_mean": 0.02902287563884157,
+   "usdt_mean": 0.029355190800681434,
+   "diff": {
+    "mean": -0.00033231516183986363,
+    "ci_level": 0.95,
+    "block": 20,
+    "boot": 20000,
+    "n": 587,
+    "lo": -0.0033964156729131183,
+    "hi": 0.0019367086882453152,
+    "ci_method": "block_bootstrap_percentile"
+   },
+   "sigma": 0.02820037534717087,
+   "dropped_incomplete_days": {
+    "usdc": 1,
+    "usdt": 0
+   },
+   "transfer_forbidden": false
+  },
+  "NEARUSDC": {
+   "launch": "2024-04-11",
+   "from": "2024-05-11",
+   "n_days": 600,
+   "usdc_mean": 0.022365316666666666,
+   "usdt_mean": 0.012378293333333335,
+   "diff": {
+    "mean": 0.009987023333333334,
+    "ci_level": 0.95,
+    "block": 20,
+    "boot": 20000,
+    "n": 600,
+    "lo": 0.006962333333333334,
+    "hi": 0.013438641666666674,
+    "ci_method": "block_bootstrap_percentile"
+   },
+   "sigma": 0.019168515814838014,
+   "dropped_incomplete_days": {
+    "usdc": 1,
+    "usdt": 0
+   },
+   "transfer_forbidden": false
+  },
+  "NEOUSDC": {
+   "launch": "2024-04-18",
+   "from": "2024-05-18",
+   "n_days": 593,
+   "usdc_mean": 0.022367320404721752,
+   "usdt_mean": 0.01894751939291737,
+   "diff": {
+    "mean": 0.0034198010118043844,
+    "ci_level": 0.95,
+    "block": 20,
+    "boot": 20000,
+    "n": 593,
+    "lo": 0.0009072833052276568,
+    "hi": 0.006451364249578418,
+    "ci_method": "block_bootstrap_percentile"
+   },
+   "sigma": 0.017447481078675577,
+   "dropped_incomplete_days": {
+    "usdc": 1,
+    "usdt": 0
+   },
+   "transfer_forbidden": false
+  },
+  "ORDIUSDC": {
+   "launch": "2024-02-22",
+   "from": "2024-03-23",
+   "n_days": 649,
+   "usdc_mean": 0.026242716486902927,
+   "usdt_mean": 0.024009226502311253,
+   "diff": {
+    "mean": 0.0022334899845916803,
+    "ci_level": 0.95,
+    "block": 20,
+    "boot": 20000,
+    "n": 649,
+    "lo": -0.003459023112480742,
+    "hi": 0.0066347303543913706,
+    "ci_method": "block_bootstrap_percentile"
+   },
+   "sigma": 0.02917264281199233,
+   "dropped_incomplete_days": {
+    "usdc": 1,
+    "usdt": 0
+   },
+   "transfer_forbidden": false
+  },
+  "PENGUUSDC": {
+   "launch": "2025-07-23",
+   "from": "2025-08-22",
+   "n_days": 132,
+   "usdc_mean": 0.0026205530303030295,
+   "usdt_mean": -0.004675227272727275,
+   "diff": {
+    "mean": 0.007295780303030306,
+    "ci_level": 0.95,
+    "block": 20,
+    "boot": 20000,
+    "n": 132,
+    "lo": 0.0002646363636363701,
+    "hi": 0.013690765151515155,
+    "ci_method": "block_bootstrap_percentile"
+   },
+   "sigma": 0.023389640729175692,
+   "dropped_incomplete_days": {
+    "usdc": 1,
+    "usdt": 1
+   },
+   "transfer_forbidden": false
+  },
+  "PNUTUSDC": {
+   "launch": "2025-03-07",
+   "from": "2025-04-06",
+   "n_days": 270,
+   "usdc_mean": 0.00999681851851852,
+   "usdt_mean": 0.009681062962962964,
+   "diff": {
+    "mean": 0.0003157555555555586,
+    "ci_level": 0.95,
+    "block": 20,
+    "boot": 20000,
+    "n": 270,
+    "lo": -0.010371285185185188,
+    "hi": 0.007686422222222222,
+    "ci_method": "block_bootstrap_percentile"
+   },
+   "sigma": 0.029575157692224577,
+   "dropped_incomplete_days": {
+    "usdc": 1,
+    "usdt": 1
+   },
+   "transfer_forbidden": false
+  },
+  "SOLUSDC": {
+   "launch": "2024-01-03",
+   "from": "2024-02-02",
+   "n_days": 699,
+   "usdc_mean": 0.019175286123032906,
+   "usdt_mean": 0.018323243204577972,
+   "diff": {
+    "mean": 0.0008520429184549361,
+    "ci_level": 0.95,
+    "block": 20,
+    "boot": 20000,
+    "n": 699,
+    "lo": -0.001655309012875536,
+    "hi": 0.0031085507868383396,
+    "ci_method": "block_bootstrap_percentile"
+   },
+   "sigma": 0.017550285685097203,
+   "dropped_incomplete_days": {
+    "usdc": 1,
+    "usdt": 0
+   },
+   "transfer_forbidden": false
+  },
+  "SUIUSDC": {
+   "launch": "2024-02-08",
+   "from": "2024-03-09",
+   "n_days": 663,
+   "usdc_mean": 0.016172244343891407,
+   "usdt_mean": 0.0130792383107089,
+   "diff": {
+    "mean": 0.0030930060331825038,
+    "ci_level": 0.95,
+    "block": 20,
+    "boot": 20000,
+    "n": 663,
+    "lo": -0.0004075007541478147,
+    "hi": 0.007567609351432883,
+    "ci_method": "block_bootstrap_percentile"
+   },
+   "sigma": 0.024954597598359225,
+   "dropped_incomplete_days": {
+    "usdc": 1,
+    "usdt": 0
+   },
+   "transfer_forbidden": false
+  },
+  "TIAUSDC": {
+   "launch": "2024-04-25",
+   "from": "2024-05-25",
+   "n_days": 586,
+   "usdc_mean": -0.020927534129692827,
+   "usdt_mean": -0.03266350170648464,
+   "diff": {
+    "mean": 0.011735967576791809,
+    "ci_level": 0.95,
+    "block": 20,
+    "boot": 20000,
+    "n": 586,
+    "lo": 0.008325979522184298,
+    "hi": 0.01582867064846417,
+    "ci_method": "block_bootstrap_percentile"
+   },
+   "sigma": 0.027465858536978343,
+   "dropped_incomplete_days": {
+    "usdc": 1,
+    "usdt": 0
+   },
+   "transfer_forbidden": false
+  },
+  "TRUMPUSDC": {
+   "launch": "2025-03-06",
+   "from": "2025-04-05",
+   "n_days": 271,
+   "usdc_mean": -0.015252505535055349,
+   "usdt_mean": -0.02705888191881919,
+   "diff": {
+    "mean": 0.011806376383763837,
+    "ci_level": 0.95,
+    "block": 20,
+    "boot": 20000,
+    "n": 271,
+    "lo": 0.00696979335793358,
+    "hi": 0.017501970479704795,
+    "ci_method": "block_bootstrap_percentile"
+   },
+   "sigma": 0.026886437530610863,
+   "dropped_incomplete_days": {
+    "usdc": 1,
+    "usdt": 1
+   },
+   "transfer_forbidden": false
+  },
+  "UNIUSDC": {
+   "launch": "2025-06-16",
+   "from": "2025-07-16",
+   "n_days": 169,
+   "usdc_mean": 0.025263183431952666,
+   "usdt_mean": 0.018938609467455625,
+   "diff": {
+    "mean": 0.006324573964497043,
+    "ci_level": 0.95,
+    "block": 20,
+    "boot": 20000,
+    "n": 169,
+    "lo": 0.00270598224852071,
+    "hi": 0.00983920118343195,
+    "ci_method": "block_bootstrap_percentile"
+   },
+   "sigma": 0.012801116987936715,
+   "dropped_incomplete_days": {
+    "usdc": 1,
+    "usdt": 0
+   },
+   "transfer_forbidden": false
+  },
+  "WIFUSDC": {
+   "launch": "2024-04-04",
+   "from": "2024-05-04",
+   "n_days": 607,
+   "usdc_mean": 0.021248018121911037,
+   "usdt_mean": 0.014770752883031304,
+   "diff": {
+    "mean": 0.006477265238879737,
+    "ci_level": 0.95,
+    "block": 20,
+    "boot": 20000,
+    "n": 607,
+    "lo": 0.003152558484349262,
+    "hi": 0.009344434925864915,
+    "ci_method": "block_bootstrap_percentile"
+   },
+   "sigma": 0.018369351485572085,
+   "dropped_incomplete_days": {
+    "usdc": 1,
+    "usdt": 1
+   },
+   "transfer_forbidden": false
+  },
+  "WLDUSDC": {
+   "launch": "2024-03-14",
+   "from": "2024-04-13",
+   "n_days": 628,
+   "usdc_mean": 0.015653820063694267,
+   "usdt_mean": 0.010820192675159239,
+   "diff": {
+    "mean": 0.004833627388535033,
+    "ci_level": 0.95,
+    "block": 20,
+    "boot": 20000,
+    "n": 628,
+    "lo": 0.0012672181528662367,
+    "hi": 0.008017340764331206,
+    "ci_method": "block_bootstrap_percentile"
+   },
+   "sigma": 0.018777361065862832,
+   "dropped_incomplete_days": {
+    "usdc": 1,
+    "usdt": 0
+   },
+   "transfer_forbidden": false
+  },
+  "WLFIUSDC": {
+   "launch": "2025-09-08",
+   "from": "2025-10-08",
+   "n_days": 85,
+   "usdc_mean": -0.05338190588235295,
+   "usdt_mean": -0.06937287058823528,
+   "diff": {
+    "mean": 0.015990964705882356,
+    "ci_level": 0.95,
+    "block": 20,
+    "boot": 20000,
+    "n": 85,
+    "lo": 0.007983364705882349,
+    "hi": 0.03119815294117647,
+    "ci_method": "block_bootstrap_percentile"
+   },
+   "sigma": 0.037276947468990566,
+   "dropped_incomplete_days": {
+    "usdc": 1,
+    "usdt": 1
+   },
+   "transfer_forbidden": false
+  },
+  "XRPUSDC": {
+   "launch": "2024-01-03",
+   "from": "2024-02-02",
+   "n_days": 699,
+   "usdc_mean": 0.025765785407725325,
+   "usdt_mean": 0.023683396280400573,
+   "diff": {
+    "mean": 0.0020823891273247497,
+    "ci_level": 0.95,
+    "block": 20,
+    "boot": 20000,
+    "n": 699,
+    "lo": -0.002394599427753933,
+    "hi": 0.005371576537911305,
+    "ci_method": "block_bootstrap_percentile"
+   },
+   "sigma": 0.01866809760521766,
+   "dropped_incomplete_days": {
+    "usdc": 1,
+    "usdt": 0
+   },
+   "transfer_forbidden": false
+  },
+  "ZECUSDC": {
+   "launch": "2025-11-19",
+   "from": "2025-12-19",
+   "n_days": 13,
+   "usdc_mean": -0.026583923076923074,
+   "usdt_mean": 0.006332384615384616,
+   "diff": {
+    "mean": -0.03291630769230769,
+    "ci_level": 0.95,
+    "block": 20,
+    "boot": 20000,
+    "n": 13,
+    "lo": -0.03291630769230769,
+    "hi": -0.03291630769230769,
+    "ci_method": "block_bootstrap_percentile"
+   },
+   "sigma": 0.04634025019063631,
+   "dropped_incomplete_days": {
+    "usdc": 1,
+    "usdt": 0
+   },
+   "transfer_forbidden": true
+  }
+ },
+ "dropped": {
+  "DATAIPUSDC": "no funding file for one version"
+ },
+ "BTC": {
+  "launch": "2024-01-03",
+  "from": "2024-02-02",
+  "n_days": 699,
+  "usdc_mean": 0.022895998569384835,
+  "usdt_mean": 0.02279559799713877,
+  "diff": {
+   "mean": 0.00010040057224606611,
+   "ci_level": 0.95,
+   "block": 20,
+   "boot": 20000,
+   "n": 699,
+   "lo": -0.0016664749642346208,
+   "hi": 0.0017618884120171676,
+   "ci_method": "block_bootstrap_percentile"
+  },
+  "sigma": 0.011846599549213547,
+  "dropped_incomplete_days": {
+   "usdc": 1,
+   "usdt": 0
+  },
+  "transfer_forbidden": false
+ },
+ "ETH": {
+  "launch": "2024-01-03",
+  "from": "2024-02-02",
+  "n_days": 699,
+  "usdc_mean": 0.02210153075822604,
+  "usdt_mean": 0.023955331902718167,
+  "diff": {
+   "mean": -0.0018538011444921311,
+   "ci_level": 0.95,
+   "block": 20,
+   "boot": 20000,
+   "n": 699,
+   "lo": -0.004227885550786841,
+   "hi": -4.449213161659445e-05,
+   "ci_method": "block_bootstrap_percentile"
+  },
+  "sigma": 0.013400223084966738,
+  "dropped_incomplete_days": {
+   "usdc": 1,
+   "usdt": 0
+  },
+  "transfer_forbidden": false
+ },
+ "power": {
+  "delta": 0.002,
+  "sigma": 0.013939429049110998,
+  "n_needed_iid": 381.2744072918055,
+  "n_available": 699,
+  "note": "reference only: not a held-out window, days are autocorrelated"
+ },
+ "verdict": null,
+ "traps_checked": [
+  4,
+  7,
+  10
+ ],
+ "integrity_bad": {},
+ "provenance": {
+  "code": {
+   "head": "8f9cb27cb1b626fac87138aa2c3a0eb8580f73a3",
+   "dirty": false,
+   "bot": {
+    "files": {
+     "files/config.py": "07d7b02153a89b3b",
+     "files/exit_validator.py": "0979bfc8008e9043",
+     "files/_backtest_trend_start_detector.py": "5b56efa89f8e3a8c",
+     "files/_compute_early_capture.py": "f21dd6307c55e8d6",
+     ".runtime/release/runtime_overrides.json": "6f78825c315421e6",
+     "files/watchlist.json": "061e69c119e4cea1"
+    },
+    "dirty": true
+   }
+  },
+  "utc": "2026-11-06T00:47:37.554866+00:00"
+ }
+}
