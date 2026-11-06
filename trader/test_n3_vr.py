@@ -68,6 +68,32 @@ class TestVR(unittest.TestCase):
         self.assertGreater(rej / sims, 0.01)
 
 
+class TestWildPlacebo(unittest.TestCase):
+    def test_sign_flips_remove_serial_dependence(self):
+        import n3_vr as N
+        rng = np.random.default_rng(21)
+        e = rng.normal(0, 0.005, 50_000)
+        r = np.zeros_like(e)
+        for i in range(1, len(e)):
+            r[i] = -0.2 * r[i - 1] + e[i]
+        ok = np.ones(len(r), dtype=bool)
+        self.assertLess(N.vr(r, ok, 4)["vr"], 0.8)
+        self.assertAlmostEqual(N.vr(N.wild(r, ok, np.random.default_rng(1)), ok, 4)["vr"], 1.0, delta=0.05)
+
+    def test_absolute_returns_and_gaps_are_kept(self):
+        import n3_vr as N
+        r = np.array([0.01, -0.02, 0.0, 0.03])
+        ok = np.array([True, True, False, True])
+        w = N.wild(r, ok, np.random.default_rng(2))
+        self.assertEqual(np.abs(w).tolist(), np.abs(r).tolist())
+
+    def test_vr_without_the_robust_part_gives_the_same_ratio(self):
+        import n3_vr as N
+        r = np.random.default_rng(3).normal(size=500)
+        ok = np.ones(500, dtype=bool)
+        self.assertEqual(N.vr(r, ok, 8)["vr"], N.vr(r, ok, 8, robust=False)["vr"])
+
+
 class TestGaps(unittest.TestCase):
     def test_missing_bar_removes_its_interval(self):
         import n3_vr as N

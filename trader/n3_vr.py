@@ -53,7 +53,7 @@ def returns(t, c, v):
     return r, ok
 
 
-def vr(r, ok, q: int) -> dict:
+def vr(r, ok, q: int, robust: bool = True) -> dict:
     r, ok = np.asarray(r, dtype=float), np.asarray(ok, dtype=bool)
     n = int(ok.sum())
     mu = float(r[ok].mean())
@@ -67,6 +67,8 @@ def vr(r, ok, q: int) -> dict:
     s = (cs[q:] - cs[:-q])[full]
     m = q * w * (1 - q / n)
     value = float(((s - q * mu) ** 2).sum() / m / sa)
+    if not robust:
+        return {"vr": value, "z_star": None, "n": n, "windows": w}
     d2 = d ** 2
     theta = 0.0
     for j in range(1, q):
@@ -114,6 +116,11 @@ def sigma_before(t, c, v, start_ms: int) -> float:
 
 def bounce_bias(c: float, sigma: float, q: int) -> float:
     return -(2 * c ** 2 / sigma ** 2) * (1 - 1 / q)
+
+
+def wild(r, ok, rng) -> np.ndarray:
+    """Control: random signs keep |r| and its clusters and remove any serial dependence of the signs."""
+    return np.asarray(r, dtype=float) * rng.choice((-1.0, 1.0), size=len(r))
 
 
 # ------------------------------------------------------------------ data
@@ -289,6 +296,46 @@ def _print(o: dict) -> None:
     print({k: o[k] for k in ("window", "months", "symbols_used", "symbol_months_dropped_below_min", "symbols_without_data", "gap_share_mean")}, flush=True)
 
 
+def placebo(draws: int = 40) -> dict:
+    """Is the negative pool a property of the month-long estimator on fat, clustered returns? Same symbols, same months, exploration only."""
+    import provenance as PV
+    PV.require_clean()
+    vol = NC.load_volumes()
+    p2s = _perp_to_spot()
+    uni = universes(vol, *EXPLORE)
+    lo_ms, hi_ms = _ms(NC.month_days(EXPLORE[0])[0]), _ms(NC.month_days(EXPLORE[1])[1]) + DAY
+    cache, data = {}, {}
+    for month, syms in uni.items():
+        start, end = _ms(NC.month_days(month)[0]), _ms(NC.month_days(month)[1]) + DAY
+        for s in syms:
+            if s not in cache:
+                cache[s] = _load(s, p2s, "recent", lo_ms, hi_ms)
+            a = cache[s]
+            if a is None:
+                continue
+            k = (a["t"] >= start) & (a["t"] < end)
+            if k.sum() <= MIN_RETURNS:
+                continue
+            r, ok = returns(a["t"][k], a["c"][k], a["v"][k])
+            if int(ok.sum()) >= MIN_RETURNS:
+                data.setdefault(month, {})[s] = (r, ok)
+    rng = np.random.default_rng(29)
+    pools = {q: [] for q in MAIN}
+    for _ in range(draws):
+        for q in MAIN:
+            rows = {m: {s: vr(wild(r, ok, rng), ok, q, robust=False)["vr"] - 1 for s, (r, ok) in x.items()} for m, x in data.items()}
+            pools[q].append(float(np.mean([v for _, v in pool_months(rows)])))
+    ex = json.loads((EXP / "N3_VR_EXPLORE.json").read_text(encoding="utf-8"))
+    out = {"spec": SPEC, "stage": "exploration_control", "window": EXPLORE, "draws": draws, "control": "random signs on the same returns, same months, same symbols", "horizons": {}, "provenance": PV.block()}
+    for q in MAIN:
+        v = np.array(pools[q])
+        obs = ex["horizons"][str(q)]["pool"]["mean"]
+        out["horizons"][str(q)] = {"observed": obs, "control_mean": float(v.mean()), "control_sd": float(v.std(ddof=1)), "control_min": float(v.min()), "control_max": float(v.max()), "observed_minus_control": obs - float(v.mean()), "share_control_at_or_below_observed": float((v <= obs).mean())}
+    (EXP / "N3_VR_PLACEBO.json").write_text(json.dumps(out, ensure_ascii=False, indent=1, default=str), encoding="utf-8")
+    print(json.dumps(out["horizons"], indent=0))
+    return out
+
+
 def bh() -> dict:
     """One look. Refuses without the ledger entry; the marker is written before the window is read."""
     import provenance as PV
@@ -327,6 +374,8 @@ def main(argv=None) -> int:
         fetch(log=lambda s: print(s, flush=True))
     elif argv[:1] == ["explore"]:
         explore()
+    elif argv[:1] == ["placebo"]:
+        placebo()
     elif argv[:1] == ["bh"]:
         bh()
     else:
