@@ -30,6 +30,7 @@ if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
 
 import archive_bh as A            # noqa: E402
+import n_common as NC             # noqa: E402
 import trader_config as TC        # noqa: E402
 
 SPEC = "n1-1106-spec.md"
@@ -278,13 +279,11 @@ def _launch(sym: str, inv: dict) -> str:
 
 
 def _power(sigma: float, n_obs: int, delta: float = DELTA) -> dict:
-    z = 1.959964 + 0.841621
-    return {"delta": delta, "sigma": sigma, "n_needed_iid": (z * sigma / delta) ** 2, "n_available": n_obs,
+    return {"delta": delta, "sigma": sigma, "n_needed_iid": NC.required_n(sigma, delta, 0.05)[0], "n_available": n_obs,
             "note": "reference only: not a held-out window, days are autocorrelated"}
 
 
 def funding_report(inv: dict, syms: list) -> dict:
-    import daily_revenue as DR
     pairs, dropped, per = {}, {}, {}
     for s in syms:
         a, b = _load(f"{s}_funding"), _load(f"{usdt_of(s)}_funding")
@@ -301,19 +300,19 @@ def funding_report(inv: dict, syms: list) -> dict:
         pairs[s] = {"usdc": c, "usdt": u, "from": start}
         series = sorted((d, c[d] - u[d]) for d in c if d >= start and d in u)
         if len(series) >= 10:
-            g = DR.aggregate(series, block=BLOCK)
+            g = NC.ci([x for _, x in series], block=BLOCK)
             per[s] = {"launch": launch, "from": start, "n_days": len(series), "usdc_mean": float(np.mean([c[d] for d, _ in series])),
                       "usdt_mean": float(np.mean([u[d] for d, _ in series])), "diff": g, "sigma": float(np.std([x for _, x in series], ddof=1)),
                       "dropped_incomplete_days": {"usdc": n_all_c - len(daily_sums(a["t"], a["rate"], a["hours"])), "usdt": n_all_u - len(daily_sums(b["t"], b["rate"], b["hours"]))},
-                      "transfer_forbidden": bool(g["hi95"] is not None and g["hi95"] < -DELTA)}
+                      "transfer_forbidden": bool(g["hi"] is not None and g["hi"] < -DELTA)}
         else:
             dropped[s] = f"{len(series)} common complete days"
     series = pool({k: v for k, v in pairs.items() if k in per})
-    blocks = {b: DR.aggregate(series, block=b) for b in (5, 20, 60)}
+    blocks = {b: NC.ci([x for _, x in series], block=b) for b in (5, 20, 60)}
     sigma = float(np.std([x for _, x in series], ddof=1))
     out = {"spec": SPEC, "stage": "descriptive", "window": [series[0][0], series[-1][0]], "metric": "daily funding USDC - USDT, %/day", "delta": DELTA,
            "pool": blocks[20], "pool_blocks": blocks, "pool_by_year": _year_means(series),
-           "pool_transfer_forbidden": bool(blocks[20]["hi95"] < -DELTA), "per_symbol": per, "dropped": dropped, "BTC": per.get("BTCUSDC"), "ETH": per.get("ETHUSDC"),
+           "pool_transfer_forbidden": bool(blocks[20]["hi"] < -DELTA), "per_symbol": per, "dropped": dropped, "BTC": per.get("BTCUSDC"), "ETH": per.get("ETHUSDC"),
            "power": _power(sigma, len(series)), "verdict": None, "traps_checked": [4, 7, 10]}
     return out
 
