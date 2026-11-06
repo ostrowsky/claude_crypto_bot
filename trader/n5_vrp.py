@@ -102,18 +102,18 @@ def spread_rows(text: str) -> list:
             delta = abs(float(r["delta"]))
             if not 0.40 <= delta <= 0.60:
                 continue
-            buy, sell = float(r["best_buy_iv"]), float(r["best_sell_iv"])
+            bid, ask, vega = float(r["best_bid_price"]), float(r["best_ask_price"]), float(r["vega"])
         except (ValueError, KeyError, IndexError, TypeError):
             continue
-        if buy > 0 and sell > 0:
-            out.append((r["date"], r["hour"], r["symbol"], delta, buy, sell))
+        if bid > 0 and ask > bid and vega > 0:
+            out.append((r["date"], r["hour"], r["symbol"], delta, (ask - bid) / vega))
     return out
 
 
 def day_spread(rows: list):
     if not rows:
         return None
-    return float(np.median([(x[5] - x[4]) * 100 for x in rows]))
+    return float(np.median([x[4] for x in rows]))
 
 
 # ------------------------------------------------------------------ data

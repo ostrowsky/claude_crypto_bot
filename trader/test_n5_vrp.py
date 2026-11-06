@@ -6,7 +6,7 @@ Interface the tests fix:
   n5_vrp.newey_west(x, lag) -> {"mean", "se", "n"}
   n5_vrp.leland_points(sigma, cost_side=0.0005) -> float
   n5_vrp.expiry_days(symbol, day) -> int                      BTC-230929-40000-P on 2023-08-30 -> 30
-  n5_vrp.spread_rows(text) -> [(day, hour, symbol, delta, buy_iv, sell_iv)]
+  n5_vrp.spread_rows(text) -> [(day, hour, symbol, delta, width_points)]
   n5_vrp.day_spread(rows) -> median width in vol points, or None
 """
 import math
@@ -117,23 +117,24 @@ class TestCosts(unittest.TestCase):
 
     HEAD = "date,hour,symbol,underlying,type,strike,open,high,low,close,volume_contracts,volume_usdt,best_bid_price,best_ask_price,best_bid_qty,best_ask_qty,best_buy_iv,best_sell_iv,mark_price,mark_iv,delta,gamma,vega,theta,openinterest_contracts,openinterest_usdt\n"
 
-    def _row(self, day, hour, sym, buy, sell, delta):
-        return f"{day},{hour},{sym},BTCUSDT,P,x,0,0,0,0,0,0,1,2,1,1,{buy},{sell},1,0.5,{delta},0,0,0,0,0\n"
+    def _row(self, day, hour, sym, bid, ask, vega, delta):
+        return f'{day},{hour},{sym},BTCUSDT,P,x,0,0,0,0,0,0,{bid},{ask},1,1,"",0.6,1,0.5,{delta},0,{vega},0,0,0' + chr(10)
 
     def test_filter(self):
         import n5_vrp as N
         d = "2023-08-30"
         good = "BTC-230929-40000-P"
         rows = N.spread_rows(self.HEAD
-                             + self._row(d, "00", good, "0.50", "0.56", "-0.50")
-                             + self._row(d, "12", good, "0.50", "0.54", "0.45")
-                             + self._row(d, "06", good, "0.50", "0.99", "-0.50")          # hour
-                             + self._row(d, "00", good, '""', "0.56", "-0.50")            # empty IV
-                             + self._row(d, "00", good, "0E-8", "0.56", "-0.50")          # zero IV
-                             + self._row(d, "00", good, "0.50", "0.99", "-0.70")          # delta
-                             + self._row(d, "00", "BTC-230908-40000-P", "0.50", "0.99", "-0.50"))     # 9 days
+                             + self._row(d, "00", good, "100", "160", "10", "-0.50")
+                             + self._row(d, "12", good, "100", "140", "10", "0.45")
+                             + self._row(d, "06", good, "100", "900", "10", "-0.50")          # hour
+                             + self._row(d, "00", good, "0E-8", "160", "10", "-0.50")         # no bid
+                             + self._row(d, "00", good, "160", "160", "10", "-0.50")          # no width
+                             + self._row(d, "00", good, "100", "160", "0E-8", "-0.50")        # no vega
+                             + self._row(d, "00", good, "100", "900", "10", "-0.70")          # delta
+                             + self._row(d, "00", "BTC-230908-40000-P", "100", "900", "10", "-0.50"))     # 9 days
         self.assertEqual(len(rows), 2)
-        self.assertAlmostEqual(N.day_spread(rows), 5.0)                # median of 6 and 4 vol points
+        self.assertAlmostEqual(N.day_spread(rows), 5.0)                # (ask - bid) / vega: median of 6 and 4 vol points
 
     def test_no_rows(self):
         import n5_vrp as N
