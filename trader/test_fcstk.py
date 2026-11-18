@@ -118,7 +118,7 @@ class TestHedgeAndIncome(unittest.TestCase):
     def test_value_does_not_depend_on_the_coin_price(self):
         F = _f()
         e = [100.0, 100.0, 130.0, 70.0, 100.0, 100.0]
-        r = F.simulate(mk(e, [p * 1.1 for p in e]), cfg(), free(), ds(1), ds(5), chooser=only_eth, start_equity=10_000.0)
+        r = F.simulate(mk(e, [p * 1.1 for p in e]), cfg(), free(), ds(1), ds(5), chooser=only_eth, slip_hold=0.0, start_equity=10_000.0)
         self.assertEqual(len(r["series"]), 4)
         for _, v in r["series"]:                           # perp quantity = 1.1 x held quantity, or +-30% would show
             self.assertAlmostEqual(v, 0.0, places=9)
@@ -129,7 +129,7 @@ class TestHedgeAndIncome(unittest.TestCase):
     def test_ratio_growth_is_earned_and_expected_matches(self):
         C, F = _carry(), _f()
         m = mk([100.0] * 6, [110.0, 110.0, 111.1, 112.2, 113.3, 113.3])
-        r = F.simulate(m, cfg(), free(), ds(1), ds(4), chooser=only_eth, band=1.0, start_equity=10_000.0)
+        r = F.simulate(m, cfg(), free(), ds(1), ds(4), chooser=only_eth, slip_hold=0.0, band=1.0, start_equity=10_000.0)
         fc = C.simulate(m, cfg(), free(), ds(1), ds(4), chooser=only_eth, start_equity=10_000.0)
         got = [v for _, v in r["series"]]
         # held leg 5000 of 10000; closes 110 -> 111.1 -> 112.2: marks 10000, 10000, 10050, 10100
@@ -150,7 +150,7 @@ UP = [110.0, 110.0, 110.66, 110.66, 110.66, 110.66, 110.66, 110.66]         # ra
 class TestRehedge(unittest.TestCase):
     def run_k2(self, w, fees=None, e=None, day_to=6, **kw):
         F = _f()
-        return F.simulate(mk(e or [100.0] * len(w), w), cfg(2), fees or free(), ds(1), ds(day_to), chooser=only_eth,
+        return F.simulate(mk(e or [100.0] * len(w), w), cfg(2), fees or free(), ds(1), ds(day_to), chooser=only_eth, slip_hold=0.0,
                           ratio_days=1, start_equity=10_000.0, **kw)
 
     def test_only_at_the_band(self):
@@ -190,7 +190,7 @@ class TestRehedge(unittest.TestCase):
 
     def test_skipped_and_counted_when_the_wallet_is_empty(self):
         F = _f()
-        r = F.simulate(mk([100.0] * 8, UP), cfg(1), free(), ds(1), ds(6), chooser=only_eth, ratio_days=1,
+        r = F.simulate(mk([100.0] * 8, UP), cfg(1), free(), ds(1), ds(6), chooser=only_eth, slip_hold=0.0, ratio_days=1,
                        start_equity=10_000.0)              # K = 1: the whole equity is in the pair, no funding
         self.assertEqual(r["rehedges"], 0)
         self.assertEqual(r["rehedge_skipped"], 3)          # due on days 3, 4 and 5
@@ -203,7 +203,7 @@ class TestRatio(unittest.TestCase):
 
     def sim(self, w, day_to, **kw):
         F = _f()
-        return F.simulate(mk([100.0] * len(w), w), cfg(2), free(), ds(1), ds(day_to), chooser=only_eth,
+        return F.simulate(mk([100.0] * len(w), w), cfg(2), free(), ds(1), ds(day_to), chooser=only_eth, slip_hold=0.0,
                           start_equity=10_000.0, **kw)
 
     def test_the_close_of_day_d_is_not_used_on_day_d(self):
@@ -217,8 +217,8 @@ class TestRatio(unittest.TestCase):
         F = _f()
         a = mk([100.0] * 8, UP)
         b = mk([100.0] * 5 + [10.0] * 3, UP[:5] + [300.0] * 3)
-        ra = F.simulate(a, cfg(2), free(), ds(1), ds(5), chooser=only_eth, ratio_days=1, start_equity=10_000.0)
-        rb = F.simulate(b, cfg(2), free(), ds(1), ds(5), chooser=only_eth, ratio_days=1, start_equity=10_000.0)
+        ra = F.simulate(a, cfg(2), free(), ds(1), ds(5), chooser=only_eth, slip_hold=0.0, ratio_days=1, start_equity=10_000.0)
+        rb = F.simulate(b, cfg(2), free(), ds(1), ds(5), chooser=only_eth, slip_hold=0.0, ratio_days=1, start_equity=10_000.0)
         self.assertEqual(ra["series"], rb["series"])
         self.assertEqual(ra["final_equity"], rb["final_equity"])
         self.assertEqual(ra["rehedges"], rb["rehedges"])
@@ -229,7 +229,7 @@ class TestDepeg(unittest.TestCase):
     def test_no_forced_sale_and_the_mark_recovers(self):
         F = _f()
         w = [110.0, 110.0, 110.0, 55.0, 110.0, 110.0, 110.0, 110.0]
-        r = F.simulate(mk([100.0] * 8, w), cfg(), free(), ds(1), ds(7), chooser=only_eth, start_equity=10_000.0)
+        r = F.simulate(mk([100.0] * 8, w), cfg(), free(), ds(1), ds(7), chooser=only_eth, slip_hold=0.0, start_equity=10_000.0)
         got = dict(r["series"])
         self.assertAlmostEqual(got[ds(3)], -25.0, places=9)                 # half of the book halves for a day
         self.assertAlmostEqual(got[ds(4)], (10_000.0 / 7_500.0 - 1) * 100, places=9)
@@ -259,7 +259,7 @@ class TestMoney(unittest.TestCase):
     def test_funding_is_paid_on_the_short_and_grows_with_it(self):
         F = _f()
         m = mk([100.0] * 8, UP, funding={"ETHUSDT": events(range(8))})
-        r = F.simulate(m, cfg(2), free(), ds(1), ds(6), chooser=only_eth, ratio_days=1, start_equity=10_000.0)
+        r = F.simulate(m, cfg(2), free(), ds(1), ds(6), chooser=only_eth, slip_hold=0.0, ratio_days=1, start_equity=10_000.0)
         self.assertEqual(r["rehedges"], 1)                                  # at 00:15 of day 3
         self.assertAlmostEqual(r["funding_income"], 6 * 25.0 * 100.0 * 0.0001 + 9 * 25.15 * 100.0 * 0.0001, places=9)
 
@@ -270,7 +270,7 @@ class TestStopAndMissing(unittest.TestCase):
         F = _f()
         e = [100.0, 100.0, 160.0, 160.0, 160.0, 200.0, 160.0, 160.0]
         w = [110.0, 110.0, 192.0, 192.0, 192.0, 240.0, 192.0, 192.0]         # ratio 1.1, then 1.2 from day 2
-        r = F.simulate(mk(e, w), cfg(), free(), ds(1), ds(8), chooser=only_eth, ratio_days=1, start_equity=10_000.0)
+        r = F.simulate(mk(e, w), cfg(), free(), ds(1), ds(8), chooser=only_eth, slip_hold=0.0, ratio_days=1, start_equity=10_000.0)
         self.assertEqual([(t["reason"], t["exit_day"]) for t in r["trades"]], [("margin_stop", ds(3)), ("flush", ds(8))])
         self.assertEqual(r["trades"][1]["entry_day"], ds(4))
         self.assertEqual(r["margin_stops"], 1)
@@ -284,7 +284,7 @@ class TestStopAndMissing(unittest.TestCase):
 
     def test_pair_is_not_opened_without_the_instrument(self):
         F = _f()
-        r = F.simulate(mk([100.0] * 6), cfg(), free(), ds(1), ds(4), chooser=only_eth, start_equity=10_000.0)
+        r = F.simulate(mk([100.0] * 6), cfg(), free(), ds(1), ds(4), chooser=only_eth, slip_hold=0.0, start_equity=10_000.0)
         self.assertEqual(r["trades"], [])
         self.assertAlmostEqual(r["final_equity"], 10_000.0, places=9)
         self.assertEqual(r["exposure_share"], 0.0)
