@@ -1,0 +1,211 @@
+{
+ "spec": "e4-scale-out-1118-spec.md",
+ "split": "2026-07-01",
+ "base": "X4_p1_floor8",
+ "base_epoch": "0bccb4b2cf6d04f9",
+ "base_train": {
+  "n_days": 120,
+  "excluded": 0,
+  "from": "2026-03-03",
+  "to": "2026-06-30",
+  "mean_pct": -0.4167,
+  "lo95": -0.9781,
+  "hi95": 0.1501,
+  "ci_level": 0.95,
+  "ci_method": "block_bootstrap_percentile",
+  "block": 5,
+  "sd_pct": 2.8352,
+  "compound_pct": -42.262,
+  "max_dd_pct": -44.729,
+  "pos_share": 0.367,
+  "worst_pct": -8.7967
+ },
+ "base_trades": 926,
+ "train": {
+  "S_t08": {
+   "paired": {
+    "n_days": 120,
+    "excluded": 0,
+    "from": "2026-03-03",
+    "to": "2026-06-30",
+    "mean_pct": 0.0443,
+    "lo95": -0.0194,
+    "hi95": 0.1213,
+    "ci_level": 0.95,
+    "ci_method": "block_bootstrap_percentile",
+    "block": 5,
+    "sd_pct": 0.395,
+    "compound_pct": 5.359,
+    "max_dd_pct": -2.521,
+    "pos_share": 0.492,
+    "worst_pct": -1.7479
+   },
+   "changed": 117,
+   "agg": {
+    "n_days": 120,
+    "excluded": 0,
+    "from": "2026-03-03",
+    "to": "2026-06-30",
+    "mean_pct": -0.3724,
+    "lo95": -0.9161,
+    "hi95": 0.1861,
+    "ci_level": 0.95,
+    "ci_method": "block_bootstrap_percentile",
+    "block": 5,
+    "sd_pct": 2.6855,
+    "compound_pct": -38.794,
+    "max_dd_pct": -41.663,
+    "pos_share": 0.392,
+    "worst_pct": -8.576
+   },
+   "trades": 926,
+   "scale_exits": 117,
+   "changed_detail": {
+    "n": 117,
+    "mean_ret_diff_pp": 0.4720666122200743,
+    "by_month": {
+     "2026-03": 16,
+     "2026-04": 33,
+     "2026-05": 38,
+     "2026-06": 30
+    }
+   },
+   "months_paired": {
+    "2026-03": 0.006174972460591166,
+    "2026-04": 0.1302368097614182,
+    "2026-05": 0.013045367463462972,
+    "2026-06": 0.02745420102724386
+   }
+  },
+  "S_t15": {
+   "paired": {
+    "n_days": 120,
+    "excluded": 0,
+    "from": "2026-03-03",
+    "to": "2026-06-30",
+    "mean_pct": 0.0463,
+    "lo95": 0.0028,
+    "hi95": 0.0832,
+    "ci_level": 0.95,
+    "ci_method": "block_bootstrap_percentile",
+    "block": 5,
+    "sd_pct": 0.2818,
+    "compound_pct": 5.665,
+    "max_dd_pct": -1.411,
+    "pos_share": 0.408,
+    "worst_pct": -1.4105
+   },
+   "changed": 42,
+   "agg": {
+    "n_days": 120,
+    "excluded": 0,
+    "from": "2026-03-03",
+    "to": "2026-06-30",
+    "mean_pct": -0.3704,
+    "lo95": -0.9278,
+    "hi95": 0.1915,
+    "ci_level": 0.95,
+    "ci_method": "block_bootstrap_percentile",
+    "block": 5,
+    "sd_pct": 2.7634,
+    "compound_pct": -38.8,
+    "max_dd_pct": -41.697,
+    "pos_share": 0.392,
+    "worst_pct": -8.7057
+   },
+   "trades": 926,
+   "scale_exits": 42,
+   "changed_detail": {
+    "n": 42,
+    "mean_ret_diff_pp": 1.3657808238368858,
+    "by_month": {
+     "2026-03": 6,
+     "2026-04": 10,
+     "2026-05": 14,
+     "2026-06": 12
+    }
+   },
+   "months_paired": {
+    "2026-03": 0.01913172257857803,
+    "2026-04": 0.05705032563226558,
+    "2026-05": 0.044865435887662966,
+    "2026-06": 0.06337194766027306
+   }
+  },
+  "S_t25": {
+   "paired": {
+    "n_days": 120,
+    "excluded": 0,
+    "from": "2026-03-03",
+    "to": "2026-06-30",
+    "mean_pct": 0.03,
+    "lo95": -0.0033,
+    "hi95": 0.066,
+    "ci_level": 0.95,
+    "ci_method": "block_bootstrap_percentile",
+    "block": 5,
+    "sd_pct": 0.2009,
+    "compound_pct": 3.639,
+    "max_dd_pct": -0.93,
+    "pos_share": 0.283,
+    "worst_pct": -0.9285
+   },
+   "changed": 12,
+   "agg": {
+    "n_days": 120,
+    "excluded": 0,
+    "from": "2026-03-03",
+    "to": "2026-06-30",
+    "mean_pct": -0.3867,
+    "lo95": -0.9502,
+    "hi95": 0.1733,
+    "ci_level": 0.95,
+    "ci_method": "block_bootstrap_percentile",
+    "block": 5,
+    "sd_pct": 2.8062,
+    "compound_pct": -40.077,
+    "max_dd_pct": -42.638,
+    "pos_share": 0.367,
+    "worst_pct": -8.7967
+   },
+   "trades": 926,
+   "scale_exits": 12,
+   "changed_detail": {
+    "n": 12,
+    "mean_ret_diff_pp": 3.029950787662427,
+    "by_month": {
+     "2026-04": 4,
+     "2026-05": 6,
+     "2026-06": 2
+    }
+   },
+   "months_paired": {
+    "2026-03": 0.0,
+    "2026-04": 0.046476620624351664,
+    "2026-05": 0.03630900602115271,
+    "2026-06": 0.03596774208640207
+   }
+  }
+ },
+ "winner": null,
+ "verdict": "STOP: no candidate passes on train; the test half was not opened",
+ "provenance": {
+  "code": {
+   "head": "6f89ab26c9b9b07f7de2e0f4bb42a9b11048e7ee",
+   "dirty": false,
+   "bot": {
+    "files": {
+     "files/config.py": "07d7b02153a89b3b",
+     "files/exit_validator.py": "0979bfc8008e9043",
+     "files/_backtest_trend_start_detector.py": "5b56efa89f8e3a8c",
+     "files/_compute_early_capture.py": "f21dd6307c55e8d6",
+     ".runtime/release/runtime_overrides.json": "6f78825c315421e6",
+     "files/watchlist.json": "061e69c119e4cea1"
+    },
+    "dirty": true
+   }
+  },
+  "utc": "2026-11-18T21:14:59.687627+00:00"
+ },
+ "utc": "2026-11-18T21:14:59.687627+00:00"
+}
