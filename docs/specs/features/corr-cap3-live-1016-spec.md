@@ -91,7 +91,8 @@ winner-days did not appear live, and the tail it called marginal (+9.9%) came ou
 The relaxed entries are the loss-clustering ones.
 
 **Operator decision, chat 2026-11-18: roll back.**
-- `CORR_MAX_PER_CLUSTER` goes back to 2, for entry and prune, and the bot is restarted.
+- `CORR_MAX_PER_CLUSTER` goes back to 2, for entry and prune (commit 86cfded). It takes effect at the next bot
+  restart; Claude could not restart the bot from the session (process access blocked), so the operator restarts it.
 - `CORR_CAP_RELAXED_FROM` stays 2. With the cap at 2 no candidate passes at cluster size 2, so
   `corr_cap_relaxed` stops by itself.
 - With the cap at 2, the prune again closes the weakest position of a cluster of 3 or more. A

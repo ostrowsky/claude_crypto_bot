@@ -1204,7 +1204,7 @@ Relaxed trades averaged −0.93% against −0.49% for the rest. Max drawdown −
 −124, worst day −51.5 vs −23.4.
 
 **Operator rolled back 2026-11-18:** `CORR_MAX_PER_CLUSTER = 2` (entry and prune),
-bot restarted. A `rolled_back` decision supersedes `d-2026-10-16T133755Z-cap3`.
+live from the next bot restart (Claude could not restart it: process access is blocked). A `rolled_back` decision supersedes `d-2026-10-16T133755Z-cap3`.
 With cap 2 the prune again closes the weakest position of a cluster of 3 or more;
 positions above the profit protect are never pruned. Do not re-test cap 3 on these
 days. Spec: `docs/specs/features/corr-cap3-live-1016-spec.md`.
