@@ -1073,6 +1073,8 @@ only; the 2026 window was not opened for any of them:
   - The gain is mechanical: COIN-M and USD-M rates are nearly equal (BTC −0.0007 [−0.0022, +0.0010]), and notional = capital instead of half.
   - New risk: the position is effectively USD, not USDT. Basis reached +0.74% in the USDC crisis (2023-03), worst day −0.565%, max DD −1.3% (FC −0.17%); Sharpe 8.1 vs 11.2.
   - Next by the rule: one 2026 look, the operator's call. Its power is ~10% (~181 days of archive funding). Expect ~1.8 %/yr at 2026 rates, not 7.9. The demo account's COIN-M access is unverified.
+  - **2026 look (operator 2026-11-18, once, window 2026-01..06 = the funding archive on disk, k = 1): gain NOT SHOWN.** COIN-M +0.0010 %/day [−0.0027, +0.0098] vs FC_PASSIVE +0.0002 [−0.0012, +0.0027] on the same 181 days; paired +0.0008 [−0.0021, +0.0077], 3 of 6 months positive. No thin margin, DD −0.47%.
+  - On half a year the entry/exit costs (0.62% of capital) nearly match the funding (0.95%). COIN-M rates were ABOVE USD-M in 2026 (BTC +0.0035 [+0.0008, +0.0062]), so this is too few days, not a refutation. No second look at history; a further check would only be a forward shadow book (operator's call). Result `docs/audit/results/G3A_TEST.json`.
 - **N2, quoting a USDC perp at zero maker with a taker hedge on the USDT perp (2026-11-06, `n2-1106-spec.md`): REJECTED by the pilot stop.** 3 days of mainnet tape, 3 pairs (BTC, ETH, SOL), strictly-through fills.
   - All 8 latency × width cells earn −6.2..−7.0 bp per fill, every pair negative; stop cell (θ = 3 bp, 250/250 ms) −6.31.
   - The quote sits 6–8 bp from fair, but only 0–1 bp is captured at the fill, and the hedge costs 5 bp more. 88–99% of fills follow a > 2 bp move of the USDT perp in the previous second.
