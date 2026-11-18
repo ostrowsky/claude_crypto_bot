@@ -186,3 +186,62 @@ The existing `test_learning_progress_truth.py` must still pass.
 ## 5. Verification
 
 On the live files of 2026-11-18, before and after: see the commit message.
+
+## 6. Pipeline blocker count (2026-11-18, second fix)
+
+### D4. Five May records reported as a structural blocker (TH-05, TH-10)
+
+Q3 and Q6 counted every decision with `validation_verdict == pending_manual_validation`.
+Five records matched, and the report called them «5 decisions stuck», a structural blocker.
+They are not open work:
+
+| record | stage | what happened |
+|---|---|---|
+| `d-2026-05-11T112800Z-31ae5d` ENTRY_SCORE_FLOOR_GLOBAL | approved | superseded the same day (`rolled_back`, demo of the rollback path) and on 05-28 (`deferred`, verdict `reject`) |
+| `d-2026-05-11T213540Z-ce9fdf` WATCHLIST_MATCH_SCORE_TOLERANCE | rejected | closed |
+| `d-2026-05-11T213541Z-f0df87` GATE_RANKER_HARD_VETO_THRESHOLD | rejected | closed |
+| `d-2026-05-11T213714Z-4d6cb5` MODE_IMPULSE_SPEED_ENABLED | approved | superseded on 05-28 |
+| `d-2026-05-28T132755Z-f37987` MODE_IMPULSE_SPEED_ENABLED | deferred | the key never existed in `config.py` (05-28 record). The question was answered in June by curtailment with fallback to trend (`cur001`, `rbcur1`, `fbt001`). |
+
+None of the four keys is defined in `files/config.py` (checked 2026-11-18).
+
+### 6.1 Rule
+
+- **Thread.** Records are grouped by `hypothesis_id`. Without it they fall back to `config_key`,
+  and without that to `decision_id`. The latest record (by `ts`, file order on ties) is the
+  thread's current state.
+- **Blocker.** A record counts only when all of these hold:
+  - its verdict is `pending_manual_validation`;
+  - it is the latest record of its thread;
+  - its stage is not terminal (`rejected`, `rolled_back`);
+  - its `config_key` is defined in `files/config.py`.
+- **Not blocking.** Every other pending record is still shown, with its reason:
+  - `superseded` — a later record of the same thread exists;
+  - `closed_without_verdict` — terminal stage;
+  - `unknown_key` — the key is not in `config.py`.
+- **Config unreadable.** The `unknown_key` class is not applied, a latest non-terminal record
+  counts as a blocker, and the output says `keys_verified = false`. The count is never lowered
+  without evidence.
+
+### 6.2 Output
+
+- `pipeline.pending_manual_validation` now holds the blocker count. Q3/Q6 and the skill read
+  this key.
+- New fields: `pending_verdict_records` (the raw count), `pending_not_blocking`
+  ({reason: count}), `pending_detail` ([{decision_id, config_key, stage, reason}]) and
+  `keys_verified`.
+- **Q3:** «(!) pipeline blocker» only when blockers > 0. Otherwise one line: pending records,
+  none blocking, with the counts by reason.
+- **Q6:** «Unblock pipeline» only when blockers > 0.
+
+### 6.3 Tests (written before the fix, `files/test_learning_progress_comparable.py`)
+
+1. The five live-shaped records plus their later records give 0 blockers: superseded 2,
+   closed 2, unknown key 1, raw 5.
+2. A latest pending record, stage `approved`, with a known key is one blocker.
+3. Pending, then a later record of the same thread is `superseded`.
+4. Unreadable config: no `unknown_key` class, the latest non-terminal record counts,
+   `keys_verified = false`.
+5. Records without `hypothesis_id` are grouped by `config_key`.
+6. Rendering at 0 blockers: no «pipeline blocker» line in Q3, no «Unblock pipeline» in Q6, and
+   the «none blocking» line is shown. At 1 blocker both appear.
