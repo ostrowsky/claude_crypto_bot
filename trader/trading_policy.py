@@ -49,6 +49,8 @@ class Exits:
     rsi_min_profit: float = 0.005       # rsi_hold: profit at the signal bar needed to hold (fixed, all modes)
     hold_after_bars: int = 96           # rsi_hold: latest exit = signal bar + this
     learned_id: str | None = None       # learned: id in learned_exits.REGISTRY (trader-learning-loop-f-1020-spec.md F2)
+    take_pct: float | None = None       # p1_scale: sell take_frac of the position at entry * (1 + take_pct) (e4-scale-out-1118-spec.md)
+    take_frac: float = 0.5              # p1_scale: the share sold at the take level; the rest runs on the X4 trail
 
 
 @dataclass(frozen=True)
@@ -73,6 +75,9 @@ class TradingPolicy:
             d["admission"].pop("regime", None)
         if d["exits"].get("learned_id") is None:   # field added 2026-10-20, same reason
             d["exits"].pop("learned_id", None)
+        if d["exits"].get("take_pct") is None:     # fields added 2026-11-18 (E4), same reason
+            d["exits"].pop("take_pct", None)
+            d["exits"].pop("take_frac", None)
         blob = json.dumps(d, sort_keys=True, default=str)
         return hashlib.sha256(blob.encode()).hexdigest()[:16]
 
@@ -157,6 +162,8 @@ def exit_plan(policy: TradingPolicy, grid, cand: dict, floor_of=None):
         return real
     if E.kind == "learned":
         return _learned_exit(policy, grid, cand, floor_of)
+    if E.kind == "p1_scale":
+        return _scale_out(policy, grid, cand, floor_of)
     if j is None or ie is None:
         return None
     C, H, L, O, A = grid.C, grid.H, grid.L, grid.O, grid.ATR
@@ -194,6 +201,26 @@ def exit_plan(policy: TradingPolicy, grid, cand: dict, floor_of=None):
                 return q, float(tp), "tp", dist
         return (last, float(C[last, j]), "time", dist) if math.isfinite(C[last, j]) else None
     raise ValueError(E.kind)
+
+
+def _scale_out(policy: TradingPolicy, grid, cand: dict, floor_of=None):
+    """E4 (e4-scale-out-1118-spec.md): the X4 plan; if a bar's high trades through entry * (1 + take_pct) on or before the
+    X4 exit bar, take_frac of the position is sold there and the rest runs on to the X4 exit. One blended raw price at the
+    runner's bar (the slot and the cash of the sold part free up with the runner -- disclosed). 15m trades only."""
+    from dataclasses import replace as _replace
+    E = policy.exits
+    x4 = exit_plan(_replace(policy, exits=Exits(kind="p1_trail", floor_override=E.floor_override, max_bars=E.max_bars)),
+                   grid, cand, floor_of)
+    if x4 is None or cand.get("tf") != "15m" or E.take_pct is None:
+        return x4
+    ie, j = cand["ie"], cand["j"]
+    c0 = grid.C[ie, j]
+    level = c0 * (1 + E.take_pct)
+    for q in range(ie + 1, x4[0] + 1):
+        h = grid.H[q, j]
+        if math.isfinite(h) and h >= level * (1 + TP_TICK):
+            return x4[0], float(E.take_frac * level + (1 - E.take_frac) * x4[1]), "scale", x4[3]
+    return x4
 
 
 def _learned_exit(policy: TradingPolicy, grid, cand: dict, floor_of=None):
