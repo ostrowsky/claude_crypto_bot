@@ -533,6 +533,30 @@ user cmd window stays the normal manual path.
 
 ## 7. Known issues & fixes
 
+### Learning-progress analyzer compared incomparable points (2026-11-18, FIXED)
+
+`files/analyze_learning_progress.py` feeds every "отчёт по обучению" (skill
+`crypto-progress`). Its trends ran across label changes:
+- NS `IMPROVING 0.0743 -> 0.1242`: the first point was an April legacy-label value.
+- recall `DEGRADING 0.754 -> 0.133`: the first point predates the 08-16..09-21
+  label-store freeze. During the freeze `phantom_filter` dropped bandit rows
+  (11 110 -> 6 816).
+- The UCB line printed a thirds-mean delta (−0.0887) beside the single endpoints
+  0.0473 -> 0.1046.
+- Q5 read the legacy RM matrix as the plan.
+
+Now:
+- only comparable rows count: same NS definition, a label store covering the
+  window, bandit/model epoch from 2026-09-22;
+- windows are disjoint and each carries n;
+- the halves are pooled with a 95% CI. The verdicts are IMPROVING / DEGRADING /
+  INCONCLUSIVE («рано судить») / INSUFFICIENT; UCB and AUC are DIAGNOSTIC only;
+- Q5 reads `continuous-improvement-agent-spec.md` and the trader roadmap.
+
+`daily_learning` logs the recall's n and eval span from 11-19. Live 11-18: NS 0.124
+(n=14), change between disjoint windows −0.058 [−0.181, +0.065], INCONCLUSIVE.
+Spec: `docs/specs/features/learning-progress-comparable-1118-spec.md`.
+
 ### Positioning at the leader alert and at the crossing — no signal yet; one rule pre-registered (2026-10-20)
 
 Scheduled test `crypto-bot-leader-positioning-test`. Positioning store: 60 days,

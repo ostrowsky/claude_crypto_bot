@@ -594,6 +594,8 @@ def save_progress(
     ba = train_result.get("bandit_accuracy", {})
     eb = train_result.get("entry_bandit", {})
     _top20 = collect_result.get("top20", [])
+    _eval_days = [str(d["day"]) for d in (ba.get("daily") or [])
+                  if isinstance(d, dict) and d.get("day")]
     record = {
         "ts": datetime.now(timezone.utc).isoformat(),
         "n_collected": collect_result.get("n_records", 0),
@@ -608,6 +610,13 @@ def save_progress(
         "bandit_recall_lift": ba.get("lift"),
         "bandit_precision": ba.get("precision"),
         "bandit_ucb_separation": ba.get("ucb_separation"),
+        # The recall's denominator and the days it was graded on, so a trend
+        # can print n and compare only disjoint evaluation windows (TH-01,
+        # TH-05; learning-progress-comparable-1118-spec.md). Absent before
+        # 2026-11-19.
+        "bandit_n_positive": ba.get("total_positive"),
+        "bandit_eval_first_day": min(_eval_days) if _eval_days else None,
+        "bandit_eval_last_day": max(_eval_days) if _eval_days else None,
         # Which label produced the numbers above. Rows written before
         # 2026-08-13 used `label_top20`, whose positives were mostly days
         # already over — their recall is not comparable with what follows.

@@ -5,7 +5,7 @@
   it got here. It is **no longer the normative target**; that is
   [`continuous-improvement-agent-spec.md`](continuous-improvement-agent-spec.md).
 - **Created:** 2026-05-12
-- **Last updated:** 2026-08-13 (Truth Harness shipped; legacy training scores invalidated; North-Star ground truth marked provisional)
+- **Last updated:** 2026-11-18 (L1-h: learning-progress analyzer compares only comparable windows; earlier: 2026-08-13 Truth Harness shipped)
 - **Owner:** Vasiliy Ostrovsky + Claude
 - **North Star:** composite `EarlyCapture@top20` (target 0.40; provisional until immutable later-EOD labels, see [PROJECT_CONTEXT.md](../../../PROJECT_CONTEXT.md))
 - **Project priority:** P0 (founding principle, see [CLAUDE.md §0](../../../CLAUDE.md))
@@ -141,7 +141,7 @@ run in `pipeline_run.py --daily` before notify. Spec: [`agent-tasks-0929`](agent
 | L1-e | Red flag detection (persistent ≥4d) | ✅ | — | `bot_health_report.detect_red_flags()` |
 | L1-f | Training-to-live gap explicit metric | 🟡 | `test_bot_health_report_integrity.py` | fail-closed: unavailable until training side is `out_of_sample_time_holdout` |
 | L1-g | Truth Harness (state + staged change profiles) | ✅ | `test_truth_harness.py` (7+) | TH-01…TH-12; tracked pre-commit hook; project skill; blocking findings remain visible rather than passed |
-| L1-h | Strategic learning-progress analyzer truth gating | ✅ | `test_learning_progress_truth.py` | provisional NS and non-OOS recall/AUC render `UNKNOWN`, never improving/degrading |
+| L1-h | Strategic learning-progress analyzer truth gating | ✅ | `test_learning_progress_truth.py`, `test_learning_progress_comparable.py` (23) | provisional NS and non-OOS recall/AUC render `UNKNOWN`, never improving/degrading. **2026-11-18:** trends had compared points across label changes (NS `IMPROVING 0.0743 -> 0.1242` from an April legacy-label point; recall `DEGRADING 0.754 -> 0.133` across the label-store freeze) and the UCB line printed a thirds-mean delta beside single endpoints. Now only comparable rows (same NS definition, label store covering the window, bandit/model epoch from 2026-09-22), disjoint windows with n each, pooled halves with a 95% CI -> IMPROVING / DEGRADING / INCONCLUSIVE / INSUFFICIENT; UCB and AUC are DIAGNOSTIC. Q5 reports the target spec and the trader roadmap; this matrix is flagged as legacy. `daily_learning` now logs the recall's n and eval span. Spec [`learning-progress-comparable-1118`](learning-progress-comparable-1118-spec.md) |
 
 ### L2 — Hypothesis generator
 
@@ -319,6 +319,7 @@ missing rows = the loop isn't really closing.
 | 2026-08-13 | **0.070 provisional** (n=26, 10/14 full days) | **unknown** — suppressed until OOS temporal holdout | n/a | **RM-23 Truth Harness shipped:** exposed same-snapshot North-Star/model labels, answer-encoding `tg_return_since_open`, row-level day leakage and post-fit bandit recall; health report now publishes a canonical scorecard, unknowns and evidence-ranked next steps instead of inflated capability claims | — |
 | 2026-08-13 | tbd (read live in 7d) | **2.10× OOS lift** (45 train days / 7 eval, recall 74.2% at 35.3% ENTER, base 8.1%) | n/a | **Entry-bandit training leak fixed (ML-b).** Reward followed `label_top20` on the earliest snapshot of a day — the 00 UTC EOD resolution of a day already over (41% of rows; 34.8% with nothing left to decide, median +1.75% still ahead). Temporal holdout: that label scored **lift 0.65×, below random** — the origin of "recall@20 = 100%". Reward now follows the move remaining after the snapshot (day's top-10 AND ≥ +3%): **4.07×**. Two same-path defects fixed with it: dataset read as TAIL (training window frozen at 2026-06-05 for 69 days) and state rebuilt from scratch (37 144 updates vs 8.39M from ~188× re-ingestion, which also voided the "UCB separation growing" claim). `evaluate_bandit_accuracy` now fits its own holdout bandit and publishes the in-sample echo beside it | `BANDIT_FORWARD_REWARD_ENABLED=False` + restore `bandit_entry_state.pre_leakfix.json` |
 | 2026-10-20 | 10-11 value (0.204) shown as current 10-12..10-20; fresh row restored | n/a | n/a | **metrics_daily stale 9 days:** the L0 step hit its 600 s timeout every morning (nine scripts in sequence, row written only at the end), so no row was appended and the report kept the 10-11 North Star `verified`. Now one budget inside the script, the row is always written, values older than 36 h are `stale`. Spec: [`metrics-daily-stale-1020`](metrics-daily-stale-1020-spec.md) | — |
+| 2026-11-18 | **0.124** (n=14, 11/14 full days); disjoint 14-day windows 09-20..10-20 0.159 (n=121) vs 10-21..11-17 0.101 (n=32), 95% CI of the change [-0.181, +0.065] -> INCONCLUSIVE | n/a | n/a | **Learning-progress analyzer:** the 'IMPROVING 0.0743 -> 0.1242' it printed compared an April legacy-label point with today's v2; now only comparable, disjoint windows are compared | — |
 
 Conventions for filling the table:
 - One row per measurable change. Re-measurements every 7/14/30 days get

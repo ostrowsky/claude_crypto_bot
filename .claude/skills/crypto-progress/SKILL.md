@@ -40,12 +40,28 @@ cwd : D:\Projects\claude_crypto_bot
 cmd : D:\Projects\claude_crypto_bot\pyembed\python.exe files\analyze_learning_progress.py
 ```
 
-This single script aggregates the longest available history from
-`learning_progress.jsonl`, `metrics_daily.jsonl`, the latest pipeline health
-JSON, `decisions.jsonl`, attribution, and the living roadmap spec. Its stdout
-is already organized into `[Q1]`..`[Q6]` blocks with computed trend verdicts
-(IMPROVING / FLAT / DEGRADING / INSUFFICIENT). Read it in full; it is small
-(~60 lines) by design — do **not** read the underlying jsonl files yourself.
+This single script aggregates `learning_progress.jsonl`, `metrics_daily.jsonl`,
+the latest pipeline health JSON, `decisions.jsonl`, attribution, and the roadmap
+specs (`continuous-improvement-agent-spec.md` = signal-bot target,
+`autonomous-trading-roadmap-1010-spec.md` = trader; the legacy
+`auto-improvement-loop-spec.md` is only flagged as stale). Its stdout is
+organized into `[Q1]`..`[Q6]` blocks. Read it in full (~90 lines) — do **not**
+read the underlying jsonl files yourself.
+
+Trends compare only **comparable, non-overlapping windows** (same metric
+definition, label store covering the window, same comparability epoch) and
+carry n per window (spec `learning-progress-comparable-1118-spec.md`).
+Verdicts:
+
+| verdict | meaning |
+|---|---|
+| `IMPROVING` / `DEGRADING` | 95% CI of late − early half excludes 0 |
+| `INCONCLUSIVE` | CI spans 0 — write «рано судить», never a direction |
+| `INSUFFICIENT` | < 2 disjoint windows, n not logged, or pooled n < 20 per half |
+| `UNKNOWN` | ground truth not verified / no out-of-sample rows |
+| `DIAGNOSTIC` | UCB separation, AUC: no n or variance logged → first/last only, no verdict |
+
+There is no `FLAT`: an interval spanning zero does not show flatness.
 
 ### 2. (OPTIONAL) Tactical deep-dive — only if the user wants gate/ML detail
 
@@ -74,24 +90,27 @@ numbers.
 
 ### Q1. Совершенствуется ли бот к целевой метрике?
 
-**Вердикт: {IMPROVING/FLAT/DEGRADING/НЕТ ДАННЫХ}**
+**Вердикт: {IMPROVING / DEGRADING / РАНО СУДИТЬ (INCONCLUSIVE) / НЕДОСТАТОЧНО ДАННЫХ (INSUFFICIENT) / UNKNOWN}**
 
-- North Star (`watchlist_top_early_capture_pct`): latest `{value}`, baseline_7d `{baseline_7d}`, status `{status}`
-- Тренд early_capture: `{trend}` (first `{first}` → last `{last}`, Δ `{delta}`)
-- {If INSUFFICIENT/STALE: explicitly say the NS measurement itself is the weak link and why}
+- North Star `NS_EarlyCapture_top20_v2`: latest `{value}` on `{date}`, **n={n} winner-days**, full days `{full}/{window}`, days_down_or_partial `{down}`; target 0.40, floor 0.25
+- Разложение: coverage `{cov}`, capture `{cap}`, lead `{lead}` (capture и lead — средние по вошедшим, их произведение ≠ NS)
+- v3 move-lead (`NS_EarlyCapture_top20_v3`): `{v3}`, n `{v3_n}`, без дедлайна `{no_deadline}`
+- Непересекающиеся окна: {each `date = value (n)`}
+- Тренд: `{verdict}` — early `{days}` `{value}` (n={n}) → late `{days}` `{value}` (n={n}), Δ `{delta}`, 95% CI `[{lo}, {hi}]`
+- Исключено строк: `{total}` (главные причины: {top 2 reasons}) — ряд до 2026-09-22 не сравнивается с текущим
+- {If INSUFFICIENT/INCONCLUSIVE: say plainly the NS cannot answer the question at this n; never state a direction}
 
-### Q2. Прогресс или деградация? (вся история)
+### Q2. Диагностика обучения (не прогресс цели, TH-02)
 
-История: `{span}`
+Эпохи сравнимости: bandit с `{bandit_epoch}`, model с `{model_epoch}` (причины — в выводе).
 
-| Метрика | Вердикт | first → last | Δ |
-|---------|---------|--------------|---|
-| recall@20 | {v} | {first}→{last} | {delta} |
-| UCB separation | {v} | {first}→{last} | {delta} |
-| AUC top20 | {v} | {first}→{last} | {delta} |
-| bandit n_signal | {v} | {first}→{last} | {delta} |
+| Метрика | Вердикт | Значения | n / контекст |
+|---------|---------|----------|--------------|
+| recall@20 (OOS) | {v} | latest `{recall}` | n `{n or ?}`, ENTER `{enter}`, base `{base}`, lift `{lift}`, precision `{prec}` |
+| UCB separation | DIAGNOSTIC | `{first}` → `{last}` (last−first `{d}`) | нет n — без вердикта |
+| AUC top20 | DIAGNOSTIC | `{first}` → `{last}` (last−first `{d}`) | нет n — без вердикта |
 
-bandit updates: `{first}` → `{last}`
+Счётчики: n_signal `{a}` → `{b}` (с потолком), updates `{a}` → `{b}` — объём, не прогресс.
 
 ### Q3. Используют ли все компоненты данные для приближения к цели?
 
@@ -110,13 +129,15 @@ bandit updates: `{first}` → `{last}`
 
 ### Q5. Стадия roadmap — нужна ли коррекция?
 
-- Спека обновлена: `{last_updated}`
-- Component matrix: OK `{done}` / partial `{partial}` / missing `{missing}` ({pct}% done)
-- Завершено: `{roadmap_done}`
-- Осталось ({n}): {first 5 RM-N + short desc}
-- **Коррекция:** {your judgement — is the priority order still right given the
-  red flags and the data-staleness findings? e.g. if metrics_daily is stale,
-  fixing the EOD job outranks any new RM item}
+- **Сигнальный бот** (`continuous-improvement-agent-spec.md`, целевая): статус `{status}`, ревизия `{revised}`, последний коммит `{date}` ({age} д.)
+  - Фазы rollout: {list}
+  - Достигнутая фаза: **не вычисляется** — в спеке нет статуса фаз; не называй стадию без проверки exit gate
+- **Трейдер** (`autonomous-trading-roadmap-1010-spec.md` §7): последний коммит `{date}` ({age} д.), коммитов в `trader/` после него: `{n}`
+  - {rows: spec [stage]: verdict — only the ones relevant to the question}
+- **Legacy-матрица** (`auto-improvement-loop-spec.md`): STALE с `{date}`, не план; RM-4/RM-5/RM-18 сняты
+- **Коррекция:** {your judgement — e.g. if the trader table lags many commits,
+  say which verdicts it is missing; if metrics_daily is stale, that outranks
+  any roadmap item}
 
 ### Q6. Дальнейшие шаги
 
@@ -128,19 +149,24 @@ pipeline), then North-Star-moving roadmap items, then nice-to-haves.}
 
 ## Interpretation rules (apply when writing the report)
 
-- A `FLAT`/`INSUFFICIENT` North Star with a `STALE` metrics_daily means **you
-  cannot honestly answer Q1** — say so plainly; do not paper over it with
-  bandit metrics. Per project §0, the train→live gap is the most important
-  diagnostic; never collapse it into one rosy number.
-- `recall@20 = 1.0` for many days is a **plateau ceiling**, not a triumph —
-  pivot attention to UCB separation slope and the deployment-side NS.
+- An `INSUFFICIENT`/`INCONCLUSIVE` North Star, or a `STALE` metrics_daily,
+  means **you cannot honestly answer Q1 with a direction** — say «рано судить»
+  plainly; do not paper over it with bandit metrics. Per project §0, the
+  train→live gap is the most important diagnostic; never collapse it into one
+  rosy number.
+- Never build a trend yourself from values the analyzer did not put in one
+  chain (e.g. an April number vs today's): they are different definitions
+  (TH-05).
+- Every recall/coverage/precision you quote carries its n, base rate and lift
+  (TH-01). Recall at a different ENTER rate is a different operating point.
+- UCB separation and AUC are `DIAGNOSTIC`: report first → last, never as
+  progress or degradation.
 - A gate in over-blocking (miss_pct > take baseline) is a **candidate to
   relax**, but only flag it; the pipeline must validate via Pareto sweep.
-- `pending_manual_validation` decisions are the canonical sign that RM-1/RM-2
-  (blocked-event logging) have not reached the production bot yet — call this
-  out under Q3/Q6 whenever the count is > 0.
-- If the analyzer prints `spec NOT FOUND`, Q5 is unanswerable — tell the user
-  the roadmap spec path could not be resolved instead of guessing.
+- `pending_manual_validation` decisions have no validator verdict — flag them
+  under Q3/Q6; do not infer from them which roadmap items shipped.
+- If the analyzer prints `NOT FOUND` for a roadmap spec, that part of Q5 is
+  unanswerable — say so instead of guessing.
 
 ## Output format
 
