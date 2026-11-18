@@ -1061,6 +1061,10 @@ only; the 2026 window was not opened for any of them:
   - G2, USDT: −30.76 bp [−83.00, +84.08], n = 614, median −36.9, 9% positive; needs 32 584 against ≤ 4 075. The upper bound rests on the 2025-10-10 wicks. On USDC: 55 trades, no decisive window exists.
   - Formula: the Binance page divides the whole rate by 8/N, which differs from the design for intervals other than 8 h; the page is used.
   - Reference only, no interval: a maker entry on G1 gives +1.3 and +20.2 bp. Testing it needs its own spec.
+- **FC-STK, WBETH instead of spot ETH in FC_PASSIVE (2026-11-18, `fc-stk-staking-leg-1110-spec.md`), train 2024–2025: STOP on the drawdown criterion.**
+  - Paired vs FC_PASSIVE +0.0017 %/day (≈ +0.6 %/yr), block 20 [+0.0006, +0.0029], block 60 [+0.0012, +0.0021], both years positive; 97% explained by the WBETH/ETH rate growth.
+  - Max drawdown −0.750% vs −0.244% (the rule allowed 0.10 pp deeper): all of it is 2025-10-10, the WBETH depeg on Binance (close ratio 1.078 → 1.045 → 1.071). Intraday low reached −89.5% against ETH that day.
+  - The bound is not relaxed. Accepting the depeg tail for +0.6 %/yr is the operator's call and would be a new pre-registration.
 - **TM: BTC/ETH spot timing (trend, vol-managed, funding overheat) is REJECTED, 0 of 20.** None beats a circular-shift
   random timing of the same schedule, none beats buy-and-hold. Best vs constant exposure: T_sma_56 +0.027 [−0.039, +0.093]
   (`btc-eth-timing-tm-1028-spec.md`).
