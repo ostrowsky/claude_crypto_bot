@@ -245,3 +245,14 @@ None of the four keys is defined in `files/config.py` (checked 2026-11-18).
 5. Records without `hypothesis_id` are grouped by `config_key`.
 6. Rendering at 0 blockers: no «pipeline blocker» line in Q3, no «Unblock pipeline» in Q6, and
    the «none blocking» line is shown. At 1 blocker both appear.
+
+### 6.4 Verification (2026-11-18, live files)
+
+| | before | after |
+|---|---|---|
+| Q3 | `(!) pipeline blocker: 5 decisions stuck at pending_manual_validation` | `pending verdict: 5 records, none blocking (closed_without_verdict 2, superseded 2, unknown_key 1)` |
+| Q6 | `Unblock pipeline: 5 decisions have no validator verdict ...` | no such step |
+| JSON | `pending_manual_validation = 5` | `pending_manual_validation = 0`, `pending_verdict_records = 5`, `keys_verified = true` |
+
+Per record: 31ae5d and 4d6cb5 superseded, ce9fdf and f0df87 closed without a verdict, f37987 unknown key —
+the table in D4. Tests: 7 new failed before the fix; both analyzer test files pass after it (31 tests).

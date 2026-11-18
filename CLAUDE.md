@@ -555,6 +555,12 @@ Now:
 
 `daily_learning` logs the recall's n and eval span from 11-19. Live 11-18: NS 0.124
 (n=14), change between disjoint windows −0.058 [−0.181, +0.065], INCONCLUSIVE.
+Second fix the same day (spec §6): Q3/Q6 counted every `pending_manual_validation`
+record and reported «5 decisions stuck». All five were May records: 2 superseded,
+2 rejected, 1 deferred on `MODE_IMPULSE_SPEED_ENABLED`, a key never defined in
+`config.py`. A blocker is now the latest record of its thread, with an open stage and a
+key in `config.py`. The rest are listed by reason. Live: 0 blockers, «5 records, none
+blocking». An unreadable config never lowers the count.
 Spec: `docs/specs/features/learning-progress-comparable-1118-spec.md`.
 
 ### Positioning at the leader alert and at the crossing — no signal yet; one rule pre-registered (2026-10-20)

@@ -662,7 +662,15 @@ stop_rl_headless.bat     — остановка RL worker (по PID из .runtim
 
 `daily_learning` пишет n и окно оценки recall с 11-19. Живые данные 11-18: NS 0.124
 (n=14), изменение между непересекающимися окнами −0.058 [−0.181, +0.065],
-INCONCLUSIVE. Спека: `docs/specs/features/learning-progress-comparable-1118-spec.md`.
+INCONCLUSIVE.
+
+Вторая правка в тот же день (спека §6). Q3/Q6 считали каждую запись
+`pending_manual_validation` и писали «5 decisions stuck». Все пять — майские записи:
+2 вытеснены более поздними, 2 отклонены, 1 отложена по ключу `MODE_IMPULSE_SPEED_ENABLED`,
+которого в `config.py` никогда не было. Блокер теперь — последняя запись своей гипотезы,
+с открытым этапом и ключом из `config.py`. Остальные перечисляются с причиной. Живые
+данные: 0 блокеров, «5 records, none blocking». Если `config.py` не читается, счёт не
+снижается. Спека: `docs/specs/features/learning-progress-comparable-1118-spec.md`.
 
 ### Позиционирование у алерта лидера и на пересечении — сигнала пока нет; одно правило предрегистрировано (2026-10-20)
 

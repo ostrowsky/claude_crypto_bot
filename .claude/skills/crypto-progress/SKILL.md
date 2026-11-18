@@ -118,7 +118,9 @@ numbers.
 - **Deployment health:** {available? else "критик ещё не отработал сегодня"}
 - **Scout:** take_baseline `{r5}%`, over-blocking gates: {list top 3 with miss_pct}
 - **Pipeline:** {n} decisions {by_stage}; attribution hit_rate `{hit_rate}`
-- {If pending_manual_validation > 0: flag it as the structural blocker}
+- {If pending_manual_validation > 0: flag it as the structural blocker. It counts only real blockers
+  (latest record of its thread, open stage, key defined in config.py). A line "pending verdict: N records,
+  none blocking" is bookkeeping, not a blocker: mention it in one line at most}
 
 ### Q4. Хватает ли данных?
 
@@ -163,8 +165,10 @@ pipeline), then North-Star-moving roadmap items, then nice-to-haves.}
   progress or degradation.
 - A gate in over-blocking (miss_pct > take baseline) is a **candidate to
   relax**, but only flag it; the pipeline must validate via Pareto sweep.
-- `pending_manual_validation` decisions have no validator verdict — flag them
-  under Q3/Q6; do not infer from them which roadmap items shipped.
+- `pending_manual_validation` counts open decisions without a validator verdict (since 2026-11-18 only
+  the latest record of a thread, open stage, key in config.py) — flag them under Q3/Q6; superseded,
+  closed or unknown-key records are listed by reason and are not a blocker. Do not infer from them which
+  roadmap items shipped.
 - If the analyzer prints `NOT FOUND` for a roadmap spec, that part of Q5 is
   unanswerable — say so instead of guessing.
 

@@ -321,6 +321,58 @@ def load_decisions(repo: Path) -> List[dict]:
     return _read_jsonl(repo / ".runtime" / "pipeline" / "decisions" / "decisions.jsonl")
 
 
+def load_config_keys(repo: Path) -> set:
+    """Module-level tunables defined in files/config.py (same rule as pipeline_hypothesis.known_config_keys).
+    Empty when the file cannot be read: the caller then does not trust key absence."""
+    try:
+        src = (repo / "files" / "config.py").read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return set()
+    return set(re.findall(r"^([A-Z][A-Z0-9_]*)\s*[:=]", src, re.M))
+
+
+PENDING = "pending_manual_validation"
+TERMINAL_STAGES = frozenset({"rejected", "rolled_back"})
+
+
+def classify_pending(decisions: List[dict], known_keys: set) -> Dict[str, Any]:
+    """Which pending_manual_validation records are real pipeline blockers (learning-progress spec §6).
+
+    Thread = hypothesis_id, else config_key, else decision_id; its latest record (ts, file order) is the state.
+    Blocker = pending AND latest of its thread AND stage not terminal AND key defined in config.py.
+    Everything else pending is reported by reason, never dropped. Unreadable config -> key absence is not
+    used, so the count is never lowered without evidence."""
+    keys_verified = bool(known_keys)
+    latest: Dict[str, Tuple[str, int]] = {}
+    order = []
+    for i, d in enumerate(decisions):
+        thread = d.get("hypothesis_id") or d.get("config_key") or d.get("decision_id") or f"#{i}"
+        ts = str(d.get("ts") or "")
+        order.append((thread, ts, i))
+        if thread not in latest or (ts, i) >= latest[thread]:
+            latest[thread] = (ts, i)
+    detail, not_blocking, blockers = [], {}, 0
+    for (thread, ts, i), d in zip(order, decisions):
+        if d.get("validation_verdict") != PENDING:
+            continue
+        if latest[thread] != (ts, i):
+            reason = "superseded"
+        elif d.get("stage") in TERMINAL_STAGES:
+            reason = "closed_without_verdict"
+        elif keys_verified and d.get("config_key") not in known_keys:
+            reason = "unknown_key"
+        else:
+            reason = "blocker"
+        if reason == "blocker":
+            blockers += 1
+        else:
+            not_blocking[reason] = not_blocking.get(reason, 0) + 1
+        detail.append({"decision_id": d.get("decision_id"), "config_key": d.get("config_key"),
+                       "stage": d.get("stage"), "reason": reason})
+    return {"blockers": blockers, "raw": len(detail), "not_blocking": not_blocking, "detail": detail,
+            "keys_verified": keys_verified}
+
+
 def load_attribution_meta(repo: Path) -> Optional[dict]:
     adir = repo / ".runtime" / "pipeline" / "attribution"
     if not adir.exists():
@@ -658,8 +710,12 @@ def analyze(repo: Path, spec_path: Optional[Path]) -> Dict[str, Any]:
     for d in decisions:
         st = d.get("stage", "unknown")
         pipe["by_stage"][st] = pipe["by_stage"].get(st, 0) + 1
-    pend = sum(1 for d in decisions if d.get("validation_verdict") == "pending_manual_validation")
-    pipe["pending_manual_validation"] = pend
+    pc = classify_pending(decisions, load_config_keys(repo))
+    pipe["pending_manual_validation"] = pc["blockers"]          # real blockers only (spec §6)
+    pipe["pending_verdict_records"] = pc["raw"]
+    pipe["pending_not_blocking"] = pc["not_blocking"]
+    pipe["pending_detail"] = pc["detail"]
+    pipe["keys_verified"] = pc["keys_verified"]
     out["pipeline"] = pipe
 
     # ── Q5: roadmap from the target specs; the legacy matrix is only flagged ──
@@ -809,6 +865,15 @@ def render(a: Dict[str, Any]) -> str:
     if pipe.get("pending_manual_validation"):
         P(f"  (!) pipeline blocker: {pipe['pending_manual_validation']} decisions stuck "
           f"at pending_manual_validation")
+    if pipe.get("pending_verdict_records"):
+        nb = pipe.get("pending_not_blocking") or {}
+        if not pipe.get("pending_manual_validation"):
+            P(f"  pending verdict: {pipe['pending_verdict_records']} records, none blocking "
+              f"({', '.join(f'{k} {v}' for k, v in sorted(nb.items()))})")
+        elif nb:
+            P(f"  pending verdict, not blocking: {', '.join(f'{k} {v}' for k, v in sorted(nb.items()))}")
+        if not pipe.get("keys_verified", True):
+            P("  (config.py unreadable: key existence not checked)")
 
     # Q4
     ds = comp.get("data_sufficiency", {})
