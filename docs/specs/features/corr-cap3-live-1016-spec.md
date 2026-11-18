@@ -72,3 +72,38 @@ Prune counts by cluster size are reported beside the verdict.
 - the botlog event fields;
 - the readout helpers on synthetic events;
 - the registry entry and the docs.
+
+## Readout result and rollback (2026-11-18)
+
+**Readout `CORR-CAP3`, final 2026-11-17: ROLLBACK_SUGGESTED**
+(`.runtime/pipeline/readouts/CORR-CAP3.json`). 21 days, 346 trades, 91 of them relaxed, 187
+`corr_cap_relaxed` events, 32 prunes (clusters of 4–8).
+
+| criterion | result | bound |
+|---|---|---|
+| winner-days gained | **0** of 37 | ≥ 1 |
+| per trade, combined − without | −0.117 pp [−0.281, +0.028] | lower ≥ −0.10 |
+| max drawdown with / without relaxed | −208.1 / −123.6 | ≤ 10% deeper |
+| worst day with / without | −51.5 / −23.4 | ≤ 10% deeper |
+
+Relaxed trades averaged −0.929% against −0.485% for the rest. The backtest's +1.08 pp of early
+winner-days did not appear live, and the tail it called marginal (+9.9%) came out +68% deeper.
+The relaxed entries are the loss-clustering ones.
+
+**Operator decision, chat 2026-11-18: roll back.**
+- `CORR_MAX_PER_CLUSTER` goes back to 2, for entry and prune, and the bot is restarted.
+- `CORR_CAP_RELAXED_FROM` stays 2. With the cap at 2 no candidate passes at cluster size 2, so
+  `corr_cap_relaxed` stops by itself.
+- With the cap at 2, the prune again closes the weakest position of a cluster of 3 or more. A
+  position above `CORR_PRUNE_PROFIT_PROTECT_PCT` profit is never closed this way. That is the
+  pre-10-16 behaviour.
+- Recorded as a `rolled_back` decision superseding `d-2026-10-16T133755Z-cap3`.
+- The readout is final and is not recomputed.
+
+**Do not re-test cap 3 on these days.** A new relaxation of this guard needs a hypothesis that
+explains the clustered losses. The pre-crossing exemption was already refuted.
+
+Tests (`files/test_corr_cap3_live_1016.py`, changed before the config):
+- the config value is 2;
+- with the live config a cluster of 2 blocks;
+- `check_entry` still honours a patched cap of 3, so the code path stays covered.

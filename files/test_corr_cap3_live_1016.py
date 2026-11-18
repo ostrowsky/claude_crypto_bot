@@ -21,12 +21,20 @@ def cache(pairs):
 
 
 class TestGuard(unittest.TestCase):
-    def test_config(self):
-        self.assertEqual(config.CORR_MAX_PER_CLUSTER, 3)
+    def test_config_rolled_back(self):
+        # readout CORR-CAP3 = ROLLBACK_SUGGESTED, operator rolled back 2026-11-18 (spec "Readout result and rollback")
+        self.assertEqual(config.CORR_MAX_PER_CLUSTER, 2)
         self.assertEqual(config.CORR_CAP_RELAXED_FROM, 2)
 
-    def test_cluster_of_two_passes_three_blocks(self):
+    def test_live_cap_blocks_a_cluster_of_two(self):
         with mock.patch.object(config, "CORR_GUARD_ENABLED", True):
+            c2 = cache([("X", "A", 0.9), ("X", "B", 0.9)])
+            self.assertFalse(CG.check_entry("X", {"A": 1, "B": 1}, c2).allowed)
+            c1 = cache([("X", "A", 0.9)])
+            self.assertTrue(CG.check_entry("X", {"A": 1}, c1).allowed)
+
+    def test_cluster_of_two_passes_three_blocks_at_cap3(self):
+        with mock.patch.object(config, "CORR_GUARD_ENABLED", True), mock.patch.object(config, "CORR_MAX_PER_CLUSTER", 3):
             c2 = cache([("X", "A", 0.9), ("X", "B", 0.9)])
             r = CG.check_entry("X", {"A": 1, "B": 1}, c2)
             self.assertTrue(r.allowed)

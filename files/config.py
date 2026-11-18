@@ -1360,7 +1360,9 @@ CORR_GUARD_THRESHOLD_BEAR: float = 0.99         # порог в медвежий
 # prune. Backtest over the whole enforcement period: +1.08 pp early winner-days
 # [+0.27, +2.43], trades non-inferior, max drawdown +9.9% (bound 10%, marginal);
 # pruning was not in the backtest. Readout CORR-CAP3 due 2026-11-13. Rollback: 2.
-CORR_MAX_PER_CLUSTER: int = 3                    # макс. позиций в одном кластере
+# 2026-11-18 ROLLED BACK 3 -> 2 (operator): readout CORR-CAP3 final ROLLBACK_SUGGESTED --
+# 0 winner-days gained, relaxed trades -0.93% vs -0.49%, max drawdown -208 vs -124.
+CORR_MAX_PER_CLUSTER: int = 2                    # макс. позиций в одном кластере
 CORR_CAP_RELAXED_FROM: int = 2                   # old cap: candidates passing at this cluster size are logged (corr_cap_relaxed)
 CORR_MARGINAL_WEIGHTING: bool = True             # штраф score при ранжировании дублей
 CORR_PRUNE_ENABLED: bool = True                  # закрывать раздувшиеся кластеры

@@ -1190,18 +1190,24 @@ rocket-days −0.04 pp [−0.36, +0.25], all −0.044 pp [−0.082, −0.006], m
 not accepted. Do not re-test σ̂/HAR/GARCH buffers on 15m data. Spec:
 `docs/specs/features/sigma-trail-1005-spec.md`.
 
-### correlation_guard cluster cap 2 → 3 — LIVE (2026-10-16)
+### correlation_guard cluster cap 2 → 3 — ROLLED BACK to 2 (2026-11-18)
 
-Operator-approved after the compromise test below. `CORR_MAX_PER_CLUSTER = 3`
-applies to entry AND prune; pruning was not in the backtest. New events (no
+Live 2026-10-16..11-18, operator-approved after the compromise test below. The cap
+of 3 applied to entry AND prune; pruning was not in the backtest. Events (no
 decision reads them):
 - `corr_cap_relaxed`: a candidate the old cap would have blocked;
 - `corr_prune`: an enforced prune.
 
-Readout `CORR-CAP3` due 2026-11-13: keep if ≥ 1 winner-day is gained, trades are
-non-inferior, and max drawdown and worst day are each no more than 10% deeper
-with the relaxed trades. Rollback: set the cap back to 2. Spec:
-`docs/specs/features/corr-cap3-live-1016-spec.md`.
+**Readout `CORR-CAP3`, final 2026-11-17: ROLLBACK_SUGGESTED.** 21 days, 346 trades,
+91 relaxed. It gained 0 of 37 winner-days. Per trade −0.117 pp [−0.281, +0.028].
+Relaxed trades averaged −0.93% against −0.49% for the rest. Max drawdown −208 vs
+−124, worst day −51.5 vs −23.4.
+
+**Operator rolled back 2026-11-18:** `CORR_MAX_PER_CLUSTER = 2` (entry and prune),
+bot restarted. A `rolled_back` decision supersedes `d-2026-10-16T133755Z-cap3`.
+With cap 2 the prune again closes the weakest position of a cluster of 3 or more;
+positions above the profit protect are never pruned. Do not re-test cap 3 on these
+days. Spec: `docs/specs/features/corr-cap3-live-1016-spec.md`.
 
 ### correlation_guard re-judged by the goal — a trade-off, operator's call (2026-10-16)
 
