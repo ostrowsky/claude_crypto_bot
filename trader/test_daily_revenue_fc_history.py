@@ -127,6 +127,16 @@ class TestComputeMainFcHistory(unittest.TestCase):
         finally:
             rt.close()
 
+    def test_first_computation_without_bench_carries_nothing(self):
+        rt = _Runtime(entry_age=12, day_age=7)
+        try:
+            r = self.run_day(rt)                             # no earlier revision of the day: nothing to carry
+            self.assertEqual(r["revision"], 1)
+            self.assertNotIn("bench_carried", r)
+            self.assertNotIn("bench_btc_pct", r)
+        finally:
+            rt.close()
+
 
 class TestFcRowsAndContext(unittest.TestCase):
     def test_load_fc_rows_reads_every_journal(self):

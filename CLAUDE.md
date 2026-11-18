@@ -907,6 +907,13 @@ FC_PASSIVE on the demo account: spot BTC+ETH long + USD-M perp short, L = 1 isol
   for orphan balances.
   - Every ~5 min it put a STOP_LOSS on the whole leg at −11 % and cancelled it on the next cycle.
   - It never triggered. Now `reconcile.run(reserved=...)` leaves FC pairs alone.
+- **Sixth defect, found 2026-11-18 (fixed).** From day 11-04 the daily revenue booked the FC spot leg as policy revenue.
+  - Cause: the FC spot quantity was rebuilt from the decision journals of the last 5 days *from now*, and the 10-30
+    `fc_entry` rows fell out of that window. Now `daily_revenue.load_fc_rows` reads every journal.
+  - An unsizable FC leg makes the day UNKNOWN (`fc_spot_qty_unknown`), never policy revenue.
+  - 30-day policy window on 11-17: −0.211 → −0.022 %/day [−0.035, −0.006]; total −5.05 → −0.52 %.
+  - The 105 `reconcile_error` alarms of 11-17 were the demo spot host returning 502, not a mismatch. Those of
+    11-15/16 were a local DNS outage.
 - **Incident at the first demo step (09:18 UTC).** The demo `fut_order` RESULT has no `avgPrice`, and the code
   read the filled perp as rejected. It unwound the spot legs and left naked shorts.
   - Claude closed both shorts by hand the same minute (reduceOnly).

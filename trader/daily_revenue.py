@@ -184,7 +184,12 @@ def compute_day(day: str, snaps, fills, fc: dict | None = None) -> dict:
         reserve = sum(h["qty"] * (h1[a]["px"] - h["px"]) for a, h in h0.items() if a in FEE_RESERVE and a in h1)
         rec["fee_reserve_contrib_pct"] = reserve / e0 * 100
         rec["R_policy_pct"] = rec["R_pct"] - rec["stable_contrib_pct"] - rec["fee_reserve_contrib_pct"]
-        if fc is not None:                     # FC-DEMO: its spot leg is hedged on futures, not policy revenue
+        if fc is not None and fc.get("spot_qty_unknown"):
+            # the FC mark shows a spot leg the journal cannot size: policy revenue is unknown, not the leg's move
+            # (bug 2026-11-18: a silent zero booked the hedged leg as policy revenue for 14 days)
+            rec.update(R_policy_pct=None, fc_spot_contrib_pct=None, reason="fc_spot_qty_unknown")
+            status = "UNKNOWN"
+        elif fc is not None:                   # FC-DEMO: its spot leg is hedged on futures, not policy revenue
             fq = fc.get("spot_qty") or {}
             fcs = sum(q * (h1[a]["px"] - h0[a]["px"]) for a, q in fq.items() if a in h0 and a in h1)
             rec["fc_spot_contrib_pct"] = fcs / e0 * 100
@@ -269,6 +274,50 @@ def _bench_live(day: str) -> dict:
     return b
 
 
+def load_fc_rows(root: Path | None = None) -> list:
+    """Every fc_demo row of EVERY decision journal (bug 2026-11-18). The spot quantity of a day comes from the last
+    fc_entry before it, however old: a window relative to now (it was 5 days) loses the entry and books the hedged
+    spot leg as policy revenue. Lines without 'fc_demo' are skipped before parsing (the journals hold ~1 700
+    scanner rows a day)."""
+    import fc_demo as F
+    if root is None:
+        import audit as A
+        root = A.ROOT / "decisions"
+    out = []
+    for f in sorted(Path(root).glob("*.jsonl")):
+        with io.open(f, encoding="utf-8") as fh:
+            for line in fh:
+                if F.BOOK not in line:
+                    continue
+                try:
+                    r = json.loads(line)
+                except Exception:
+                    continue
+                if r.get("book") == F.BOOK:
+                    out.append(r)
+    return out
+
+
+def fc_context(rows, d0: datetime) -> dict | None:
+    """The fc input of compute_day for the UTC day starting d0, or None when FC never ran in demo mode.
+    spot_qty_unknown: the first demo fc_mark of the day shows a spot value > 0 while the journal knows no FC spot
+    quantity at that mark's moment -- the leg cannot be sized, so the day's policy revenue is unknown."""
+    import fc_demo as F
+    demo = F._rows_demo(rows)
+    if not demo:
+        return None
+    d1 = d0 + timedelta(days=1)
+    ctx = {"spot_qty": F.fc_spot_qty_at(rows, d0), "equity_start": F.fc_equity_at(rows, d0),
+           "equity_end": F.fc_equity_at(rows, d1), "spot_qty_unknown": False}
+    mark = next(((t, r) for t, r in demo if d0 <= t < d1 and r.get("kind") == "fc_mark"), None)
+    if mark is not None and float(mark[1].get("spot_value") or 0) > 0 and not F.fc_spot_qty_at(rows, mark[0]):
+        ctx["spot_qty_unknown"] = True
+    return ctx
+
+
+BENCH_KEYS = ("bench_btc_pct", "bench_universe_pct", "bench_universe_n", "bench_universe_of", "bench_usdt_pct")
+
+
 def compute_main(day: str | None = None, bench: bool = True) -> dict:
     import trader_config as TC
     day = day or (datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%d")
@@ -277,19 +326,21 @@ def compute_main(day: str | None = None, bench: bool = True) -> dict:
              if d0 - timedelta(minutes=15) <= _ts(s["ts"]) <= d0 + timedelta(days=1, minutes=15)]
     fc = None
     try:
-        import audit_report as AR
-        import fc_demo as F
-        dec = [r for r in AR.load("decisions", 5) if r.get("book") == F.BOOK]
-        if any(r.get("mode") == "demo" for r in dec):
-            fc = {"spot_qty": F.fc_spot_qty_at(dec, d0), "equity_start": F.fc_equity_at(dec, d0),
-                  "equity_end": F.fc_equity_at(dec, d0 + timedelta(days=1))}
+        import audit as A
+        fc = fc_context(load_fc_rows(A.ROOT / "decisions"), d0)
     except Exception:
         fc = None
     rec = compute_day(day, snaps, _read_rows(TC.RUNTIME / "trading" / "ledger.jsonl"), fc=fc)
+    out_path = TC.RUNTIME / "metrics" / "daily_revenue.jsonl"
     if bench:
         rec.update(_bench_live(day))
+    else:                                  # a recompute: daily klines of an old day are gone from the 3-candle fetch
+        prev = latest_by_day(out_path).get(day) or {}
+        kept = {k: prev[k] for k in BENCH_KEYS if k in prev}
+        if kept:
+            rec.update(kept, bench_carried=True)
     rec["computed_utc"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
-    return append_day(TC.RUNTIME / "metrics" / "daily_revenue.jsonl", rec)
+    return append_day(out_path, rec)
 
 
 if __name__ == "__main__":
