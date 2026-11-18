@@ -7,7 +7,9 @@ Interface the tests fix:
        marks: [(t_ms, perp_price, spot_price)] one a day; funding: [(t_ms, rate, perp_price)]
   coinm.parse_cm_klines(text) / parse_cm_funding(text)  (archive_bh parsers on the COIN-M file layout)
 """
+import json
 import unittest
+from pathlib import Path
 
 DAY = 86_400_000
 
@@ -109,6 +111,101 @@ class TestParsers(unittest.TestCase):
         f = C.parse_cm_funding("calc_time,funding_interval_hours,last_funding_rate\n1700000000000,8,0.0001\n")
         self.assertEqual(f["t"].tolist(), [1700000000000])
         self.assertAlmostEqual(float(f["rate"][0]), 0.0001)
+
+
+# ------------------------------------------------------------------ one-time 2026 look (spec section 8), written BEFORE the code
+def _fake_out(lo95=0.001, margin=0.99, dd=-1.0):
+    return {"pairs": {"BTCUSD_PERP": {"min_margin_ratio": margin}, "ETHUSD_PERP": {"min_margin_ratio": 0.99}},
+            "agg": {"n_days": 181, "mean_pct": 0.005, "lo95": -0.001, "hi95": 0.012, "max_dd_pct": dd},
+            "paired_vs_fc": {"n_days": 181, "mean_pct": 0.003, "lo95": lo95, "hi95": 0.008}}
+
+
+class TestTestLook(unittest.TestCase):
+    def setUp(self):
+        import tempfile
+        self.tmp = Path(tempfile.mkdtemp())
+        self.train = self.tmp / "G3A_TRAIN.json"
+        self.train.write_text(json.dumps({"passes": True}), encoding="utf-8")
+        self.marker = self.tmp / "G3A_TEST_OPENED.json"
+        self.out = self.tmp / "G3A_TEST.json"
+        self.calls, self.trials = [], []
+
+    def _run(self, coverage_ok=True, compute=None):
+        import coinm as C
+
+        def comp(lo, hi, alpha):
+            self.calls.append((lo, hi, alpha, self.marker.exists()))
+            return compute() if compute else _fake_out()
+        return C.run_test(train_path=self.train, out_path=self.out, marker=self.marker, compute_fn=comp,
+                          coverage_fn=lambda lo, hi: {"ok": coverage_ok}, log_fn=self.trials.append, check_clean=False)
+
+    def test_window_is_2026_first_half_and_disjoint_from_train(self):
+        import coinm as C
+        self.assertEqual(C.TEST_WINDOW, ("2026-01-01", "2026-07-01"))
+        self.assertLessEqual(C.WINDOW[1], C.TEST_WINDOW[0])
+        self.assertEqual(C.TEST_ALPHA, 0.05)
+
+    def test_marker_written_before_compute_and_second_look_refused(self):
+        self._run()
+        self.assertEqual(len(self.calls), 1)
+        self.assertTrue(self.calls[0][3])                       # the marker existed when compute ran
+        self.assertEqual(self.calls[0][:3], ("2026-01-01", "2026-07-01", 0.05))
+        with self.assertRaises(RuntimeError):
+            self._run()
+        self.assertEqual(len(self.calls), 1)
+
+    def test_coverage_failure_burns_no_look(self):
+        with self.assertRaises(RuntimeError):
+            self._run(coverage_ok=False)
+        self.assertFalse(self.marker.exists())
+        self.assertEqual(self.calls, [])
+
+    def test_train_must_have_passed(self):
+        self.train.write_text(json.dumps({"passes": False}), encoding="utf-8")
+        with self.assertRaises(RuntimeError):
+            self._run()
+        self.train.unlink()
+        with self.assertRaises(RuntimeError):
+            self._run()
+        self.assertFalse(self.marker.exists())
+        self.assertEqual(self.calls, [])
+
+    def test_output_and_trial_record(self):
+        r = self._run()
+        self.assertEqual(r["stage"], "test")
+        self.assertEqual(tuple(r["window"]), ("2026-01-01", "2026-07-01"))
+        self.assertEqual(r["alpha"], 0.05)
+        self.assertEqual(r["decision"]["outcome"], "accepted")
+        self.assertTrue(self.out.exists())
+        self.assertEqual(len(self.trials), 1)
+        self.assertEqual(self.trials[0]["family"], "G3A")
+        self.assertEqual(self.trials[0]["k_opened_on_test"], 1)
+
+
+class TestDecide(unittest.TestCase):
+    def test_accepted_only_with_all_three(self):
+        import coinm as C
+        ok = dict(paired={"lo95": 0.0005}, min_margin=0.99, agg={"max_dd_pct": -2.0})
+        self.assertEqual(C.decide_test(**ok)["outcome"], "accepted")
+        for bad in ({"paired": {"lo95": 0.0}}, {"paired": {"lo95": -0.001}}, {"paired": {"lo95": None}}, {"paired": {}},
+                    {"min_margin": 0.009}, {"agg": {"max_dd_pct": -10.5}}, {"agg": {}}):
+            self.assertEqual(C.decide_test(**{**ok, **bad})["outcome"], "not_shown", bad)
+
+    def test_dd_floor_boundary_and_margin_boundary(self):
+        import coinm as C
+        self.assertEqual(C.decide_test({"lo95": 0.001}, 0.01, {"max_dd_pct": -10.0})["outcome"], "accepted")
+
+
+class TestCoverage(unittest.TestCase):
+    def test_ninety_five_percent_and_funding_to_the_last_day(self):
+        import coinm as C
+        hi = "2026-07-01"
+        last_ok = C._ms(hi) - DAY + 8 * 3600 * 1000            # 06-30 08:00
+        self.assertTrue(C.coverage_ok(172, 181, last_ok, hi))   # 172 >= 0.95 * 181 = 171.95
+        self.assertFalse(C.coverage_ok(171, 181, last_ok, hi))
+        self.assertFalse(C.coverage_ok(181, 181, C._ms(hi) - 2 * DAY + 16 * 3600 * 1000, hi))   # ends 06-29
+        self.assertFalse(C.coverage_ok(181, 181, None, hi))
+        self.assertFalse(C.coverage_ok(0, 0, last_ok, hi))
 
 
 if __name__ == "__main__":
