@@ -1230,6 +1230,25 @@ Compromises (pre-registered, `corr-guard-compromise-1016-spec.md`):
 - **pre-crossing exemption:** refuted. The drawdown is +25%: the candidates
   the guard blocks on shock days are exactly the early ones.
 
+### Rotation when the portfolio is full — REFUTED; ML rotation threshold is stale (2026-11-19)
+
+This came from the gpt_crypto_bot design audit
+(`docs/reports/2026-11-19-gpt-bot-experiment-design-audit.md`). The audit found
+six recurring design defects there: worse-rate gates on positive-skew policies,
+fixed short horizons, underpowered portfolio gates, a label containing the
+baseline, absolute thresholds, and selection on the test set.
+
+**Rotation does not move the goal here.** Over 599 winner-days, evicting the
+weakest leg for portfolio-blocked candidates gained **0 days**, in both arms.
+- The ceiling is 2 days: only 3 winner-days ever had a blocked candidate before
+  the crossing. The portfolio limit is not a cause of late entry in this bot.
+- Per trade the change is neutral.
+
+**ML-gated rotation is inert.** Its threshold `ROTATION_ML_PROBA_MIN = 0.62`
+predates the 2026-09-07 ML scale change, so only 0–2% of blocked candidates
+reach it. The config is unchanged. Spec:
+`docs/specs/features/rotation-goal-1119-spec.md`.
+
 ### GOAL-label ML model in SHADOW (2026-10-12)
 
 The next step after the two tests below: `ml_goal_shadow.py` trains the GOAL-label
